@@ -6,8 +6,8 @@ export JAVA_HOME=${JAVA_HOME:-$TOOLS/jdk}
 export PATH=$JAVA_HOME/bin:$PATH
 
 CORE=app/src/main/java/dev/gawel/dothome/core
-if grep -rn 'import android' "$CORE"; then
-  echo "core/ must not import android.*" >&2
+if grep -rn 'android\.' "$CORE"; then
+  echo "core/ must not reference android.*" >&2
   exit 1
 fi
 
