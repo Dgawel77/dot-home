@@ -13,7 +13,7 @@ public final class NowPlaying {
     public boolean playing;
     public long positionMs, durationMs, changedAtMs;
     public String sessionKey;
-    /** STATE_STOPPED / STATE_NONE: nothing worth showing. Paused sessions stay eligible. */
+    /** STATE_STOPPED / STATE_NONE / STATE_ERROR: nothing worth showing. Paused sessions stay eligible. */
     public boolean stopped;
     /** Playback speed and the SystemClock.elapsedRealtime() at which positionMs was valid. */
     public float speed = 1f;
@@ -58,11 +58,27 @@ public final class NowPlaying {
 
     private static boolean eq(String x, String y) { return x == null ? y == null : x.equals(y); }
 
-    /** The items that may be shown: everything except stopped/none sessions. */
+    /** True when the session names what it plays: a title or an artist that is not blank. */
+    public boolean hasMetadata() {
+        return !blank(title) || !blank(artist);
+    }
+
+    private static boolean blank(String s) { return s == null || s.trim().isEmpty(); }
+
+    /**
+     * Whether the music widget shows n at all. A stopped session, or one without a title or artist (an idle player
+     * that keeps an empty session, even one claiming to play), counts as nothing playing and leaves the widget blank.
+     * A paused track with metadata still shows, so it can be resumed.
+     */
+    public static boolean showable(NowPlaying n) {
+        return n != null && !n.stopped && n.hasMetadata();
+    }
+
+    /** The items that may be shown: see {@link #showable}. */
     public static List<NowPlaying> eligible(List<NowPlaying> all) {
         List<NowPlaying> out = new ArrayList<>();
         if (all == null) return out;
-        for (NowPlaying n : all) if (n != null && !n.stopped) out.add(n);
+        for (NowPlaying n : all) if (showable(n)) out.add(n);
         return out;
     }
 

@@ -90,6 +90,30 @@ public final class NowPlayingTest {
         T.eq(0, NowPlaying.eligible(null).size(), "null safe");
     }
 
+    public static void testNoMetadataIsNothingPlaying() {
+        NowPlaying idle = np("i", null, true, 900); // "playing" with no title or artist
+        NowPlaying empty = np("e", "", false, 800);
+        empty.artist = "  ";
+        NowPlaying artistOnly = np("a", null, false, 100);
+        artistOnly.artist = "Artist";
+        List<NowPlaying> l = new ArrayList<>();
+        l.add(idle);
+        l.add(empty);
+        T.check(!NowPlaying.showable(idle), "no metadata, even playing");
+        T.check(!NowPlaying.showable(empty), "blank metadata");
+        T.check(NowPlaying.choose(NowPlaying.eligible(l)) == null, "only empty sessions -> widget blank");
+        l.add(artistOnly);
+        T.eq("a", NowPlaying.choose(NowPlaying.eligible(l)).sessionKey, "an artist alone is enough");
+        T.check(!NowPlaying.showable(null), "null");
+    }
+
+    public static void testPausedWithMetadataShows() {
+        NowPlaying paused = np("p", "Song", false, 1);
+        T.check(NowPlaying.showable(paused), "paused track can be resumed");
+        paused.stopped = true;
+        T.check(!NowPlaying.showable(paused), "stopped hides");
+    }
+
     public static void testPackageDenylist() {
         T.eq(10, NowPlaying.BLOCKED_PACKAGES.size(), "denylist size");
         String[] blocked = {"com.google.android.gm", "com.microsoft.office.outlook", "com.microsoft.office.officehubrow",

@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The music widget while something plays (widget_music_empty otherwise): the card, art and text bitmap, and
+     three 56 dp transport buttons with 32 dp glyphs. 56 dp fits the 1-row height (95 dp less 2 x 16 dp pad
+     leaves 63 dp); WidgetArt.music keeps MUSIC_TRANSPORT_DP clear for them. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/music_root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:visibility="gone">
+    android:layout_height="match_parent">
     <ImageView
         android:id="@+id/music_img"
         android:layout_width="match_parent"
@@ -14,27 +16,34 @@
         android:layout_width="wrap_content"
         android:layout_height="match_parent"
         android:layout_gravity="end"
+        android:layout_marginEnd="4dp"
         android:gravity="center_vertical"
         android:orientation="horizontal">
         <ImageButton
             android:id="@+id/music_prev"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
             android:background="@android:color/transparent"
+            android:padding="0dp"
+            android:scaleType="center"
             android:src="@drawable/ic_prev"
             android:contentDescription="@string/music_prev" />
         <ImageButton
             android:id="@+id/music_play"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
             android:background="@android:color/transparent"
+            android:padding="0dp"
+            android:scaleType="center"
             android:src="@drawable/ic_play"
             android:contentDescription="@string/music_play_pause" />
         <ImageButton
             android:id="@+id/music_next"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
             android:background="@android:color/transparent"
+            android:padding="0dp"
+            android:scaleType="center"
             android:src="@drawable/ic_next"
             android:contentDescription="@string/music_next" />
     </LinearLayout>

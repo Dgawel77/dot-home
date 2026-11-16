@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 32 dp on a 32-unit viewport (1 unit = 1 dp): the 24-unit glyph scaled by 4/3, so the 1.6 stroke becomes 2.13. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path android:strokeColor="#DDDDDD" android:strokeWidth="1.6" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M7 6v12M18 6l-8 6 8 6z" />
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="32"
+    android:viewportHeight="32">
+    <path android:strokeColor="@color/dot_l100" android:strokeWidth="2.13" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M8.75 8v16M23.25 8l-10.5 8 10.5 8z" />
 </vector>

@@ -7,5 +7,5 @@
     android:resizeMode="horizontal|vertical"
     android:updatePeriodMillis="0"
     android:widgetCategory="home_screen"
-    android:initialLayout="@layout/widget_music"
+    android:initialLayout="@layout/widget_music_empty"
     android:description="@string/widget_music_desc" />

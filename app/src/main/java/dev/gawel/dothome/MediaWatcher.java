@@ -174,7 +174,8 @@ public class MediaWatcher extends NotificationListenerService {
         if (ps != null) {
             n.playing = ps.getState() == PlaybackState.STATE_PLAYING;
             int st = ps.getState();
-            n.stopped = st == PlaybackState.STATE_STOPPED || st == PlaybackState.STATE_NONE;
+            n.stopped = st == PlaybackState.STATE_STOPPED || st == PlaybackState.STATE_NONE
+                || st == PlaybackState.STATE_ERROR;
             n.positionMs = Math.max(0, ps.getPosition());
             n.speed = ps.getPlaybackSpeed();
             n.positionAtElapsedMs = ps.getLastPositionUpdateTime();
@@ -185,7 +186,9 @@ public class MediaWatcher extends NotificationListenerService {
         } else {
             n.changedAtMs = System.currentTimeMillis();
         }
-        if (n.title == null && n.artist == null && !n.playing) return null; // nothing worth showing
+        // No title or artist is nothing playing, even when the state says playing: idle players keep sessions with
+        // empty metadata, and those used to show an empty card with the transport buttons.
+        if (!n.hasMetadata()) return null;
         Log.d(TAG, "now playing from " + c.getPackageName() + ", playing=" + n.playing);
         return n;
     }

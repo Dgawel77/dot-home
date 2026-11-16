@@ -25,7 +25,7 @@ public class MusicWidget extends AppWidgetProvider {
     /** Called by MediaWatcher whenever the chosen session changes. */
     static void update(Context ctx, NowPlaying np) {
         last = np;
-        goneSent = np == null;
+        goneSent = !NowPlaying.showable(np);
         try {
             AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
             int[] ids = mgr.getAppWidgetIds(new ComponentName(ctx, MusicWidget.class));

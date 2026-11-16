@@ -31,7 +31,7 @@ final class WidgetUpdater {
 
     static void updateAll(Context ctx) {
         NowPlaying np = MusicWidget.last();
-        if (np != null || !MusicWidget.goneAlreadySent()) {
+        if (NowPlaying.showable(np) || !MusicWidget.goneAlreadySent()) {
             MusicWidget.update(ctx, np); // re-extrapolates the progress bar on every tick
         }
         try {
@@ -113,13 +113,14 @@ final class WidgetUpdater {
 
     private static final int MUSIC_DEFAULT_W_DP = 330, MUSIC_DEFAULT_H_DP = 76;
 
-    /** The music widget's views: hidden when np is null, otherwise art/text bitmap plus transport buttons. */
+    /**
+     * The music widget's views: the empty layout (nothing at all on the wallpaper) when nothing is playing (np null,
+     * stopped or without metadata, see {@link NowPlaying#showable}), otherwise the art/text bitmap plus transport
+     * buttons.
+     */
     static RemoteViews musicViews(Context ctx, AppWidgetManager mgr, int id, NowPlaying np) {
+        if (!NowPlaying.showable(np)) return new RemoteViews(ctx.getPackageName(), R.layout.widget_music_empty);
         RemoteViews rv = new RemoteViews(ctx.getPackageName(), R.layout.widget_music);
-        if (np == null) {
-            rv.setViewVisibility(R.id.music_root, android.view.View.GONE);
-            return rv;
-        }
         float density = ctx.getResources().getDisplayMetrics().density;
         Bundle o = mgr.getAppWidgetOptions(id);
         int wDp = o == null ? 0 : o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0);
@@ -132,7 +133,6 @@ final class WidgetUpdater {
         float eff = density * shrink;
         float radiusDp = shapeRadiusDp(o, wDp, hDp);
         Bitmap art = safe(h, w, () -> WidgetArt.music(ctx, w, h, np, eff, radiusDp));
-        rv.setViewVisibility(R.id.music_root, android.view.View.VISIBLE);
         rv.setImageViewBitmap(R.id.music_img, art);
         rv.setImageViewResource(R.id.music_play, np.playing ? R.drawable.ic_pause : R.drawable.ic_play);
         rv.setOnClickPendingIntent(R.id.music_prev, commandIntent(ctx, 10, MediaCommandReceiver.PREV));

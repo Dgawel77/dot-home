@@ -46,6 +46,8 @@ final class WidgetArt {
     private static final String SEP = " \u00B7 ";
     private static final float ART_RADIUS_DP = 12f;
     private static final float ICON_STROKE_DP = 1.6f;
+    /** Right part of the music widget kept clear for widget_music.xml's three 56 dp buttons and 4 dp end margin. */
+    static final float MUSIC_TRANSPORT_DP = 3 * 56f + 4f;
     /** Clear glass card: 75% near-black tint, diagonal white sheen from the top-left, gradient white rim. */
     static final int GLASS_FILL = 0xBF0E0E0E;
     static final float GLASS_SHEEN_ALPHA = 0.12f;
@@ -218,8 +220,8 @@ final class WidgetArt {
 
     /**
      * The music widget body: 64 dp halftone art square (S4, L100 dots, 12 dp corners), title (Inter 15, L100),
-     * artist (Inter 13, L65) and an S4 dot-row progress bar. The right 132 dp is left clear for the transport
-     * buttons. dens is the effective density, so every size is true dp; radiusDp is the card's corner radius.
+     * artist (Inter 13, L65) and an S4 dot-row progress bar. The right MUSIC_TRANSPORT_DP (172 dp) is left clear for
+     * the transport buttons. dens is the effective density, so every size is true dp; radiusDp is the card's corner radius.
      */
     static Bitmap music(Context ctx, int wPx, int hPx, NowPlaying np, float dens, float radiusDp) {
         Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
@@ -239,7 +241,7 @@ final class WidgetArt {
         }
 
         float textX = artX + artS + 16f * dens;
-        float maxW = Math.max(1f, wPx - 132f * dens - textX - 4f * dens);
+        float maxW = Math.max(1f, wPx - MUSIC_TRANSPORT_DP * dens - textX - 4f * dens);
         Paint title = text(Fonts.interMedium(ctx), 15f, dens, DotStyle.L100);
         Paint artist = text(Fonts.inter(ctx), 13f, dens, DotStyle.L65);
 

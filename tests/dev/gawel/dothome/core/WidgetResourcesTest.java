@@ -84,6 +84,33 @@ public final class WidgetResourcesTest {
         T.eq("15dp", attr(date, "textSize"), "date size");
     }
 
+    public static void testMusicBlankWhenNothingPlays() {
+        T.check(read("xml/widget_music_info.xml").contains("android:initialLayout=\"@layout/widget_music_empty\""),
+            "a new music widget starts blank");
+        String empty = read("layout/widget_music_empty.xml");
+        T.eq(1, elements(empty, "FrameLayout").size(), "one view");
+        T.check(!empty.contains("ImageButton") && !empty.contains("ImageView"), "no card, no buttons");
+    }
+
+    public static void testMusicButtons56dpWith32dpGlyphs() {
+        List<String> buttons = elements(read("layout/widget_music.xml"), "ImageButton");
+        T.eq(3, buttons.size(), "three buttons");
+        for (String b : buttons) {
+            T.eq("56dp", attr(b, "layout_width"), "touch width");
+            T.eq("56dp", attr(b, "layout_height"), "touch height");
+            T.eq("center", attr(b, "scaleType"), "glyph at its own size");
+        }
+        T.check(56 <= 95 - 2 * 16, "fits the 1-row 95 dp widget inside the 16 dp pad");
+        for (String icon : new String[] {"ic_play", "ic_pause", "ic_next", "ic_prev"}) {
+            String v = elements(read("drawable/" + icon + ".xml"), "vector").get(0);
+            T.eq("32dp", attr(v, "width"), icon + " width");
+            T.eq("32dp", attr(v, "height"), icon + " height");
+            T.eq("32", attr(v, "viewportWidth"), icon + " viewport");
+            T.eq("32", attr(v, "viewportHeight"), icon + " viewport");
+            T.check(!read("drawable/" + icon + ".xml").contains("#"), icon + " uses @color/dot_l100");
+        }
+    }
+
     public static void testFontResourcesExist() {
         for (String f : new String[] {"dot_matrix.ttf", "dot_matrix_grid.ttf", "inter.ttf"}) {
             T.check(Files.isRegularFile(Paths.get(RES + "font/" + f)), "res/font/" + f);

@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 32 dp on a 32-unit viewport (1 unit = 1 dp): the 24-unit glyph scaled by 4/3. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path android:fillColor="#DDDDDD" android:pathData="M7 5h3.5v14H7z" />
-    <path android:fillColor="#DDDDDD" android:pathData="M13.5 5H17v14h-3.5z" />
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="32"
+    android:viewportHeight="32">
+    <path android:fillColor="@color/dot_l100" android:pathData="M9.5 6.5h4.5v19h-4.5z" />
+    <path android:fillColor="@color/dot_l100" android:pathData="M18 6.5h4.5v19H18z" />
 </vector>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The music widget while nothing plays: nothing at all (no card, no buttons), only the wallpaper shows. A
+     separate empty layout, so the blank state does not depend on how the launcher treats a GONE root view. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/music_empty"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" />
