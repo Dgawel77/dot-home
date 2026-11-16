@@ -10,7 +10,7 @@ public final class Halftone {
     private static final float SKIP_BELOW = 0.10f;
 
     /**
-     * Converts an image (ARGB or grey) to (cx, cy, diameter) triples on a square lattice of stepPx cells.
+     * Converts an ARGB image (alpha is composited onto black) to (cx, cy, diameter) triples on a square lattice of stepPx cells.
      * Luminance is stretched between its 2nd and 98th percentile; diameter = sqrt(b) x 0.85 x step;
      * cells with b below 10% are skipped. Cells are the mean luminance of their pixels.
      */
@@ -18,7 +18,7 @@ public final class Halftone {
         float[] lum = new float[w * h];
         for (int i = 0; i < lum.length; i++) {
             int p = argb[i];
-            lum[i] = (0.299f * ((p >> 16) & 0xFF) + 0.587f * ((p >> 8) & 0xFF) + 0.114f * (p & 0xFF)) / 255f;
+            lum[i] = ((p >>> 24) / 255f) * (0.299f * ((p >> 16) & 0xFF) + 0.587f * ((p >> 8) & 0xFF) + 0.114f * (p & 0xFF)) / 255f;
         }
         float[] sorted = lum.clone();
         Arrays.sort(sorted);

@@ -68,10 +68,10 @@ public final class DesignValuesTest {
 
     public static void testFixedAdvance() {
         T.eq(DotMatrixFont.render("00:00").cols, DotMatrixFont.render("11:11").cols, "same width");
-        T.eq(29, DotMatrixFont.render("12:41").cols, "fixed 5-wide colon");
+        T.eq(25, DotMatrixFont.render("12:41").cols, "12:41 cols");
         DotMatrixFont.Grid g = DotMatrixFont.render("1:");
-        T.eq(11, g.cols, "1 + gap + 5");
-        T.eq(DotMatrixFont.cells("12:41").length, 29 * 7, "cells size");
+        T.eq(7, g.cols, "1 + gap + colon");
+        T.eq(DotMatrixFont.cells("12:41").length, 25 * 7, "cells size");
     }
 
     public static void testCellsAllCells() {
@@ -86,6 +86,31 @@ public final class DesignValuesTest {
         int[] p = new int[w * h];
         java.util.Arrays.fill(p, 0xFF000000 | (v << 16) | (v << 8) | v);
         return p;
+    }
+
+    public static void testHalftoneTransparentNoDots() {
+        int[] p = new int[16 * 16];
+        java.util.Arrays.fill(p, 0x00FFFFFF);
+        T.eq(0, Halftone.dots(p, 16, 16, 4).length, "transparent white");
+    }
+
+    private static String bitmap(char c) {
+        boolean[] g = DotMatrixFont.glyph(c);
+        StringBuilder sb = new StringBuilder();
+        for (int r = 0; r < 7; r++) {
+            if (r > 0) sb.append(',');
+            for (int x = 0; x < 5; x++) sb.append(g[r * 5 + x] ? '1' : '0');
+        }
+        return sb.toString();
+    }
+
+    public static void testDegreeAndPercentBitmaps() {
+        T.eq("01110,01010,01110,00000,00000,00000,00000", bitmap('\u00B0'), "degree");
+        T.eq("11000,11001,00010,00100,01000,10011,00011", bitmap('%'), "percent");
+    }
+
+    public static void testDigitsShareAdvance() {
+        T.eq(DotMatrixFont.render("00:00").cols, DotMatrixFont.render("11:11").cols, "digit advance");
     }
 
     public static void testHalftoneBlackNoDots() {
@@ -167,7 +192,7 @@ public final class DesignValuesTest {
     private static ClearZones zone() {
         List<float[]> r = new ArrayList<float[]>();
         r.add(new float[] {100, 100, 200, 100}); // x,y,w,h
-        return ClearZones.of(r, 40f);
+        return ClearZones.of(r, 40f, 4f);
     }
 
     public static void testZonesInsideAndFar() {

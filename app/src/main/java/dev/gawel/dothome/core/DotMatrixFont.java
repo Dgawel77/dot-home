@@ -16,12 +16,12 @@ public final class DotMatrixFont {
         "01110,10001,10001,01110,10001,10001,01110", // 8
         "01110,10001,10001,01111,00001,00010,01100", // 9
     };
-    private static final String COLON = "00000,00000,00100,00000,00100,00000,00000";
-    private static final String DEGREE = "01100,10010,10010,01100,00000,00000,00000";
+    private static final String COLON = "0,0,1,0,1,0,0";
+    private static final String DEGREE = "01110,01010,01110,00000,00000,00000,00000";
     private static final String MINUS = "00000,00000,00000,11111,00000,00000,00000";
     private static final String DOT = "00000,00000,00000,00000,00000,00000,00100";
-    private static final String PERCENT = "11001,11010,00010,00100,01000,01011,10011";
-    /** Every glyph has the same advance. */
+    private static final String PERCENT = "11000,11001,00010,00100,01000,10011,00011";
+    /** Digits and the symbol glyphs share one advance; the colon is a single column. */
     public static final int GLYPH_COLS = 5;
 
     private DotMatrixFont() {}
@@ -72,7 +72,7 @@ public final class DotMatrixFont {
 
     public static int width(char c) {
         spec(c); // validates
-        return GLYPH_COLS;
+        return c == ':' ? 1 : GLYPH_COLS;
     }
 
     /** Lays glyphs out left to right with one absent column between them. */

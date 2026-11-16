@@ -19,14 +19,15 @@ public final class ClearZones {
     private final float edge;
     private final float cell;
 
-    private ClearZones(List<float[]> rects, float edgePx) {
+    private ClearZones(List<float[]> rects, float edgePx, float cellPx) {
         this.rects = new ArrayList<float[]>(rects);
         this.edge = Math.max(edgePx, 0f);
-        this.cell = Math.max(edge / 8f, 1f);
+        this.cell = Math.max(cellPx, 1f);
     }
 
-    public static ClearZones of(List<float[]> rects, float edgePx) {
-        return new ClearZones(rects, edgePx);
+    /** cellPx is the lattice step: the dither runs per lattice cell, so whole dots drop out. */
+    public static ClearZones of(List<float[]> rects, float edgePx, float cellPx) {
+        return new ClearZones(rects, edgePx, cellPx);
     }
 
     public boolean inside(float x, float y) {
