@@ -3,6 +3,7 @@ package dev.gawel.dothome;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Path;
@@ -28,7 +29,7 @@ import dev.gawel.dothome.core.Weather;
 import dev.gawel.dothome.core.WeatherCodes;
 
 /**
- * Draws the clock, weather and music widgets as bitmaps (a dark glass card when backdrops are on) on the 4 dp lattice. Every function takes the
+ * Draws the clock, weather and music widgets as bitmaps (a clear glass card when backdrops are on) on the 4 dp lattice. Every function takes the
  * effective density (display density times the shrink applied to the bitmap), so sizes come out as true dp once
  * the launcher stretches the bitmap back. Content offsets snap to multiples of the step; no containers, glows or
  * gradients.
@@ -38,13 +39,14 @@ final class WidgetArt {
     private static final int WORST_TEMP_COLS = 23;
     private static final float ART_RADIUS_DP = 12f;
     private static final float ICON_STROKE_DP = 1.6f;
-    /** Dark glass card: fill, 1 dp inner hairline, top sheen (peak at centre, 0 at the corners), inset map shade. */
-    static final int GLASS_FILL = 0xF0121212;
-    static final int GLASS_EDGE = 0x1FFFFFFF;
-    static final int GLASS_SHEEN = 0x14FFFFFF;
-    static final int GLASS_SHADE = 0x66000000;
+    /** Clear glass card: 75% near-black tint, diagonal white sheen from the top-left, gradient white rim. */
+    static final int GLASS_FILL = 0xBF0E0E0E;
+    static final float GLASS_SHEEN_ALPHA = 0.12f;
+    static final float GLASS_SHEEN_X = 0.6f, GLASS_SHEEN_Y = 0.9f;
+    static final float GLASS_RIM_MAX = 0.40f, GLASS_RIM_MIN = 0.10f;
+    static final float GLASS_RIM_X = 0.5f, GLASS_RIM_Y = 0.8f;
+    static final float GLASS_RIM_DP = 1.2f;
     static final float GLASS_RADIUS_DP = 24f;
-    static final float GLASS_SHADE_DP = 6f;
 
     private WidgetArt() {}
 
@@ -264,15 +266,15 @@ final class WidgetArt {
         return bmp;
     }
 
-    /** Pref "widget.backdrop" (default on): whether widgets draw their own dark glass card. */
+    /** Pref "widget.backdrop" (default on): whether widgets draw their own clear glass card. */
     static boolean backdropOn(Context ctx) {
         return !"false".equals(new PrefsStore(ctx).get("widget.backdrop", "true"));
     }
 
     /**
-     * Dark glass card for a bitmap that is the part of a totalW-wide widget starting at xOff: the whole card is
-     * drawn in widget coordinates and shifted, so a pair of halves share one outline, hairline and sheen, with no
-     * edge at the seam.
+     * Clear glass card for a bitmap that is the part of a totalW-wide widget starting at xOff: the whole card is
+     * drawn in widget coordinates and shifted, so a pair of halves share one tint, sheen and rim gradient, with
+     * no edge at the seam.
      */
     private static void backdrop(Context ctx, Canvas c, int hPx, float dens, int xOff, int totalW) {
         if (!backdropOn(ctx)) return;
@@ -280,21 +282,35 @@ final class WidgetArt {
         c.translate(-xOff, 0);
         float rad = GLASS_RADIUS_DP * dens;
         c.drawPath(panel(0, 0, totalW, hPx, rad), fill(GLASS_FILL));
-        float sw = Math.max(1f, dens);
-        Paint sheen = new Paint(Paint.ANTI_ALIAS_FLAG);
-        sheen.setShader(new LinearGradient(0, 0, totalW, 0, new int[] {GLASS_SHEEN & 0xFFFFFF, GLASS_SHEEN, GLASS_SHEEN & 0xFFFFFF},
-            new float[] {0f, 0.5f, 1f}, Shader.TileMode.CLAMP));
-        c.drawRect(rad, sw, totalW - rad, 2f * sw, sheen);
-        c.drawPath(panel(sw / 2f, sw / 2f, totalW - sw / 2f, hPx - sw / 2f, Math.max(0f, rad - sw / 2f)), edge(sw));
+        glassFinish(c, totalW, hPx, dens);
         c.restore();
     }
 
-    private static Paint edge(float sw) {
-        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        p.setStyle(Paint.Style.STROKE);
-        p.setStrokeWidth(sw);
-        p.setColor(GLASS_EDGE);
-        return p;
+    /** Diagonal sheen (clipped to the rounded card) and gradient rim over a w x h card at the origin. */
+    private static void glassFinish(Canvas c, float w, float h, float dens) {
+        float rad = GLASS_RADIUS_DP * dens;
+        // sheen: alpha = 0.12 * (1 - s)^2 along s = x*0.6/W + y*0.9/H, sampled at five stops
+        float ax = GLASS_SHEEN_X / w, ay = GLASS_SHEEN_Y / h, n = ax * ax + ay * ay;
+        int[] sc = new int[5];
+        float[] sp = new float[5];
+        for (int i = 0; i < 5; i++) {
+            sp[i] = i / 4f;
+            float t = 1f - sp[i];
+            sc[i] = Color.argb(Math.round(GLASS_SHEEN_ALPHA * t * t * 255f), 255, 255, 255);
+        }
+        Paint sheen = new Paint(Paint.ANTI_ALIAS_FLAG);
+        sheen.setShader(new LinearGradient(0, 0, ax / n, ay / n, sc, sp, Shader.TileMode.CLAMP));
+        c.drawPath(panel(0, 0, w, h, rad), sheen);
+        // rim: alpha 0.40 at the top-left easing to 0.10 along s = x*0.5/W + y*0.8/H
+        float sw = Math.max(1f, GLASS_RIM_DP * dens);
+        float rx = GLASS_RIM_X / w, ry = GLASS_RIM_Y / h, rn = rx * rx + ry * ry;
+        Paint rim = new Paint(Paint.ANTI_ALIAS_FLAG);
+        rim.setStyle(Paint.Style.STROKE);
+        rim.setStrokeWidth(sw);
+        rim.setShader(new LinearGradient(0, 0, rx / rn, ry / rn,
+            Color.argb(Math.round(GLASS_RIM_MAX * 255f), 255, 255, 255), Color.argb(Math.round(GLASS_RIM_MIN * 255f), 255, 255, 255),
+            Shader.TileMode.CLAMP));
+        c.drawPath(panel(sw / 2f, sw / 2f, w - sw / 2f, h - sw / 2f, Math.max(0f, rad - sw / 2f)), rim);
     }
 
     private static Path panel(float l, float t, float r, float b, float rad) {
@@ -304,30 +320,19 @@ final class WidgetArt {
     }
 
     /**
-     * Glass finish for an opaque map bitmap when the switch is on: a 6 dp inner shade (GLASS_SHADE fading to 0
-     * inward), transparent rounded corners, then the 1 dp hairline over the rounded edge. No fill over the map.
+     * Glass finish for an opaque map bitmap when the switch is on: transparent rounded corners, then the same
+     * diagonal sheen and gradient rim as the cards. No fill over the map.
      */
     static void glassMap(Context ctx, Bitmap bmp, float dens) {
         if (!backdropOn(ctx)) return;
         Canvas cv = new Canvas(bmp);
         int w = bmp.getWidth(), h = bmp.getHeight();
-        float band = Math.min(GLASS_SHADE_DP * dens, Math.min(w, h) / 2f);
-        int clear = GLASS_SHADE & 0xFFFFFF;
-        float[][] g = {{0, 0, 0, band}, {0, h, 0, h - band}, {0, 0, band, 0}, {w, 0, w - band, 0}};
-        RectF[] r = {new RectF(0, 0, w, band), new RectF(0, h - band, w, h), new RectF(0, 0, band, h), new RectF(w - band, 0, w, h)};
-        for (int i = 0; i < 4; i++) {
-            Paint p = new Paint();
-            p.setShader(new LinearGradient(g[i][0], g[i][1], g[i][2], g[i][3], GLASS_SHADE, clear, Shader.TileMode.CLAMP));
-            cv.drawRect(r[i], p);
-        }
-        float rad = GLASS_RADIUS_DP * dens;
-        Path outside = panel(0, 0, w, h, rad);
+        Path outside = panel(0, 0, w, h, GLASS_RADIUS_DP * dens);
         outside.setFillType(Path.FillType.INVERSE_WINDING);
         Paint clr = new Paint(Paint.ANTI_ALIAS_FLAG);
         clr.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
         cv.drawPath(outside, clr);
-        float sw = Math.max(1f, dens);
-        cv.drawPath(panel(sw / 2f, sw / 2f, w - sw / 2f, h - sw / 2f, Math.max(0f, rad - sw / 2f)), edge(sw));
+        glassFinish(cv, w, h, dens);
     }
 
     /** " 2h ago"-style text once the data is older than 90 minutes; null while fresh. Hours, then days. */
