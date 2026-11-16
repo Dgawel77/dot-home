@@ -16,6 +16,8 @@ Also writes contact.png (every final icon on BG with label and source marker).
 First run creates tools/.venv with pinned wheels (skia-python renders the SVGs; the NAS has no
 system cairo). Simple Icons (CC0) comes from the pinned npm tarball, cached in tools/cache/.
 """
+import base64
+import hashlib
 import io
 import json
 import os
@@ -33,8 +35,10 @@ VENV = os.path.join(HERE, ".venv")
 CACHE = os.path.join(HERE, "cache")
 FONT = os.path.join(ROOT, "app", "src", "main", "assets", "fonts", "Inter-Regular.ttf")
 
-PINNED_WHEELS = ["skia-python==144.0", "pillow==13.0.0", "numpy==2.5.4"]
+REQUIREMENTS = os.path.join(HERE, "iconfix-requirements.txt")  # full freeze incl. transitive deps
 SIMPLE_ICONS_VERSION = "16.36.0"  # published 2026-10-25
+SIMPLE_ICONS_SHA512 = (  # registry dist.integrity for 16.36.0 (base64)
+    "+VNPPkqSOLidFeSgBKUWX4n50WPpDC09hav+BgS26anIF1oQOlGBb8LvwGR+6fYRjo+B6CiKzNBceMPkSVXANQ==")
 SIMPLE_ICONS_URL = "https://registry.npmjs.org/simple-icons/-/simple-icons-%s.tgz" % SIMPLE_ICONS_VERSION
 
 # core/DotStyle: FG 0xFFDDDDDD, BG 0xFF0B0B0B
@@ -96,10 +100,13 @@ def label_from_package(pkg):
     return word[:1].upper() + word[1:]
 
 
-def resolve_slug(pkg, label, table, titles):
-    """Table first, then exact normalised label == normalised Simple Icons title."""
+def resolve_slug(pkg, label, table, titles, kind="auto"):
+    """Table first; then (auto rows only) exact normalised label == normalised Simple Icons title.
+    Mono rows rejected for fill ratio never get a coincidental label match."""
     if pkg in table:
         return table[pkg]
+    if kind != "auto":
+        return None
     return titles.get(normalise(label)) if label else None
 
 
@@ -129,19 +136,28 @@ def parse_index(path):
 
 # ---------------------------------------------------------------- Simple Icons
 
-def ensure_simple_icons():
-    """Download (once) and safely extract the pinned simple-icons release; returns package dir."""
-    dest = os.path.join(CACHE, "simple-icons-" + SIMPLE_ICONS_VERSION)
-    pkg = os.path.join(dest, "package")
-    if os.path.isfile(os.path.join(pkg, "data", "simple-icons.json")):
-        return pkg
-    os.makedirs(CACHE, exist_ok=True)
-    tgz = dest + ".tgz"
-    if not os.path.isfile(tgz):
-        req = urllib.request.Request(SIMPLE_ICONS_URL, headers={"User-Agent": "dothome-iconfix"})
-        with urllib.request.urlopen(req, timeout=120) as r, open(tgz + ".part", "wb") as out:
-            shutil.copyfileobj(r, out)
-        os.replace(tgz + ".part", tgz)
+def _sha512_b64(path):
+    h = hashlib.sha512()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return base64.b64encode(h.digest()).decode("ascii")
+
+
+def _download(tgz):
+    req = urllib.request.Request(SIMPLE_ICONS_URL, headers={"User-Agent": "dothome-iconfix"})
+    part = tgz + ".part"
+    with urllib.request.urlopen(req, timeout=120) as r, open(part, "wb") as out:
+        shutil.copyfileobj(r, out)
+    got = _sha512_b64(part)
+    if got != SIMPLE_ICONS_SHA512:
+        os.remove(part)
+        raise RuntimeError("simple-icons %s integrity mismatch: expected sha512-%s, got sha512-%s"
+                           % (SIMPLE_ICONS_VERSION, SIMPLE_ICONS_SHA512, got))
+    os.replace(part, tgz)
+
+
+def _extract(tgz, dest):
     tmp = dest + ".tmp"
     shutil.rmtree(tmp, ignore_errors=True)
     os.makedirs(tmp)
@@ -161,6 +177,33 @@ def ensure_simple_icons():
                     shutil.copyfileobj(src, out)
     shutil.rmtree(dest, ignore_errors=True)
     os.replace(tmp, dest)
+
+
+def ensure_simple_icons():
+    """Download (once, sha512-verified) and safely extract the pinned simple-icons release.
+
+    The cached tarball is re-hashed on every run; a mismatch or tar error deletes the tarball and
+    the extracted dir and re-downloads once. Returns the package dir."""
+    dest = os.path.join(CACHE, "simple-icons-" + SIMPLE_ICONS_VERSION)
+    pkg = os.path.join(dest, "package")
+    tgz = dest + ".tgz"
+    os.makedirs(CACHE, exist_ok=True)
+    for attempt in (1, 2):
+        try:
+            if os.path.isfile(tgz) and _sha512_b64(tgz) != SIMPLE_ICONS_SHA512:
+                raise tarfile.TarError("cached tarball hash mismatch")
+            if not os.path.isfile(tgz):
+                _download(tgz)
+            if not os.path.isfile(os.path.join(pkg, "data", "simple-icons.json")):
+                _extract(tgz, dest)
+            return pkg
+        except (tarfile.TarError, EOFError, OSError) as e:
+            if attempt == 2:
+                raise
+            print("simple-icons cache bad (%s); re-downloading" % e)
+            if os.path.isfile(tgz):
+                os.remove(tgz)
+            shutil.rmtree(dest, ignore_errors=True)
     return pkg
 
 
@@ -262,8 +305,9 @@ def fix(in_dir, out_dir, overrides_dir=None, log=print):
     os.makedirs(out_dir, exist_ok=True)
     keep = {r[1] + ".png" for r in rows} | {"index.tsv", "contact.png"}
     for f in os.listdir(out_dir):
-        if f not in keep:
-            os.remove(os.path.join(out_dir, f))
+        fp = os.path.join(out_dir, f)
+        if f not in keep and os.path.isfile(fp):
+            os.remove(fp)
     shutil.copyfile(os.path.join(in_dir, "index.tsv"), os.path.join(out_dir, "index.tsv"))
     sheet = []
     for comp, name, kind, label in rows:
@@ -285,7 +329,7 @@ def fix(in_dir, out_dir, overrides_dir=None, log=print):
             else:
                 why = "auto" if kind != "mono" else "fill %.2f" % ratio
                 out = None
-                slug = resolve_slug(pkg, label, PACKAGE_TO_SLUG, titles)
+                slug = resolve_slug(pkg, label, PACKAGE_TO_SLUG, titles, kind)
                 if slug:
                     svg = os.path.join(pkg_dir, "icons", slug + ".svg")
                     if os.path.isfile(svg):
@@ -338,7 +382,7 @@ def _bootstrap():
     py = os.path.join(VENV, "bin", "python")
     if not os.path.isfile(py):
         subprocess.check_call([sys.executable, "-m", "venv", VENV])
-        subprocess.check_call([py, "-m", "pip", "-q", "install"] + PINNED_WHEELS)
+        subprocess.check_call([py, "-m", "pip", "-q", "install", "-r", REQUIREMENTS])
     os.execv(py, [py, os.path.abspath(__file__)] + sys.argv[1:])
 
 

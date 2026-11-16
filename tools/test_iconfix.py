@@ -30,6 +30,10 @@ class Resolve(unittest.TestCase):
     def test_label_match_when_not_in_table(self):
         self.assertEqual(ix.resolve_slug("x.y", "Netflix", {}, self.TITLES), "netflix")
 
+    def test_mono_rejected_for_fill_never_label_matches(self):
+        self.assertIsNone(ix.resolve_slug("x.y", "Netflix", {}, self.TITLES, "mono"))
+        self.assertEqual(ix.resolve_slug("com.a", "Zzz", {"com.a": "claude"}, self.TITLES, "mono"), "claude")
+
     def test_no_match(self):
         self.assertIsNone(ix.resolve_slug("x.y", "Zzz", {}, self.TITLES))
 
@@ -38,6 +42,17 @@ class Resolve(unittest.TestCase):
         slugs = set(titles.values())
         for pkg, slug in ix.PACKAGE_TO_SLUG.items():
             self.assertIn(slug, slugs, pkg)
+
+
+class Cache(unittest.TestCase):
+    def test_corrupt_cache_is_repaired(self):
+        pkg = ix.ensure_simple_icons()
+        tgz = os.path.dirname(pkg) + ".tgz"
+        with open(tgz, "ab") as f:
+            f.write(b"x")
+        pkg = ix.ensure_simple_icons()
+        self.assertEqual(ix._sha512_b64(tgz), ix.SIMPLE_ICONS_SHA512)
+        self.assertTrue(os.path.isfile(os.path.join(pkg, "data", "simple-icons.json")))
 
 
 class Fill(unittest.TestCase):
