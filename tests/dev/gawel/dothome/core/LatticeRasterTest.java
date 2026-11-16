@@ -181,4 +181,42 @@ public final class LatticeRasterTest {
         T.eq(5, LatticeRaster.cellCount(5f, 45f, 10f, 0f), "count across a half-offset span");
         T.eq(1, LatticeRaster.cellCount(7f, 7f, 10f, 0f), "a point still has its cell");
     }
+
+    public static void testRejectsNonFiniteOrRunawayInput() {
+        Grid g = new Grid();
+        T.eq(false, LatticeRaster.coverage(new float[] {0, 10, Float.NaN}, new float[] {0, 0, 9}, 3, 10f, 0f, 0f, g), "NaN x");
+        T.eq(false, LatticeRaster.coverage(new float[] {0, 10, 5}, new float[] {0, Float.POSITIVE_INFINITY, 9}, 3, 10f, 0f, 0f, g), "infinite y");
+        T.eq(false, LatticeRaster.coverage(new float[] {0, 1e9f, 5}, new float[] {0, 0, 9}, 3, 10f, 0f, 0f, g), "runaway span");
+        T.eq(0, g.calls, "nothing reported for rejected input");
+        T.eq(false, LatticeRaster.accepts(new float[] {Float.NaN, 1, 2}, new float[] {0, 1, 2}, 3, 10f, 0f, 0f), "accepts: NaN");
+        T.eq(true, LatticeRaster.accepts(new float[] {0, 10, 5}, new float[] {0, 0, 9}, 3, 10f, 0f, 0f), "accepts: a triangle");
+        T.eq(true, LatticeRaster.coverage(new float[] {0, 10, 5}, new float[] {0, 0, 9}, 3, 10f, 0f, 0f, g), "a triangle rasterises");
+        T.check(g.calls > 0, "and reports cells");
+    }
+
+    public static void testDotRadiusEndpoints() {
+        float rl = 1f, rr = 3f;
+        T.near(rl, LatticeRaster.dotRadius(1f, 1f, rl, rr), 1e-6, "body cell (all neighbours full): light");
+        T.near(rr, LatticeRaster.dotRadius(1f, 0f, rl, rr), 1e-6, "full cell next to an empty one: regular");
+        T.near(0, LatticeRaster.dotRadius(0f, 0f, rl, rr), 1e-6, "empty cell");
+        // half-covered edge cell next to the outside: regular weight, ink by the square root of coverage
+        T.near(rr * Math.sqrt(0.5) * 1, LatticeRaster.dotRadius(0.5f, 0f, rl, rr), 1e-5, "half rim cell");
+        // a partial cell's own coverage also counts as its weakest side
+        T.near((rl + (rr - rl) * 0.5) * Math.sqrt(0.5), LatticeRaster.dotRadius(0.5f, 1f, rl, rr), 1e-5, "partial cell, full neighbours");
+    }
+
+    public static void testDotRadiusIsContinuous() {
+        float rl = 1.2f, rr = 3.15f, d = 0.001f;
+        float worst = 0;
+        for (float cov = 0; cov <= 1f; cov += 0.01f) {
+            for (float nb = 0; nb <= 1f; nb += 0.01f) {
+                float r = LatticeRaster.dotRadius(cov, nb, rl, rr);
+                worst = Math.max(worst, Math.abs(LatticeRaster.dotRadius(Math.min(1f, cov + d), nb, rl, rr) - r));
+                worst = Math.max(worst, Math.abs(LatticeRaster.dotRadius(cov, Math.min(1f, nb + d), rl, rr) - r));
+                T.check(r >= 0 && r <= rr + 1e-6, "radius in range " + r);
+            }
+        }
+        // sqrt has its steepest step at 0: sqrt(0.001) x rReg is about 0.1 px here
+        T.check(worst < 0.04f * rr, "a 0.001 input step moves the radius by at most " + worst);
+    }
 }

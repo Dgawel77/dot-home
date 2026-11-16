@@ -10,6 +10,7 @@ import java.util.TimeZone;
 
 import dev.gawel.dothome.core.FireMode;
 import dev.gawel.dothome.core.GameWorld;
+import dev.gawel.dothome.core.IntroGate;
 import dev.gawel.dothome.core.Rng;
 import dev.gawel.dothome.core.Weather;
 import dev.gawel.dothome.core.TiltInput;
@@ -33,11 +34,8 @@ final class GameHub {
     private DotRenderer renderer;
     private long hiddenAtMs = -1;
     private final KeyguardManager keyguard;
-    /**
-     * The next unlocked show plays the opening dot. Set for the process's first show and on every screen-off;
-     * any other show (a fold, a return from an app, a visibility flip) skips the intro instead of replaying it.
-     */
-    private boolean introArmed = true;
+    /** When the opening dot plays: the first show after a screen-off and unlock; folds and flips skip it. */
+    private final IntroGate introGate = new IntroGate();
 
     static synchronized GameHub get(Context context) {
         if (instance == null) instance = new GameHub(context.getApplicationContext());
@@ -96,12 +94,10 @@ final class GameHub {
         }
         visible.remove(e);
         visible.add(e);
-        if (introArmed && !keyguardLocked()) {
-            introArmed = false;
-            world.restartIntro();
-        } else {
-            world.skipIntro(); // no screen-off since the last intro, or still behind the keyguard (waits for unlock)
-        }
+        IntroGate.Action intro = introGate.visible(keyguardLocked());
+        if (intro == IntroGate.Action.PLAY) world.restartIntro();
+        else if (intro == IntroGate.Action.HOLD) world.holdIntro(); // one dot until USER_PRESENT plays it
+        else world.skipIntro();
         if (renderer != null) renderer.setOutlineRocks(prefs.outlineRocks());
         fireMode = readFireMode();
         // the zone may have changed since the last visible period; keep the persisted keys/values
@@ -147,14 +143,11 @@ final class GameHub {
     }
 
     /** The screen went off: the first show after it comes back on and unlocks plays the opening dot. */
-    void onScreenOff() { introArmed = true; }
+    void onScreenOff() { introGate.screenOff(); }
 
-    /** The keyguard was dismissed: an engine already showing behind it plays the armed intro now. */
+    /** The keyguard was dismissed: an engine already showing (holding on the first dot) plays the intro now. */
     void onUserPresent() {
-        if (introArmed && !visible.isEmpty()) {
-            introArmed = false;
-            world.restartIntro();
-        }
+        if (introGate.userPresent(!visible.isEmpty()) == IntroGate.Action.PLAY) world.restartIntro();
     }
 
     private boolean keyguardLocked() {

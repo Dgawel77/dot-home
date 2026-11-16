@@ -30,6 +30,8 @@ public final class GameWorld {
     private float w, h, time;
     /** Seconds since the intro (the opening dot) started; the world is live once it reaches cfg.introSeconds. */
     private float introT;
+    /** The intro waits at its first frame (shown behind the keyguard) until restartIntro or skipIntro. */
+    private boolean introHeld;
     private final Ship ship = new Ship();
     private final List<Rock> rocks = new ArrayList<Rock>();
     private final List<Shot> shots = new ArrayList<Shot>();
@@ -55,7 +57,7 @@ public final class GameWorld {
 
     /** Starts a shockwave at the ship; false during the intro or while the cooldown is running. */
     public boolean shockwave() {
-        if (cfg == null || introT < cfg.introSeconds || shockCool > 0) return false;
+        if (!isLive() || shockCool > 0) return false;
         shockCool = cfg.shockCooldown;
         Shockwave sw = new Shockwave();
         sw.x = ship.x;
@@ -86,13 +88,41 @@ public final class GameWorld {
     /** Seconds since the intro started; at or past GameConfig.INTRO_SECONDS the intro is over. */
     public float introTime() { return introT; }
 
-    /** Ends the intro now (a fold, page swipe or visibility flip must not replay it); world time is untouched. */
+    /** Ends the intro now, releasing any hold (a fold, page swipe or visibility flip must not replay it); world time is untouched. */
     public void skipIntro() {
+        introHeld = false;
         if (introT < GameConfig.INTRO_SECONDS) introT = GameConfig.INTRO_SECONDS;
     }
 
-    /** Plays the intro again (the first show after unlock): the ship holds still and the shockwave waits until it ends. */
-    public void restartIntro() { introT = 0f; }
+    /**
+     * Plays the intro from its first frame (the first show after unlock) so the scene starts from one dot: the ship
+     * stops where it is and shots, debris, the shockwave and hit rings are cleared. Until the intro ends the ship
+     * holds still (no autopilot, no collisions) and nothing fires: no taps, no auto-fire, no shockwave. Releases a hold.
+     */
+    public void restartIntro() {
+        resetIntro();
+        introHeld = false;
+    }
+
+    /** Like restartIntro, but the intro stays on its first frame (one dot) until restartIntro or skipIntro. */
+    public void holdIntro() {
+        resetIntro();
+        introHeld = true;
+    }
+
+    private void resetIntro() {
+        introT = 0f;
+        ship.vx = 0f;
+        ship.vy = 0f;
+        ship.hitCooldown = 0f;
+        shots.clear();
+        particles.clear();
+        rings.clear();
+        wave = null;
+    }
+
+    /** Past the intro: the autopilot steers, the ship collides, and taps, auto-fire and the shockwave work. */
+    private boolean isLive() { return cfg != null && introT >= cfg.introSeconds; }
     public float width() { return w; }
     public float height() { return h; }
 
@@ -175,9 +205,9 @@ public final class GameWorld {
         }
     }
 
-    /** Fires a shot toward (x, y); false while the fire cooldown is running. */
+    /** Fires a shot toward (x, y); false during the intro or while the fire cooldown is running. */
     public boolean fire(float x, float y) {
-        if (cfg == null || fireT > 0) return false;
+        if (!isLive() || fireT > 0) return false;
         fireT = cfg.fireCooldown;
         float a = (float) Math.atan2(y - ship.y, x - ship.x);
         ship.angle = a;
@@ -208,9 +238,9 @@ public final class GameWorld {
         if (dt > 0.05f) dt = 0.05f;
         if (dt < 0) dt = 0;
         time += dt;
-        introT += dt;
+        if (!introHeld) introT += dt;
         if (shockCool > 0) shockCool -= dt;
-        boolean live = introT >= cfg.introSeconds;
+        boolean live = isLive();
         Ship s = ship;
         if (live && autopilot) steer(dt);
         float damp = (float) Math.exp(-cfg.damping * dt);
@@ -240,12 +270,13 @@ public final class GameWorld {
         if (fireT > 0) fireT -= dt;
         if (s.hitCooldown > 0) s.hitCooldown -= dt;
 
-        if (autoFire) {
+        if (autoFire && live) {
             autoT -= dt;
             if (autoT <= 0) autoFireAtNearest();
         }
 
-        for (Rock r : rocks) {
+        for (int i = 0; i < rocks.size(); i++) {
+            Rock r = rocks.get(i);
             r.x += r.vx * dt;
             r.y += r.vy * dt;
             r.rot += r.vr * dt;
@@ -253,13 +284,15 @@ public final class GameWorld {
             if (r.x < -e) r.x = w + e; else if (r.x > w + e) r.x = -e;
             if (r.y < -e) r.y = h + e; else if (r.y > h + e) r.y = -e;
         }
-        for (Shot sh : shots) {
+        for (int i = 0; i < shots.size(); i++) {
+            Shot sh = shots.get(i);
             sh.x += sh.vx * dt;
             sh.y += sh.vy * dt;
             sh.life -= dt;
             if (sh.x < -10 || sh.x > w + 10 || sh.y < -10 || sh.y > h + 10) sh.life = 0;
         }
-        for (Shot sh : shots) {
+        for (int k = 0; k < shots.size(); k++) {
+            Shot sh = shots.get(k);
             if (sh.life <= 0) continue;
             for (int i = 0; i < rocks.size(); i++) {
                 Rock r = rocks.get(i);
@@ -273,7 +306,8 @@ public final class GameWorld {
         for (int i = shots.size() - 1; i >= 0; i--) if (shots.get(i).life <= 0) shots.remove(i);
 
         if (live) {
-            for (Rock r : rocks) {
+            for (int i = 0; i < rocks.size(); i++) {
+                Rock r = rocks.get(i);
                 float dx = s.x - r.x, dy = s.y - r.y;
                 float d = hypot(dx, dy);
                 if (d == 0) d = 1;
@@ -310,11 +344,12 @@ public final class GameWorld {
             }
             if (wave.t >= cfg.shockDuration) wave = null;
         }
-        for (Ring g : rings) g.t += dt;
+        for (int i = 0; i < rings.size(); i++) rings.get(i).t += dt;
         for (int i = rings.size() - 1; i >= 0; i--) if (rings.get(i).t >= cfg.ringLife) rings.remove(i);
         float fr = (float) Math.exp(-0.8 * dt);
         float gx = tiltX * cfg.gravityAccel * dt, gy = tiltY * cfg.gravityAccel * dt;
-        for (Particle p : particles) {
+        for (int i = 0; i < particles.size(); i++) {
+            Particle p = particles.get(i);
             p.vx += gx;
             p.vy += gy;
             p.x += p.vx * dt;
@@ -351,7 +386,8 @@ public final class GameWorld {
             ay = dy * f;
         }
         float max = 1.2f * ta;
-        for (Rock r : rocks) {
+        for (int i = 0; i < rocks.size(); i++) {
+            Rock r = rocks.get(i);
             float range = r.r + 90f * k;
             float nowD = hypot(s.x - r.x, s.y - r.y);
             if (nowD >= range) continue;
@@ -384,7 +420,8 @@ public final class GameWorld {
     private void autoFireAtNearest() {
         float best = 0.6f * Math.min(w, h);
         Rock target = null;
-        for (Rock r : rocks) {
+        for (int i = 0; i < rocks.size(); i++) {
+            Rock r = rocks.get(i);
             float d = hypot(r.x - ship.x, r.y - ship.y);
             if (d < best) { best = d; target = r; }
         }
@@ -393,7 +430,10 @@ public final class GameWorld {
 
     private float mass() {
         float m = 0;
-        for (Rock r : rocks) m += r.size == 3 ? 1f : r.size == 2 ? 0.45f : 0.2f;
+        for (int i = 0; i < rocks.size(); i++) {
+            Rock r = rocks.get(i);
+            m += r.size == 3 ? 1f : r.size == 2 ? 0.45f : 0.2f;
+        }
         return m;
     }
 

@@ -24,6 +24,7 @@ public final class GameWorldTest {
     }
 
     private static void fireUntilKill(GameWorld g, Count c, float x, float y) {
+        g.skipIntro(); // firing waits for the intro
         g.fire(x, y);
         for (int i = 0; i < 125 && c.destroyed < 1; i++) g.step(0.016f);
     }
@@ -87,6 +88,7 @@ public final class GameWorldTest {
 
     public static void testFireCooldown() {
         GameWorld g = world(new Count());
+        g.skipIntro();
         T.eq(true, g.fire(100, 100), "first");
         T.eq(false, g.fire(100, 100), "second");
     }
@@ -440,18 +442,71 @@ public final class GameWorldTest {
     }
 
     public static void testRestartIntroReplaysIt() {
-        GameWorld g = pastIntro(new Count());
+        Count c = new Count();
+        GameWorld g = world(c);
+        g.setAutoFire(true);
+        stepClear(g, 3f); // live: the autopilot has the ship moving
+        GameWorld.Ship s = g.ship();
+        T.check(Math.sqrt(s.vx * s.vx + s.vy * s.vy) > 1, "moving before the replay");
+        g.addRock(1, s.x + 120, s.y, 0, 0); // an auto-fire target, out of reach of the ship
+        g.shots().add(new GameWorld.Shot());
+        g.particles().add(new GameWorld.Particle());
+        g.rings().add(new GameWorld.Ring());
         float t = g.time();
         g.restartIntro();
         T.near(0, g.introTime(), 1e-6, "intro clock reset");
+        T.near(0, s.vx, 1e-6, "ship vx stopped");
+        T.near(0, s.vy, 1e-6, "ship vy stopped");
+        T.eq(0, g.shots().size(), "shots cleared");
+        T.eq(0, g.particles().size(), "debris cleared");
+        T.eq(0, g.rings().size(), "hit rings cleared");
+        T.check(g.wave() == null, "no shockwave");
         T.eq(false, g.shockwave(), "no shockwave during the replayed intro");
-        float x0 = g.ship().x, y0 = g.ship().y;
-        g.setAutopilot(true);
-        stepClear(g, 1.0f);
-        T.near(x0, g.ship().x, 0.01, "the ship holds still during the intro (x)");
-        T.near(y0, g.ship().y, 0.01, "the ship holds still during the intro (y)");
+        T.eq(false, g.fire(s.x, s.y - 100), "no tap fire during the intro");
+        float x0 = s.x, y0 = s.y;
+        for (int i = 0; i < 62; i++) { // 0.99 s, autopilot and auto-fire on
+            g.step(0.016f);
+            T.near(x0, s.x, 0.01, "the ship holds still (x) at step " + i);
+            T.near(y0, s.y, 0.01, "the ship holds still (y) at step " + i);
+            T.eq(0, g.shots().size(), "nothing fires during the intro, step " + i);
+        }
+        T.eq(0, c.destroyed, "nothing destroyed during the intro");
         T.check(g.time() > t + 0.9f, "world time keeps running");
-        stepClear(g, 0.3f);
+        for (int i = 0; i < 19; i++) g.step(0.016f);
+        T.check(g.introTime() >= g.config().introSeconds, "intro over");
         T.eq(true, g.shockwave(), "live again after 1.2 s");
+    }
+
+    public static void testNoFireDuringFirstIntro() {
+        GameWorld g = world(new Count());
+        T.eq(false, g.fire(100, 100), "tap during the intro");
+        g.setAutoFire(true);
+        g.addRock(1, g.ship().x + 100, g.ship().y, 0, 0);
+        for (int i = 0; i < 70; i++) {
+            g.step(0.016f);
+            T.eq(0, g.shots().size(), "auto-fire waits for the intro, step " + i);
+        }
+        for (int i = 0; i < 30; i++) g.step(0.016f);
+        T.check(g.shots().size() > 0 || g.particles().size() > 0, "auto-fire after the intro");
+    }
+
+    public static void testHoldIntroStaysOnFirstDot() {
+        GameWorld g = pastIntro(new Count());
+        g.ship().vx = 50;
+        g.holdIntro();
+        T.near(0, g.ship().vx, 1e-6, "held intro stops the ship too");
+        float x0 = g.ship().x;
+        g.setAutopilot(true);
+        stepClear(g, 3f);
+        T.near(0, g.introTime(), 1e-6, "the intro stays at its first frame");
+        T.near(x0, g.ship().x, 0.01, "ship still while held");
+        T.eq(false, g.shockwave(), "no shockwave while held");
+        g.restartIntro();
+        stepClear(g, 0.5f);
+        T.near(0.5, g.introTime(), 0.02, "playing after the unlock");
+        g.holdIntro();
+        g.skipIntro();
+        stepClear(g, 0.1f);
+        T.check(g.introTime() > g.config().introSeconds, "a skip also releases the hold");
     }
 }

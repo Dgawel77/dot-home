@@ -31,7 +31,7 @@ import dev.gawel.dothome.core.GameWorld;
  */
 final class LockStills {
     private static final String TAG = "DotHome";
-    private static final float DIM = 0.62f;
+    private static final float DIM = 0f; // the renderer's L65 cap is the stills' dimming; an overlay would leave the palette
     private static final float CLEAR_TOP = 0.42f;
     private static final String REL_DIR = "Pictures/DotHome";
 

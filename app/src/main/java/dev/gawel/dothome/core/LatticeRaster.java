@@ -24,6 +24,11 @@ public final class LatticeRaster {
         }
     };
 
+    /** Polygons wider or taller than this many cells are refused: a guard against runaway coordinates. */
+    public static final int MAX_SPAN_CELLS = 1 << 14;
+    /** Vertices further than this many cells from the origin are refused (cell indices stay well inside int). */
+    public static final int MAX_CELL_INDEX = 1 << 24;
+
     /** Index of the lattice cell holding coordinate v, for a lattice of cellPx anchored at origin. */
     public static int firstCell(float v, float cellPx, float origin) {
         return (int) Math.floor((v - origin) / cellPx);
@@ -37,13 +42,44 @@ public final class LatticeRaster {
     }
 
     /**
-     * Reports (col, row, coverage) for every lattice cell whose square meets the polygon's bounding box. Columns
-     * and rows count cellPx steps from (originX, originY). Polygons with fewer than 3 points, or a cell size that
-     * is not positive, report nothing.
+     * True when coverage() will rasterise this polygon: at least 3 points, a positive cell size, every vertex finite
+     * and within MAX_CELL_INDEX cells of the origin, and a bounding box at most MAX_SPAN_CELLS cells each way.
      */
-    public static void coverage(float[] polyX, float[] polyY, int n, float cellPx, float originX, float originY,
-                                CoverageSink sink) {
-        if (n < 3 || !(cellPx > 0f) || polyX.length < n || polyY.length < n) return;
+    public static boolean accepts(float[] polyX, float[] polyY, int n, float cellPx, float originX, float originY) {
+        if (n < 3 || !(cellPx > 0f) || polyX.length < n || polyY.length < n) return false;
+        float minX = Float.MAX_VALUE, maxX = -Float.MAX_VALUE, minY = Float.MAX_VALUE, maxY = -Float.MAX_VALUE;
+        for (int i = 0; i < n; i++) {
+            float x = (polyX[i] - originX) / cellPx, y = (polyY[i] - originY) / cellPx;
+            // NaN fails every comparison, so test for "in range" rather than "out of range"
+            if (!(Math.abs(x) <= MAX_CELL_INDEX && Math.abs(y) <= MAX_CELL_INDEX)) return false;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+        }
+        return maxX - minX <= MAX_SPAN_CELLS && maxY - minY <= MAX_SPAN_CELLS;
+    }
+
+    /**
+     * Dot radius for a rock cell, continuous in its inputs so dots never pop: the weight runs from light (a body
+     * cell, every side full) to regular (a cell on the edge) by m = min(cov, minNeighbourCov), and the ink of a
+     * partial cell follows the square root of its coverage, like the halftone rule:
+     * r = (rLight + (rReg - rLight) x (1 - m)) x sqrt(cov).
+     */
+    public static float dotRadius(float cov, float minNeighbourCov, float rLight, float rReg) {
+        float c = cov < 0f ? 0f : cov > 1f ? 1f : cov;
+        float m = Math.min(c, minNeighbourCov < 0f ? 0f : minNeighbourCov > 1f ? 1f : minNeighbourCov);
+        return (rLight + (rReg - rLight) * (1f - m)) * (float) Math.sqrt(c);
+    }
+
+    /**
+     * Reports (col, row, coverage) for every lattice cell whose square meets the polygon's bounding box. Columns
+     * and rows count cellPx steps from (originX, originY). Returns false, reporting nothing, when the input is
+     * refused (see accepts: too few points, a bad cell size, a non-finite or runaway vertex).
+     */
+    public static boolean coverage(float[] polyX, float[] polyY, int n, float cellPx, float originX, float originY,
+                                   CoverageSink sink) {
+        if (!accepts(polyX, polyY, n, cellPx, originX, originY)) return false;
         float minX = polyX[0], maxX = minX, minY = polyY[0], maxY = minY;
         for (int i = 1; i < n; i++) {
             float x = polyX[i], y = polyY[i];
@@ -52,7 +88,6 @@ public final class LatticeRaster {
             if (y < minY) minY = y;
             if (y > maxY) maxY = y;
         }
-        if (!finite(minX) || !finite(maxX) || !finite(minY) || !finite(maxY)) return;
         int col0 = firstCell(minX, cellPx, originX), row0 = firstCell(minY, cellPx, originY);
         int cols = cellCount(minX, maxX, cellPx, originX), rows = cellCount(minY, maxY, cellPx, originY);
         float[][] holder = SCRATCH.get();
@@ -86,6 +121,7 @@ public final class LatticeRaster {
                 sink.cell(col0 + col, row0 + row, cov > 1f ? 1f : cov);
             }
         }
+        return true;
     }
 
     /**
@@ -125,6 +161,4 @@ public final class LatticeRaster {
     }
 
     private static float clamp(float v, int cols) { return v < 0f ? 0f : v > cols ? cols : v; }
-
-    private static boolean finite(float v) { return !Float.isNaN(v) && !Float.isInfinite(v); }
 }
