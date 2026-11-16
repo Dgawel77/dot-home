@@ -47,6 +47,8 @@ final class DotRenderer {
     private int trailHead;
     private float trailT;
 
+    private float parTx, parTy, parX, parY;
+
     private int lastToday = -1, lastBest = -1;
     private String scoreText = "";
 
@@ -63,10 +65,19 @@ final class DotRenderer {
         textPaint.setTextAlign(Paint.Align.RIGHT);
     }
 
+    /** Target parallax tilt in [-1, 1]; the drawn offset eases toward it. */
+    void setParallax(float tx, float ty) {
+        parTx = tx;
+        parTy = ty;
+    }
+
     /** Per-frame bookkeeping that is not part of the simulation (the ship's exhaust trail). Call after step(). */
     void advance(GameWorld w, float dt) {
         if (w.width() <= 0) return;
         float k = scaleK(w);
+        float a = 1f - (float) Math.exp(-dt / 0.15f);
+        parX += (parTx - parX) * a;
+        parY += (parTy - parY) * a;
         for (int i = 0; i < TRAIL_MAX; i++) if (trailLife[i] > 0) trailLife[i] -= dt;
         trailT += dt;
         GameWorld.Ship s = w.ship();
@@ -151,7 +162,12 @@ final class DotRenderer {
         List<GameWorld.Star> stars = w.stars();
         for (int i = 0; i < stars.size(); i++) {
             GameWorld.Star st = stars.get(i);
-            dot(c, st.x, st.y, ds * 0.55f, st.alpha * (0.65f + 0.35f * (float) Math.sin(t * st.speed * 2 + st.phase)) * fade);
+            float sx = st.x, sy = st.y;
+            if (withTrail) {
+                sx = wrap(sx + parX * st.depth * 28f * k, w.width());
+                sy = wrap(sy + parY * st.depth * 28f * k, w.height());
+            }
+            dot(c, sx, sy, ds * 0.55f, st.alpha * (0.65f + 0.35f * (float) Math.sin(t * st.speed * 2 + st.phase)) * fade);
         }
 
         List<GameWorld.Rock> rocks = w.rocks();
@@ -213,6 +229,20 @@ final class DotRenderer {
             for (int j = 0; j < shipPts.length; j += 2) {
                 float px = shipPts[j], py = shipPts[j + 1];
                 dot(c, s.x + px * cs - py * sn, s.y + px * sn + py * cs, ds * 1.05f, sa * blink);
+            }
+        }
+
+        GameWorld.Shockwave sw = w.wave();
+        if (sw != null && w.config() != null) {
+            float dur = w.config().shockDuration;
+            float al = 1f - sw.t / dur;
+            float rad = sw.radius;
+            if (al > 0 && rad > 1f) {
+                int n = Math.max(12, Math.round(TAU * rad / (6f * k)));
+                for (int j = 0; j < n; j++) {
+                    float ang = j * TAU / n;
+                    dot(c, sw.x + (float) Math.cos(ang) * rad, sw.y + (float) Math.sin(ang) * rad, ds * 1.2f, al);
+                }
             }
         }
 
@@ -294,6 +324,11 @@ final class DotRenderer {
     }
 
     private static float scaleK(GameWorld w) { return (float) Math.sqrt((double) w.width() * w.height()) / 669f; }
+
+    private static float wrap(float v, float size) {
+        float m = v % size;
+        return m < 0 ? m + size : m;
+    }
 
     private static float hypot(float a, float b) { return (float) Math.sqrt(a * a + b * b); }
 

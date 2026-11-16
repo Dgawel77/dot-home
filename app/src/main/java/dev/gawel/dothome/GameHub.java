@@ -36,6 +36,7 @@ final class GameHub {
     private final List<DotWallpaperService.DotEngine> visible = new ArrayList<>();
     private FireMode fireMode;
     private String zonesJson;
+    private DotRenderer renderer;
 
     static synchronized GameHub get(Context context) {
         if (instance == null) instance = new GameHub(context.getApplicationContext());
@@ -47,7 +48,16 @@ final class GameHub {
         prefs = new PrefsStore(appContext);
         scoreBook = new ScoreBook(prefs, System::currentTimeMillis, TimeZone.getDefault());
         fireMode = readFireMode();
-        tilt = new SensorTilt(appContext, new TiltInput(), (tx, ty) -> world.setTilt(tx, ty));
+        tilt = new SensorTilt(appContext, new TiltInput(), new SensorTilt.Listener() {
+            @Override
+            public void onTilt(float tx, float ty) {
+                world.setTilt(tx, ty);
+                if (renderer != null) renderer.setParallax(tx, ty);
+            }
+
+            @Override
+            public void onShake() { world.shockwave(); }
+        });
         world.setListener(new GameWorld.Listener() {
             @Override
             public void onRockDestroyed() {
@@ -59,6 +69,9 @@ final class GameHub {
             public void onShipHit() {}
         });
     }
+
+    /** The renderer that receives parallax updates. */
+    void setRenderer(DotRenderer r) { renderer = r; }
 
     GameWorld world() { return world; }
 
@@ -118,6 +131,7 @@ final class GameHub {
         if (visible.isEmpty()) {
             tilt.stop();
             world.setTilt(0f, 0f);
+            if (renderer != null) renderer.setParallax(0f, 0f);
             world.setAutoFire(false);
         } else {
             restartTiltForActive(); // another engine took over: its rotation may differ

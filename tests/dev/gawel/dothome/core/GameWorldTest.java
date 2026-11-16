@@ -303,6 +303,20 @@ public final class GameWorldTest {
         T.eq(true, g.shockwave(), "ready again");
     }
 
+    public static void testShockwaveReachesCornersAfterResize() {
+        Count c = new Count();
+        GameWorld g = world(c);
+        g.setAutopilot(false);
+        for (int i = 0; i < 5; i++) g.addRock(3, 100 + i * 100, 150 + i * 90, 0, 0);
+        T.eq(true, g.shockwave(), "shockwave");
+        g.resize(330, 810);
+        for (int i = 0; i < 75; i++) g.step(0.016f);
+        for (GameWorld.Rock r : g.rocks()) {
+            boolean onScreen = r.x >= 0 && r.x <= 330 && r.y >= 0 && r.y <= 810;
+            T.check(!(r.size == 3 && onScreen), "size-3 rock left at " + r.x + "," + r.y);
+        }
+    }
+
     public static void testStarDepthRange() {
         GameWorld g = sized(1856, 2160);
         T.check(g.stars().size() > 0, "stars");

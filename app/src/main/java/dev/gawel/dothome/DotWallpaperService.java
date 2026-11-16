@@ -125,6 +125,7 @@ public class DotWallpaperService extends WallpaperService {
     @Override
     public Engine onCreateEngine() {
         if (renderer == null) renderer = new DotRenderer(this);
+        GameHub.get(this).setRenderer(renderer);
         return new DotEngine();
     }
 

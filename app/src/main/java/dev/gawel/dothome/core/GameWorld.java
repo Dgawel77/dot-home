@@ -47,7 +47,7 @@ public final class GameWorld {
     }
 
     public void setListener(Listener l) { listener = l; }
-    public void setTilt(float tx, float ty) { tiltX = tx; tiltY = ty; }
+    public void setTilt(float tx, float ty) { tiltX = clamp(tx, -1f, 1f); tiltY = clamp(ty, -1f, 1f); }
     public void setAutopilot(boolean on) { autopilot = on; }
 
     /** Starts a shockwave at the ship; false while the cooldown (game time) is running. */
@@ -73,6 +73,7 @@ public final class GameWorld {
     public List<Particle> particles() { return particles; }
     public List<Ring> rings() { return rings; }
     public List<Star> stars() { return stars; }
+    public GameConfig config() { return cfg; }
     public float time() { return time; }
     public float width() { return w; }
     public float height() { return h; }
@@ -108,7 +109,7 @@ public final class GameWorld {
         for (Star s : stars) { s.x *= sx; s.y *= sy; }
         wanderX *= sx;
         wanderY *= sy;
-        if (wave != null) { wave.x *= sx; wave.y *= sy; wave.radius *= kr; wave.maxRadius *= kr; }
+        if (wave != null) { wave.x *= sx; wave.y *= sy; wave.radius *= kr; wave.maxRadius = hypot(w, h); }
         retargetStars();
     }
 
