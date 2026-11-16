@@ -17,7 +17,7 @@ ASSETS=()
 "$BT/aapt2" link -o $OUT/base.apk -I "$JAR" --manifest $OUT/AndroidManifest.xml \
   --min-sdk-version 26 --target-sdk-version 34 --version-code 1 --version-name 0.1 \
   "${ASSETS[@]}" $OUT/res.zip
-javac -Xlint:-options -source 8 -target 8 -bootclasspath "$JAR:$BT/core-lambda-stubs.jar" -d $OUT/classes $(find $M/java -name '*.java')
+javac -encoding UTF-8 -Xlint:-options -source 8 -target 8 -bootclasspath "$JAR:$BT/core-lambda-stubs.jar" -d $OUT/classes $(find $M/java -name '*.java')
 "$BT/d8" --min-api 26 --lib "$JAR" --output $OUT/dex $(find $OUT/classes -name '*.class')
 cp $OUT/base.apk $OUT/unsigned.apk
 (cd $OUT/dex && jar uf ../unsigned.apk classes.dex)

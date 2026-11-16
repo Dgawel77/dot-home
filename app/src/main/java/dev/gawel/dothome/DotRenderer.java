@@ -70,6 +70,7 @@ final class DotRenderer {
         try {
             Typeface t = new Typeface.Builder(assets, path).setFontVariationSettings("'wght' 400").build();
             if (t != null) return t;
+            Log.w(DotWallpaperService.TAG, "font " + path + " could not be built, using monospace");
         } catch (RuntimeException e) {
             Log.w(DotWallpaperService.TAG, "font " + path + " failed: " + e);
         }

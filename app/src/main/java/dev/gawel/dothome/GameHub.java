@@ -15,6 +15,7 @@ import java.util.TimeZone;
 import dev.gawel.dothome.core.FireMode;
 import dev.gawel.dothome.core.GameWorld;
 import dev.gawel.dothome.core.Rng;
+import dev.gawel.dothome.core.TiltInput;
 import dev.gawel.dothome.core.ScoreBook;
 import dev.gawel.dothome.core.Zones;
 
@@ -29,7 +30,8 @@ final class GameHub {
     private final Context appContext;
     private final PrefsStore prefs;
     private final GameWorld world = new GameWorld(new Rng(System.nanoTime()));
-    private final ScoreBook scoreBook;
+    private ScoreBook scoreBook;
+    private final SensorTilt tilt;
     private final List<DotWallpaperService.DotEngine> visible = new ArrayList<>();
     private FireMode fireMode;
     private String zonesJson;
@@ -44,6 +46,7 @@ final class GameHub {
         prefs = new PrefsStore(appContext);
         scoreBook = new ScoreBook(prefs, System::currentTimeMillis, TimeZone.getDefault());
         fireMode = readFireMode();
+        tilt = new SensorTilt(appContext, new TiltInput(), (tx, ty) -> world.setTilt(tx, ty));
         world.setListener(new GameWorld.Listener() {
             @Override
             public void onRockDestroyed() {
@@ -80,14 +83,20 @@ final class GameHub {
         visible.add(e);
         fireMode = readFireMode();
         zonesJson = readZonesJson();
-        scoreBook.refresh();
-        // Task 6: start SensorTilt here (tilt -> world.setTilt) for the active engine.
+        // the zone may have changed since the last visible period; keep the persisted keys/values
+        scoreBook = new ScoreBook(prefs, System::currentTimeMillis, TimeZone.getDefault());
+        world.setAutoFire(fireMode == FireMode.AUTO);
+        tilt.start(e.displayRotation()); // restart = recalibrate on the first sample
     }
 
     void onHidden(DotWallpaperService.DotEngine e) {
         visible.remove(e);
         scoreBook.refresh(); // score writes are already applied to prefs; this just rolls the day over
-        // Task 6: stop SensorTilt here when no engine remains visible.
+        if (visible.isEmpty()) {
+            tilt.stop();
+            world.setTilt(0f, 0f);
+            world.setAutoFire(false);
+        }
     }
 
     private FireMode readFireMode() {

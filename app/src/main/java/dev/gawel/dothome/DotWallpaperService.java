@@ -1,13 +1,21 @@
 package dev.gawel.dothome;
 
+import android.app.WallpaperManager;
 import android.graphics.Canvas;
+import android.os.Build;
+import android.os.Bundle;
 import android.service.wallpaper.WallpaperService;
 import android.util.Log;
 import android.view.Choreographer;
+import android.view.Display;
+import android.view.MotionEvent;
 import android.view.SurfaceHolder;
+import android.view.ViewConfiguration;
+import android.view.WindowManager;
 
 import java.util.List;
 
+import dev.gawel.dothome.core.FireMode;
 import dev.gawel.dothome.core.GameWorld;
 
 /** The Dot Home live wallpaper: a Choreographer-driven render loop that runs only while visible. */
@@ -28,6 +36,10 @@ public class DotWallpaperService extends WallpaperService {
         private int width, height;
         private long lastNanos;
         private List<float[]> zones;
+        private long lastRefreshNanos, lastErrLogMs;
+        private float downX, downY;
+        private long downMs;
+        private boolean touchValid;
 
         @Override
         public void onSurfaceCreated(SurfaceHolder holder) {
@@ -59,6 +71,7 @@ public class DotWallpaperService extends WallpaperService {
             visible = isVisible;
             if (isVisible) {
                 hub.onVisible(this);
+                setTouchEventsEnabled(hub.fireMode() == FireMode.TAP_TOUCH);
                 if (width > 0 && height > 0) zones = hub.zonesPx(width, height);
                 maybeStart();
                 fitWorld();
@@ -79,6 +92,67 @@ public class DotWallpaperService extends WallpaperService {
         }
 
         boolean isRendering() { return rendering; }
+
+        /** Surface.ROTATION_* of the display this engine is on. */
+        @SuppressWarnings("deprecation")
+        int displayRotation() {
+            Display d = null;
+            if (Build.VERSION.SDK_INT >= 30) {
+                try {
+                    d = getDisplayContext().getDisplay();
+                } catch (RuntimeException e) {
+                    d = null;
+                }
+            }
+            if (d == null) {
+                WindowManager wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+                if (wm != null) d = wm.getDefaultDisplay();
+            }
+            return d == null ? 0 : d.getRotation();
+        }
+
+        @Override
+        public Bundle onCommand(String action, int x, int y, int z, Bundle extras, boolean resultRequested) {
+            if (WallpaperManager.COMMAND_TAP.equals(action) && hub.fireMode() == FireMode.TAP_COMMAND
+                    && visible && hub.isActive(this)) {
+                hub.world().fire(x, y);
+            }
+            return null;
+        }
+
+        @Override
+        public void onTouchEvent(MotionEvent ev) {
+            if (hub.fireMode() != FireMode.TAP_TOUCH || !hub.isActive(this)) return;
+            switch (ev.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    touchValid = true;
+                    downX = ev.getX();
+                    downY = ev.getY();
+                    downMs = ev.getEventTime();
+                    break;
+                case MotionEvent.ACTION_POINTER_DOWN:
+                    touchValid = false;
+                    break;
+                case MotionEvent.ACTION_MOVE: {
+                    float slop = ViewConfiguration.get(DotWallpaperService.this).getScaledTouchSlop();
+                    float dx = ev.getX() - downX, dy = ev.getY() - downY;
+                    if (dx * dx + dy * dy >= slop * slop) touchValid = false;
+                    break;
+                }
+                case MotionEvent.ACTION_UP: {
+                    float slop = ViewConfiguration.get(DotWallpaperService.this).getScaledTouchSlop();
+                    float dx = ev.getX() - downX, dy = ev.getY() - downY;
+                    if (touchValid && ev.getPointerCount() == 1 && dx * dx + dy * dy < slop * slop
+                            && ev.getEventTime() - downMs < 250) {
+                        hub.world().fire(ev.getX(), ev.getY());
+                    }
+                    touchValid = false;
+                    break;
+                }
+                default:
+                    touchValid = false;
+            }
+        }
 
         /** The shared world follows the active engine's size; inactive engines never resize it. */
         private void fitWorld() {
@@ -114,6 +188,10 @@ public class DotWallpaperService extends WallpaperService {
             fitWorld(); // covers control passing back to this engine when another one hides
             if (world.width() > 0) {
                 if (hub.isActive(this)) {
+                    if (frameTimeNanos - lastRefreshNanos >= 1_000_000_000L) {
+                        lastRefreshNanos = frameTimeNanos;
+                        hub.scoreBook().refresh(); // rolls the day over at midnight while visible
+                    }
                     world.step(dt);
                     renderer.advance(world, dt);
                 }
@@ -126,18 +204,27 @@ public class DotWallpaperService extends WallpaperService {
             SurfaceHolder holder = getSurfaceHolder();
             Canvas c = null;
             try {
-                c = holder.getSurface().isValid() ? holder.lockHardwareCanvas() : null;
-                if (c != null) renderer.draw(c, world, zones, hub.scoreBook());
+                if (holder.getSurface().isValid()) c = holder.lockHardwareCanvas();
             } catch (IllegalStateException | IllegalArgumentException e) {
-                Log.w(TAG, "draw failed: " + e);
+                logRateLimited("lock failed: " + e);
+            }
+            if (c == null) return;
+            try {
+                renderer.draw(c, world, zones, hub.scoreBook());
             } finally {
-                if (c != null) {
-                    try {
-                        holder.unlockCanvasAndPost(c);
-                    } catch (IllegalStateException | IllegalArgumentException e) {
-                        Log.w(TAG, "post failed: " + e);
-                    }
+                try {
+                    holder.unlockCanvasAndPost(c);
+                } catch (IllegalStateException | IllegalArgumentException e) {
+                    logRateLimited("post failed: " + e);
                 }
+            }
+        }
+
+        private void logRateLimited(String msg) {
+            long now = System.currentTimeMillis();
+            if (now - lastErrLogMs >= 5000) {
+                lastErrLogMs = now;
+                Log.w(TAG, msg);
             }
         }
     }

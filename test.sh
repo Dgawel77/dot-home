@@ -12,5 +12,5 @@ if grep -rn 'android\.' "$CORE"; then
 fi
 
 OUT=build/test && rm -rf $OUT && mkdir -p $OUT
-javac -Xlint:all,-options -source 8 -target 8 -d $OUT $(find $CORE tests -name '*.java')
+javac -encoding UTF-8 -Xlint:all,-options -source 8 -target 8 -d $OUT $(find $CORE tests -name '*.java')
 java -cp $OUT dev.gawel.dothome.test.AllTests
