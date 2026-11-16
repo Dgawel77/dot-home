@@ -721,7 +721,62 @@ def final_icon(in_dir, name, pkg, kind, label, shown, pkg_dir, titles, log, box=
     return out, source
 
 
-def fix(in_dir, out_dir, overrides_dir=None, log=print, auto_shapes=False):
+TILE_INSET = 2  # px at SIZE, keeps the rim from being clipped
+TILE_RADIUS = 0.30  # of the tile side
+TILE_RGB = 0x0E
+TILE_ALPHA = 0.55
+SHEEN = 0.14
+GLYPH_SCALE = 0.70
+
+
+def _rounded_mask(size, inset, radius):
+    """Anti-aliased rounded square (float 0..1, size x size): drawn at SS x, box-downsampled."""
+    from PIL import Image, ImageDraw
+    big = Image.new("L", (size * SS, size * SS), 0)
+    lo, hi = inset * SS, (size - inset) * SS - 1
+    ImageDraw.Draw(big).rounded_rectangle([lo, lo, hi, hi], radius=radius * SS, fill=255)
+    return np.asarray(big.resize((size, size), Image.BOX), np.float64) / 255.0
+
+
+def _over(dst_rgb, dst_a, src_rgb, src_a):
+    """Premultiplied-correct 'over' on float arrays; returns straight rgb and alpha."""
+    a = src_a + dst_a * (1 - src_a)
+    pre = src_rgb * src_a[..., None] + dst_rgb * (dst_a * (1 - src_a))[..., None]
+    rgb = np.divide(pre, a[..., None], out=np.zeros_like(pre), where=a[..., None] > 0)
+    return rgb, a
+
+
+def glass_tile(glyph, size=SIZE):
+    """RGBA glass tile (light glass 55%, sheen, gradient rim) with glyph scaled to GLYPH_SCALE on top."""
+    from PIL import Image
+    side = size - 2 * TILE_INSET
+    rad = TILE_RADIUS * side
+    mask = _rounded_mask(size, TILE_INSET, rad)
+    inner = _rounded_mask(size, 2 * TILE_INSET, rad - TILE_INSET)
+    ring = np.clip(mask - inner, 0, 1)
+    yy, xx = np.mgrid[0:size, 0:size].astype(np.float64)
+    u, v = xx / size, yy / size
+    white = np.full((size, size, 3), 255.0)
+    rgb = np.full((size, size, 3), float(TILE_RGB))
+    a = TILE_ALPHA * mask
+    t = 1 - np.clip(u * 0.6 + v * 0.9, 0, 1)
+    rgb, a = _over(rgb, a, white, t * t * SHEEN * mask)
+    rgb, a = _over(rgb, a, white, ring * (0.10 + 0.30 * np.clip(1 - (u * 0.5 + v * 0.8), 0, 1)))
+    g = glyph.convert("RGBA")
+    gs = int(round(size * GLYPH_SCALE))
+    # resize rgb and alpha apart: a premultiplied RGBA resize overshoots rgb at the glyph's edges
+    ga = g.getchannel("A").resize((gs, gs), Image.LANCZOS)
+    g = g.convert("RGB").resize((gs, gs), Image.LANCZOS).convert("RGBA")
+    g.putalpha(ga)
+    layer = np.zeros((size, size, 4), np.float64)
+    o = (size - gs) // 2
+    layer[o:o + gs, o:o + gs] = np.asarray(g, np.float64)
+    rgb, a = _over(rgb, a, layer[..., :3], layer[..., 3] / 255.0)
+    out = np.dstack([np.clip(np.rint(rgb), 0, 255), np.clip(np.rint(a * 255), 0, 255)]).astype(np.uint8)
+    return Image.fromarray(out, "RGBA")
+
+
+def fix(in_dir, out_dir, overrides_dir=None, log=print, auto_shapes=False, glass=False):
     pkg_dir = ensure_simple_icons()
     check_table(pkg_dir)
     titles = load_titles(pkg_dir)
@@ -754,13 +809,17 @@ def fix(in_dir, out_dir, overrides_dir=None, log=print, auto_shapes=False):
         dst = os.path.join(out_dir, name + ".png")
         ov = override(name)
         if ov:
-            shutil.copyfile(ov, dst)
+            if glass:
+                from PIL import Image
+                glass_tile(Image.open(ov)).save(dst)
+            else:
+                shutil.copyfile(ov, dst)
             source = "override"
         else:
             out, source = final_icon(in_dir, name, pkg, kind, label, shown, pkg_dir, titles, log, box, auto_shapes)
-            out.save(dst)
+            (glass_tile(out) if glass else out).save(dst)
         sheet.append((dst, shown, source))
-    contact_sheet(sheet, os.path.join(out_dir, "contact.png"))
+    contact_sheet(sheet, os.path.join(out_dir, "contact.png"), glass=glass)
     counts = {}
     for _, _, s in sheet:
         counts[s] = counts.get(s, 0) + 1
@@ -771,7 +830,7 @@ def fix(in_dir, out_dir, overrides_dir=None, log=print, auto_shapes=False):
 MARK = {"mono": "M", "brand": "B", "auto": "A", "initial": "I", "real": "R", "override": "O"}
 
 
-def contact_sheet(items, path, width=2400, cols=16):
+def contact_sheet(items, path, width=2400, cols=16, glass=False):
     from PIL import Image, ImageDraw, ImageFont
     cell = width // cols
     icon = cell - 54
@@ -783,7 +842,10 @@ def contact_sheet(items, path, width=2400, cols=16):
     for i, (p, label, source) in enumerate(items):
         x, y = (i % cols) * cell, (i // cols) * cell
         im = Image.open(p).convert("RGBA").resize((icon, icon), Image.LANCZOS)
-        sheet.paste(Image.new("RGB", im.size, FG), (x + (cell - icon) // 2, y + 8), im.getchannel("A"))
+        if glass:  # the tile has its own colours: composite the real RGBA over BG
+            sheet.paste(im, (x + (cell - icon) // 2, y + 8), im)
+        else:
+            sheet.paste(Image.new("RGB", im.size, FG), (x + (cell - icon) // 2, y + 8), im.getchannel("A"))
         text = label if len(label) <= 17 else label[:16] + "~"
         d.text((x + cell // 2, y + icon + 20), text, fill=FG2, font=font, anchor="mm")
         d.text((x + 6, y + 4), MARK.get(source, "?"), fill=FG2, font=small)
@@ -827,6 +889,8 @@ def parse_args(argv):
     p.add_argument("--auto-shapes", action="store_true",
                    help="stipple an auto row's own mask when it passes the cleanliness gate "
                         "(brand -> own shape -> initial); contact sheet marker A")
+    p.add_argument("--glass", action=argparse.BooleanOptionalAction, default=True,
+                   help="put a translucent glass tile behind every icon (default on; --no-glass: bare glyphs)")
     return p.parse_args(argv[1:])
 
 
@@ -839,7 +903,7 @@ def main(argv):
         _bootstrap(e)
     args = parse_args(argv)
     ov = os.path.join(ROOT, "iconpack", "overrides")
-    fix(args.in_dir, args.out_dir, ov if os.path.isdir(ov) else None, auto_shapes=args.auto_shapes)
+    fix(args.in_dir, args.out_dir, ov if os.path.isdir(ov) else None, auto_shapes=args.auto_shapes, glass=args.glass)
 
 
 if __name__ == "__main__":

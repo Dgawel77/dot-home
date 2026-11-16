@@ -861,6 +861,70 @@ class Determinism(ExportFixture):
             self.assertEqual(snapshot(a), first)
 
 
+class Glass(ExportFixture):
+    def setUp(self):
+        super().setUp()
+        for k in range(ix.MIN_MONO):
+            self.add("com.m%d" % k, "mono", "M%d" % k, ring(r0=0.12 + 0.01 * k, r1=0.3))
+        self.add("com.example.blank", "mono", "Blank", 0.0)
+        with open(os.path.join(self.inp, "index.tsv"), "w") as f:
+            f.writelines(self.rows)
+
+    def run_glass(self, out, glass=True, ov=None):
+        ix.fix(self.inp, out, ov, log=lambda *_: None, glass=glass)
+
+    def test_tile_pixels(self):
+        self.run_glass(self.out)
+        im = np.asarray(Image.open(os.path.join(self.out, "ic_com_example_blank.png")))
+        self.assertEqual(im.shape, (S, S, 4))
+        self.assertEqual(im[0, 0, 3], 0)
+        self.assertEqual(im[S - 1, S - 1, 3], 0)
+        # a spot away from the glyph (inside the tile, outside the 70% glyph area): about 0x8C plus sheen
+        a = int(im[S // 2, int(S * 0.13), 3])
+        self.assertLess(abs(a - 0x8C), 24)
+        rim_tl, rim_br = int(im[S // 2, 2, 3]), int(im[S // 2, S - 3, 3])
+        self.assertGreater(rim_tl, rim_br)
+        self.assertGreater(int(im[S // 2, 2, 0]), int(im[S // 2, S - 3, 0]))
+        self.assertGreater(int(im[2, S // 2, 0]), int(im[S - 3, S // 2, 0]))
+
+    def test_glyph_stays_fg(self):
+        self.run_glass(self.out)
+        im = np.asarray(Image.open(os.path.join(self.out, "ic_com_m0.png")))
+        solid = np.zeros(im.shape[:2], bool)
+        c = slice(int(S * 0.2), int(S * 0.8))
+        solid[c, c] = im[c, c, 3] == 255
+        self.assertTrue(solid.any())
+        self.assertEqual(tuple(np.median(im[solid][:, :3], axis=0)), tuple(float(c) for c in ix.FG))
+
+    def test_no_glass_unchanged(self):
+        a, b = os.path.join(self.tmp, "a"), os.path.join(self.tmp, "b")
+        self.run_glass(a, glass=False)
+        ix.fix(self.inp, b, None, log=lambda *_: None)
+        for n in os.listdir(a):
+            with open(os.path.join(a, n), "rb") as f1, open(os.path.join(b, n), "rb") as f2:
+                self.assertEqual(f1.read(), f2.read(), n)
+        self.assertEqual(ix.parse_args(["x", "--no-glass"]).glass, False)
+        self.assertEqual(ix.parse_args(["x"]).glass, True)
+
+    def test_override_gets_tile(self):
+        ov = os.path.join(self.tmp, "ov")
+        os.makedirs(ov)
+        write_png(os.path.join(ov, "ic_com_m0.png"), ring())
+        self.run_glass(self.out, ov=ov)
+        im = np.asarray(Image.open(os.path.join(self.out, "ic_com_m0.png")))
+        self.assertEqual(im[0, 0, 3], 0)
+        self.assertGreater(im[S // 2, int(S * 0.13), 3], 0)
+
+    def test_deterministic(self):
+        a, b = os.path.join(self.tmp, "a"), os.path.join(self.tmp, "b")
+        self.run_glass(a)
+        self.run_glass(b)
+        self.run_glass(a)
+        for n in os.listdir(a):
+            with open(os.path.join(a, n), "rb") as f1, open(os.path.join(b, n), "rb") as f2:
+                self.assertEqual(f1.read(), f2.read(), n)
+
+
 class Bootstrap(unittest.TestCase):
     def test_in_venv_detection(self):
         with mock.patch.object(sys, "prefix", ix.VENV):
