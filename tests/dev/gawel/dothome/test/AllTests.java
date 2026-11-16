@@ -33,6 +33,7 @@ public final class AllTests {
         dev.gawel.dothome.core.CardShapeTest.class,
         dev.gawel.dothome.core.LatticeRasterTest.class,
         dev.gawel.dothome.core.IntroGateTest.class,
+        dev.gawel.dothome.core.LabelPickerTest.class,
     };
 
     public static void main(String[] args) throws Exception {

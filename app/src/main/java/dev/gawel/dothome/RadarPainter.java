@@ -10,11 +10,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Random;
 
+import dev.gawel.dothome.core.BoxSet;
 import dev.gawel.dothome.core.ClearZones;
 import dev.gawel.dothome.core.DotMatrixFont;
 import dev.gawel.dothome.core.DotStyle;
 import dev.gawel.dothome.core.GeoProjection;
 import dev.gawel.dothome.core.Halftone;
+import dev.gawel.dothome.core.LabelPicker;
 import dev.gawel.dothome.core.Lattice;
 import dev.gawel.dothome.core.RadarScale;
 
@@ -34,6 +36,13 @@ final class RadarPainter {
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final BitSet seen = new BitSet();
     private ClearZones zones;
+    private BoxSet boxes = new BoxSet(); // region label boxes drawn so far this frame
+
+    /** Region view: the basemap has no population, so these major cities (in priority order) are the only ones labelled. */
+    private static final String[] REGION_CITIES = {"Chicago", "Milwaukee", "Madison", "Rockford", "Indianapolis",
+        "Grand Rapids", "Gary", "South Bend", "Peoria"};
+    private static final int REGION_MAX_LABELS = 6;
+    private static final float REGION_MIN_GAP_DP = 120f;
 
     RadarPainter(Context ctx, float density, boolean region, float topDp, float bottomDp) {
         this.u = density;
@@ -221,18 +230,19 @@ final class RadarPainter {
                 if (inLake(px, py, bb, x, y) && keep(x, y)) c.drawCircle(x, y, rLight, dot);
             }
         }
-        // dot rows at regular weight: borders and roads L46, shore L65
+        // dot rows at regular weight: borders L46, roads and shore L65
         dot.setColor(DotStyle.L46);
         seen.clear();
         for (double[][] s : bm.states) row(c, p, s, cols, rows);
+        dot.setColor(DotStyle.L65);
         seen.clear();
         for (Basemap.Road r : bm.roads) row(c, p, r.pts, cols, rows);
-        dot.setColor(DotStyle.L65);
         seen.clear();
         for (double[][] s : bm.shore) row(c, p, s, cols, rows);
 
         text.setTextAlign(Paint.Align.CENTER);
         text.setColor(DotStyle.L46);
+        boxes = new BoxSet();
         for (Basemap.Label l : bm.regions) {
             if (!region && !l.name.startsWith("LAKE")) continue;
             float x = p.x(l.lon), y = p.y(l.lat);
@@ -240,23 +250,59 @@ final class RadarPainter {
             String name = l.name.toUpperCase(Locale.ROOT);
             float hw = labelWidth(name) / 2f;
             if (!keepRect(x - hw, y - 9 * u, x + hw, y + 3 * u)) continue;
+            if (!boxes.tryAdd(x - hw, y - 9 * u, x + hw, y + 3 * u)) continue;
             c.drawText(name, x, y, text);
         }
     }
 
     void drawPlaces(Canvas c, GeoProjection p, Basemap bm, int w, int h, double userLat, double userLon) {
-        int maxRank = region ? 2 : 3;
         boolean haveUser = !Double.isNaN(userLat) && !Double.isNaN(userLon);
         float ux = haveUser ? p.x(userLon) : -1e9f, uy = haveUser ? p.y(userLat) : -1e9f;
-        for (Basemap.Label l : bm.places) {
-            if (l.rank > maxRank) continue;
+        List<Basemap.Label> cand = new ArrayList<>();
+        if (region) {
+            // major cities in priority order, plus the user's own place wherever it falls in the list
+            for (String city : REGION_CITIES) {
+                for (Basemap.Label l : bm.places) {
+                    if (l.name.equals(city)) { cand.add(l); break; }
+                }
+            }
+            for (Basemap.Label l : bm.places) {
+                if (!cand.contains(l) && Math.hypot(p.x(l.lon) - ux, p.y(l.lat) - uy) < 12 * u) cand.add(l);
+            }
+        } else {
+            for (Basemap.Label l : bm.places) if (l.rank <= 3) cand.add(l);
+        }
+        // on-screen, clear of the zones
+        List<Basemap.Label> vis = new ArrayList<>();
+        for (Basemap.Label l : cand) {
             float x = p.x(l.lon), y = p.y(l.lat);
             if (x < 8 * u || x > w - 8 * u || y < topPad || y > h - bottomPad) continue;
             String name = l.name.toUpperCase(Locale.ROOT);
             if (!keepRect(x - step, y - 8 * u, x + 2 * step + labelWidth(name), y + 8 * u)) continue;
+            vis.add(l);
+        }
+        boolean[] keep = new boolean[vis.size()];
+        java.util.Arrays.fill(keep, true);
+        if (region) {
+            float[] xs = new float[vis.size()], ys = new float[vis.size()];
+            boolean[] mine = new boolean[vis.size()];
+            for (int i = 0; i < xs.length; i++) {
+                xs[i] = p.x(vis.get(i).lon);
+                ys[i] = p.y(vis.get(i).lat);
+                mine[i] = Math.hypot(xs[i] - ux, ys[i] - uy) < 12 * u;
+            }
+            keep = LabelPicker.pick(xs, ys, mine, REGION_MAX_LABELS, REGION_MIN_GAP_DP * u);
+        }
+        for (int i = 0; i < vis.size(); i++) {
+            if (!keep[i]) continue;
+            Basemap.Label l = vis.get(i);
+            float x = p.x(l.lon), y = p.y(l.lat);
+            String name = l.name.toUpperCase(Locale.ROOT);
             boolean mine = Math.hypot(x - ux, y - uy) < 12 * u;
-            int color = mine ? DotStyle.L100 : DotStyle.L65;
             float cx = cell(x), cy = cell(y);
+            // in Region view a city label never lands on a state name (the user's own place always shows)
+            if (region && !boxes.tryAdd(cx - step, cy - 8 * u, cx + 2 * step + labelWidth(name), cy + 8 * u) && !mine) continue;
+            int color = mine ? DotStyle.L100 : DotStyle.L65;
             dotAt(c, cx, cy, rReg, color);
             label(c, name, cx + 2 * step, capBase(cy), Paint.Align.LEFT, color);
         }
