@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.res.Resources;
 import android.os.PowerManager;
 import android.view.Surface;
 import android.graphics.Canvas;
@@ -17,6 +18,7 @@ import android.view.Display;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.ViewConfiguration;
+import android.view.WindowInsets;
 import android.view.WindowManager;
 
 import dev.gawel.dothome.core.FireMode;
@@ -136,6 +138,8 @@ public class DotWallpaperService extends WallpaperService {
         private float downX, downY;
         private long downMs;
         private boolean touchValid;
+        /** Status bar / cutout height in px for this engine's display; 0 until known. */
+        private float topInset = -1;
 
         @Override
         public void onSurfaceCreated(SurfaceHolder holder) {
@@ -312,6 +316,28 @@ public class DotWallpaperService extends WallpaperService {
             Choreographer.getInstance().postFrameCallback(this);
         }
 
+        @Override
+        @SuppressWarnings("deprecation")
+        public void onApplyWindowInsets(WindowInsets insets) {
+            super.onApplyWindowInsets(insets);
+            if (insets == null) return;
+            int top;
+            if (Build.VERSION.SDK_INT >= 30) {
+                top = insets.getInsets(WindowInsets.Type.statusBars() | WindowInsets.Type.displayCutout()).top;
+            } else {
+                top = insets.getSystemWindowInsetTop();
+            }
+            if (top > 0) topInset = top;
+        }
+
+        /** The inset from the window insets, else the framework status_bar_height dimen. */
+        private float topInset() {
+            if (topInset >= 0) return topInset;
+            int id = Resources.getSystem().getIdentifier("status_bar_height", "dimen", "android");
+            topInset = id > 0 ? Resources.getSystem().getDimensionPixelSize(id) : 0f;
+            return topInset;
+        }
+
         private void drawFrame(GameWorld world) {
             SurfaceHolder holder = getSurfaceHolder();
             Canvas c = null;
@@ -322,7 +348,7 @@ public class DotWallpaperService extends WallpaperService {
             }
             if (c == null) return;
             try {
-                renderer.draw(c, world, hub.scoreBook());
+                renderer.draw(c, world, hub.scoreBook(), topInset());
             } finally {
                 try {
                     holder.unlockCanvasAndPost(c);

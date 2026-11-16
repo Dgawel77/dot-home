@@ -8,15 +8,17 @@ import android.hardware.SensorManager;
 import android.view.Display;
 import android.view.WindowManager;
 
+import dev.gawel.dothome.core.Recenter;
 import dev.gawel.dothome.core.ShakeDetector;
 import dev.gawel.dothome.core.TiltInput;
 
 /**
- * Turns the gravity vector into ship steering. Registered only between start() and stop().
- * Calibrates on the first sample after every start(), so "level" is how the phone is held right then.
+ * Turns the gravity vector into effect inputs: absolute screen-plane gravity (debris) and a slowly re-centring
+ * relative tilt (star parallax). Also detects shakes. Registered only between start() and stop().
+ * Calibrates on the first sample after every start(), so parallax is neutral in the pose held right then.
  */
 final class SensorTilt implements SensorEventListener {
-    interface Listener { void onTilt(float tx, float ty); void onShake(); }
+    interface Listener { void onTilt(float gravX, float gravY, float parX, float parY); void onShake(); }
 
     private static final float ALPHA = 0.15f;
     private static final float G_ALPHA = 0.9f; // gravity low-pass when deriving linear acceleration
@@ -30,6 +32,8 @@ final class SensorTilt implements SensorEventListener {
     private boolean gSeeded;
     private int rotation;
     private float fx, fy;
+    private long lastNs;
+    private final Recenter recX = new Recenter(4f), recY = new Recenter(4f);
 
     SensorTilt(Context context, TiltInput input, Listener listener) {
         this.context = context;
@@ -64,6 +68,9 @@ final class SensorTilt implements SensorEventListener {
         Sensor lin = manager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION);
         haveLinear = running && lin != null && manager.registerListener(this, lin, SensorManager.SENSOR_DELAY_GAME);
         gSeeded = false;
+        lastNs = 0;
+        recX.reset();
+        recY.reset();
         shake.reset();
     }
 
@@ -112,8 +119,11 @@ final class SensorTilt implements SensorEventListener {
             input.calibrate(g[0], g[1]);
             needCalibrate = false;
         }
+        float dt = lastNs == 0 ? 0f : Math.max(0f, Math.min(0.1f, (e.timestamp - lastNs) * 1e-9f));
+        lastNs = e.timestamp;
         float[] t = input.tilt(g[0], g[1]);
-        listener.onTilt(t[0], t[1]);
+        float[] ab = TiltInput.absoluteGravity(g[0], g[1]);
+        listener.onTilt(ab[0], ab[1], recX.update(t[0], dt), recY.update(t[1], dt));
     }
 
     private final float[] lx = new float[3];

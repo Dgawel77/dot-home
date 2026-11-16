@@ -1,6 +1,7 @@
 package dev.gawel.dothome;
 
 import android.content.Context;
+import android.os.SystemClock;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -29,6 +30,7 @@ final class GameHub {
     private final List<DotWallpaperService.DotEngine> visible = new ArrayList<>();
     private FireMode fireMode;
     private DotRenderer renderer;
+    private long hiddenAtMs = -1;
 
     static synchronized GameHub get(Context context) {
         if (instance == null) instance = new GameHub(context.getApplicationContext());
@@ -42,9 +44,9 @@ final class GameHub {
         fireMode = readFireMode();
         tilt = new SensorTilt(appContext, new TiltInput(), new SensorTilt.Listener() {
             @Override
-            public void onTilt(float tx, float ty) {
-                world.setTilt(tx, ty);
-                if (renderer != null) renderer.setParallax(tx, ty);
+            public void onTilt(float gravX, float gravY, float parX, float parY) {
+                world.setTilt(gravX, gravY);
+                if (renderer != null) renderer.setParallax(parX, parY);
             }
 
             @Override
@@ -80,6 +82,10 @@ final class GameHub {
     }
 
     void onVisible(DotWallpaperService.DotEngine e) {
+        if (hiddenAtMs >= 0) { // the shockwave cooldown runs in real time, including while hidden
+            world.elapseHidden((SystemClock.elapsedRealtime() - hiddenAtMs) / 1000f);
+            hiddenAtMs = -1;
+        }
         visible.remove(e);
         visible.add(e);
         fireMode = readFireMode();
@@ -117,7 +123,8 @@ final class GameHub {
         if (visible.isEmpty()) {
             tilt.stop();
             world.setTilt(0f, 0f);
-            if (renderer != null) renderer.setParallax(0f, 0f);
+            if (renderer != null) renderer.resetParallax();
+            hiddenAtMs = SystemClock.elapsedRealtime();
             world.setAutoFire(false);
         } else {
             restartTiltForActive(); // another engine took over: its rotation may differ

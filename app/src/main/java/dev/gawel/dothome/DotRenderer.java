@@ -69,6 +69,11 @@ final class DotRenderer {
         parTy = clamp(ty == ty ? ty : 0f, -1f, 1f);
     }
 
+    /** Zeroes parallax at once (target and drawn offset) so stars do not slide when the wallpaper wakes. */
+    void resetParallax() {
+        parTx = parTy = parX = parY = 0f;
+    }
+
     /** Per-frame bookkeeping that is not part of the simulation (the ship's exhaust trail). Call after step(). */
     void advance(GameWorld w, float dt) {
         if (w.width() <= 0) return;
@@ -89,7 +94,7 @@ final class DotRenderer {
         }
     }
 
-    void draw(Canvas c, GameWorld w, ScoreBook sb) {
+    void draw(Canvas c, GameWorld w, ScoreBook sb, float topInset) {
         c.drawColor(Color.BLACK);
         if (w.width() <= 0) return;
         drawScene(c, w, true);
@@ -102,13 +107,13 @@ final class DotRenderer {
                 scoreText = "TODAY " + today + " · BEST " + best;
             }
             textPaint.setTextSize(16f * k);
-            c.drawText(scoreText, w.width() - 16f * k, 8f * k + 16f * k, textPaint);
+            c.drawText(scoreText, w.width() - 16f * k, topInset + 8f * k + 16f * k, textPaint);
         }
     }
 
     /**
      * Renders the current world into a new bitmap of the given size. dim (0..1) darkens the picture with black;
-     * rock and particle dots above clearTopFraction of the height are skipped so that band stays clear.
+     * rock, particle, shot and ship dots (and the shockwave) above clearTopFraction of the height are skipped so that band stays clear.
      * The world is scaled uniformly to cover the target and centred (excess is cropped), so dots never stretch.
      */
     Bitmap renderStill(GameWorld w, int width, int height, float dim, float clearTopFraction) {
@@ -193,18 +198,20 @@ final class DotRenderer {
         List<GameWorld.Shot> shots = w.shots();
         for (int i = 0; i < shots.size(); i++) {
             GameWorld.Shot sh = shots.get(i);
+            if (clearTopY >= 0 && sh.y < clearTopY) continue;
             dot(c, sh.x, sh.y, ds * 1.4f, 1f);
             dot(c, sh.x - sh.vx * 0.012f, sh.y - sh.vy * 0.012f, ds, 0.45f);
             dot(c, sh.x - sh.vx * 0.024f, sh.y - sh.vy * 0.024f, ds * 0.8f, 0.2f);
         }
 
         GameWorld.Ship s = w.ship();
-        if (t < 1.4f) {
+        boolean shipClear = clearTopY < 0 || s.y - 12f * k >= clearTopY;
+        if (shipClear && t < 1.4f) {
             float pr = ds * (1.3f + 1.4f * Math.abs((float) Math.sin(t * 3.2f)));
             dot(c, s.x, s.y, pr, 1f - clamp((t - 1.0f) / 0.4f, 0, 1));
         }
         float sa = clamp((t - 0.9f) / 0.5f, 0, 1);
-        if (sa > 0) {
+        if (shipClear && sa > 0) {
             float sp = spacing * 0.55f;
             if (sp != shipSpacing) buildShipDots(sp, k);
             float cs = (float) Math.cos(s.angle), sn = (float) Math.sin(s.angle);
@@ -216,7 +223,7 @@ final class DotRenderer {
         }
 
         GameWorld.Shockwave sw = w.wave();
-        if (sw != null && w.config() != null) {
+        if (sw != null && w.config() != null && clearTopY < 0) {
             float dur = w.config().shockDuration;
             float al = 1f - sw.t / dur;
             float rad = sw.radius;

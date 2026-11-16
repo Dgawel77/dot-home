@@ -3,6 +3,7 @@ package dev.gawel.dothome.core;
 /** Tunable constants, scaled by k = sqrt(w*h)/669 so the game feels the same at any size. */
 public final class GameConfig {
     public final float k;
+    /** tiltAccel is the autopilot steering acceleration (name kept from the old tilt steering). */
     public final float rockRadius, tiltAccel, maxSpeed, shotSpeed, hitKnock, edgeMargin;
     public final float rockSpeedMin, rockSpeedMax;
     public final int rocksTarget;
