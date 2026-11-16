@@ -488,7 +488,8 @@ class Pipeline(ExportFixture):
     def test_replacement_takes_the_mean_luminance(self):
         a = self.add("com.example.quux", "auto", "Quux", ring(), 0.2)
         b = self.add("com.example.zork", "auto", "Zork", ring())
-        self.run_fix()
+        with mock.patch.object(ix, "KEEP_STANDIN", frozenset(["com.example.quux"])):
+            self.run_fix()
         self.assertTrue(np.array_equal(self.final(a), np.asarray(ix.stipple(ix.letter_mask("Q"), 0.2))))
         self.assertTrue(np.array_equal(self.final(b), np.asarray(ix.stipple(ix.letter_mask("Z"), 0.7))))
 
@@ -522,7 +523,8 @@ class Pipeline(ExportFixture):
 
     def test_real_brand_glyph_is_stippled(self):
         name = self.add("com.netflix.mediaclient", "auto", "Netflix", ring(), 0.5)
-        self.assertEqual(self.run_fix(), {"brand": 1})
+        with mock.patch.object(ix, "KEEP_STANDIN", frozenset(["com.netflix.mediaclient"])):
+            self.assertEqual(self.run_fix(), {"brand": 1})
         a = self.final(name)
         self.assertEqual({tuple(p) for p in a[a[:, :, 3] > 0][:, :3]}, {ix.FG})
 
@@ -740,6 +742,80 @@ class AutoShapes(ExportFixture):
         a = ix.parse_args(["iconfix.py"])
         self.assertFalse(a.auto_shapes)
         self.assertTrue(a.in_dir.endswith(os.path.join("build", "icons")))
+
+
+class RealIcon(ExportFixture):
+    def tone_obj(self, lum, cov=1.0):
+        return ix.Tone(np.broadcast_to(np.asarray(lum, np.float64), (S, S)),
+                       np.broadcast_to(np.asarray(cov, np.float64), (S, S)))
+
+    def test_tile_mask(self):
+        m = ix.tile_mask((200, 160))
+        self.assertEqual(m.shape, (S, S))
+        self.assertEqual(m[S // 2, S // 2], 1.0)
+        self.assertEqual(m[10, 10], 0.0)
+        self.assertEqual(m[S // 2, (S - 200) // 2 + 2], 1.0)
+        self.assertEqual(m[S // 2, (S - 200) // 2 - 2], 0.0)
+        self.assertEqual(m[(S - 200) // 2 + 1, (S - 200) // 2 + 1], 0.0)  # rounded corner
+        self.assertTrue(((m > 0) & (m < 1)).any())  # anti-aliased
+
+    def test_polarity_flips_on_bright_tile(self):
+        mask = ix.tile_mask()
+        bright = np.full((S, S), 0.9)
+        bright[200:260, 200:260] = 0.2  # dark logo on a bright tile
+        lv = ix.real_levels(self.tone_obj(bright), mask)
+        self.assertGreater(lv[230, 230], 0.9)  # logo ends up bright
+        self.assertLess(lv[S // 2 + 60, S // 2 + 60], 0.1)  # tile ends up dark
+        lv2 = ix.real_levels(self.tone_obj(1.0 - bright), mask)  # already dark tile: same result
+        self.assertTrue(np.allclose(lv, lv2))
+
+    def test_stretch_maps_p2_to_zero(self):
+        mask = ix.tile_mask()
+        ramp = np.linspace(0.1, 0.5, S)[None, :] * np.ones((S, 1))
+        lv = ix.real_levels(self.tone_obj(ramp), mask)
+        inside = mask > 0.5
+        self.assertAlmostEqual(float(np.percentile(lv[inside], 2)), 0.0, places=2)
+        self.assertAlmostEqual(float(np.percentile(lv[inside], 98)), 1.0, places=2)
+        flat = ix.real_levels(self.tone_obj(0.4), mask)
+        self.assertTrue(np.allclose(flat, 0.4))  # span < 1e-3: as is
+
+    def test_skip_thresholds(self):
+        ramp = np.linspace(0, 1, S)[None, :] * np.ones((S, 1))
+        dots = ix.real_dots(self.tone_obj(ramp))
+        self.assertTrue(dots)
+        cov = ix.cell_means(ix.tile_mask())
+        for cx, cy, r in dots:
+            self.assertGreaterEqual(cov[int(cy // ix.P), int(cx // ix.P)], 0.12)
+            self.assertLessEqual(r, ix.P * 0.47 + 1e-9)
+        self.assertGreater(min(cx for cx, _, _ in dots), (S - ix.TILE_FALLBACK * S) / 2.0)
+        self.assertEqual(ix.real_dots(self.tone_obj(0.5, 0.0)), [])  # no coverage
+        # stretched brightness < 0.10 is skipped: a dark ramp's left tenth of the tile
+        n = len(ix.real_dots(self.tone_obj(np.linspace(0, 1, S)[None, :] ** 3 * np.ones((S, 1)))))
+        self.assertLess(n, len(dots))
+
+    def test_stand_in_becomes_real(self):
+        cols = np.linspace(0, 1, S)[None, :] * np.ones((S, 1))
+        name = self.add("com.example.quux", "auto", "Quux", specks(), cols)
+        self.add("com.netflix.mediaclient", "auto", "Netflix", ring(), cols)
+        self.assertEqual(self.run_fix(), {"real": 2})
+        want = ix.render_dots(ix.real_dots(ix.load_tone(os.path.join(self.inp, name + ".tone.png"))))
+        self.assertTrue(np.array_equal(self.final(name), np.asarray(want)))
+        self.assertEqual(ix.MARK["real"], "R")
+
+    def test_keep_list_and_missing_tone_keep_stand_in(self):
+        cols = np.linspace(0, 1, S)[None, :] * np.ones((S, 1))
+        self.add("com.hungrydroid.whitescreen", "auto", "White", specks(), cols)
+        self.add("com.example.notone", "auto", "Notone", specks())
+        self.add("com.example.quux", "auto", "Quux", ring(), cols)  # own shape passes the gate
+        with open(os.path.join(self.inp, "index.tsv"), "w") as f:
+            f.writelines(self.rows)
+        counts = ix.fix(self.inp, self.out, None, log=self.lines.append, auto_shapes=True)
+        self.assertEqual(counts, {"initial": 2, "auto": 1})
+
+    def test_mono_untouched(self):
+        cols = np.linspace(0, 1, S)[None, :] * np.ones((S, 1))
+        self.add("com.example.mono", "mono", "Mono", ring(), cols)
+        self.assertEqual(self.run_fix(), {"mono": 1})
 
 
 class Determinism(ExportFixture):

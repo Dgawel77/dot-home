@@ -24,6 +24,9 @@ Per index.tsv row (component, drawable, mono|auto[, label]):
       3. Inter Bold capital initial of the label
     brand glyphs and initials are fitted into the median mono glyph box of the run, and stippled at
     the colour icon's mean luminance (0.7 without a tone layer)
+  * final source "real": a row that would end up as brand or initial, has a tone layer and is not in
+    KEEP_STANDIN gets its real icon instead: the tone luminance (flipped if bright, 2nd-98th percentile
+    stretched) stippled through a rounded-square tile mask the size of the median mono glyph box
 Usage: iconfix.py [--auto-shapes] [in_dir [out_dir]]
 Also writes contact.png (every final icon on BG with label and source marker).
 
@@ -97,6 +100,28 @@ T_BASE, T_GAIN = 0.85, 0.15      # t = T_BASE + T_GAIN * L (flat tone, no gradie
 R_FLOOR, R_GAIN = 0.22, 0.47     # r = P * R_GAIN * sqrt(t) * k
 L_DEFAULT = 0.7                  # luminance without a tone layer
 SS = 4                           # dots are drawn at SS x and area-averaged down (see render_dots)
+
+# Real-icon stand-in replacement: stand-ins (initial / brand) with a tone layer become the colour icon's
+# luminance as a stipple, inside a rounded-square tile mask; these packages come out muddy and keep theirs.
+KEEP_STANDIN = frozenset([
+    "com.activision.callofduty.warzone",
+    "com.hungrydroid.whitescreen",
+    "com.illinoislottery.illinoislottery",
+    "com.innersloth.spacemafia",
+    "com.plato.android",
+    "com.productmadness.hovmobile",
+    "digital.cuisine.ticketplus",
+    "feastkwgt.kustom.pack",
+    "gift.ace.kwgt",
+    "rainbowforkwgt.kustom.pack",
+])
+TILE_FALLBACK = 0.62             # tile side (fraction of SIZE) with too few mono rows
+TILE_RADIUS = 0.24               # corner radius / side
+BRIGHT_MEDIAN = 0.55             # flip L when its median inside the tile is above this
+STRETCH_LO, STRETCH_HI = 2, 98   # percentiles mapped to 0..1
+STRETCH_MIN_SPAN = 1e-3
+REAL_COV_MIN = 0.12
+REAL_B_MIN = 0.10
 
 # Checked against simple-icons 16.36.0 (test_iconfix asserts every slug resolves). Packages from
 # this phone's auto list whose brand is in Simple Icons; the rest get an initial. Wordmark slugs stay
@@ -592,8 +617,49 @@ def keep_mono(kind, ratio):
     return kind == "mono" and not too_filled(ratio) and not too_empty(ratio)
 
 
+def tile_mask(box=None):
+    """Anti-aliased rounded square centred in the tile (float 0..1, SIZE x SIZE): side = the larger side
+    of the median mono glyph box (TILE_FALLBACK x SIZE without one), corner radius TILE_RADIUS x side."""
+    from PIL import Image, ImageDraw
+    side = max(box) if box else TILE_FALLBACK * SIZE
+    big = SIZE * SS
+    a = big * 0.5 - side * SS / 2.0
+    b = big * 0.5 + side * SS / 2.0
+    m = Image.new("L", (big, big), 0)
+    ImageDraw.Draw(m).rounded_rectangle([a, a, b - 1, b - 1], radius=side * SS * TILE_RADIUS, fill=255)
+    return np.asarray(m, np.float64).reshape(SIZE, SS, SIZE, SS).mean(axis=(1, 3)) / 255.0
+
+
+def real_levels(tone, mask):
+    """Tone luminance with the tile polarity (flipped when bright) and the 2nd-98th percentile stretch
+    applied; None when the tile holds no ink. mask: float 0..1, already times the tone coverage."""
+    lum = tone.lum
+    inside = mask > 0.5
+    if not inside.any():
+        return None
+    if np.median(lum[inside]) > BRIGHT_MEDIAN:
+        lum = 1.0 - lum
+    lo, hi = np.percentile(lum[inside], [STRETCH_LO, STRETCH_HI])
+    if hi - lo < STRETCH_MIN_SPAN:
+        return lum
+    return np.clip((lum - lo) / (hi - lo), 0.0, 1.0)
+
+
+def real_dots(tone, box=None):
+    """[(cx, cy, r)] halftone of the real icon: one dot per cell, radius from the stretched luminance
+    (brightness) and the tile coverage; cells below REAL_COV_MIN coverage or REAL_B_MIN brightness skip."""
+    mask = tile_mask(box) * tone.cov
+    level = real_levels(tone, mask)
+    if level is None:
+        return []
+    cov, b = cell_means(mask), cell_means(level)
+    js, is_ = np.nonzero((cov >= REAL_COV_MIN) & (b >= REAL_B_MIN))
+    r = R_GAIN * P * np.sqrt(b[js, is_]) * np.sqrt(np.minimum(1.0, cov[js, is_] / COV_FULL))
+    return [(float((i + 0.5) * P), float((j + 0.5) * P), float(q)) for j, i, q in zip(js, is_, r)]
+
+
 def final_icon(in_dir, name, pkg, kind, label, shown, pkg_dir, titles, log, box=None, auto_shapes=False):
-    """Stippled final icon and its source for one index row: mono | brand | auto | initial.
+    """Stippled final icon and its source for one index row: mono | brand | auto | initial | real.
 
     Mono rows keep their shape. Other rows try a brand glyph (blob/empty/wordmark gate), then with
     auto_shapes and an auto row its own mask (shape_problem gate), then an initial. Brand glyphs and
@@ -626,6 +692,8 @@ def final_icon(in_dir, name, pkg, kind, label, shown, pkg_dir, titles, log, box=
             log("  %s: own shape rejected (%s)" % (pkg, problem))
     if out is None:
         out, source = stipple(letter_mask(shown[:1], box), level), "initial"
+    if source in ("brand", "initial") and tone is not None and pkg not in KEEP_STANDIN:
+        out, source = render_dots(real_dots(tone, box)), "real"
     log("%-45s %-10s -> %s" % (pkg, why, source))
     return out, source
 
@@ -677,7 +745,7 @@ def fix(in_dir, out_dir, overrides_dir=None, log=print, auto_shapes=False):
     return counts
 
 
-MARK = {"mono": "M", "brand": "B", "auto": "A", "initial": "I", "override": "O"}
+MARK = {"mono": "M", "brand": "B", "auto": "A", "initial": "I", "real": "R", "override": "O"}
 
 
 def contact_sheet(items, path, width=2400, cols=16):
