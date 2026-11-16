@@ -11,6 +11,9 @@ public final class AllTests {
     static final Class<?>[] SUITES = {
         DotMatrixFontTest.class,
         RngTest.class,
+        ScoreBookTest.class,
+        TiltInputTest.class,
+        ZonesTest.class,
         dev.gawel.dothome.core.GameWorldTest.class,
     };
 
