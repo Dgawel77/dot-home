@@ -11,6 +11,7 @@ import android.graphics.drawable.AdaptiveIconDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.widget.TextView;
 import dev.gawel.dothome.core.AppFilter;
 import dev.gawel.dothome.core.MonoIcon;
@@ -60,52 +61,75 @@ public class IconExportActivity extends Activity {
             List<String> names = AppFilter.drawableNames(components);
             File dir = getExternalFilesDir("icons");
             if (dir == null) return "No external files dir";
-            int count = 0, auto = 0;
+            File[] old = dir.listFiles();
+            if (old != null) for (File f : old) if (f.getName().endsWith(".png")) f.delete();
+            int count = 0, auto = 0, failed = 0;
             Writer index = new OutputStreamWriter(new FileOutputStream(new File(dir, "index.tsv")), "UTF-8");
             try {
                 for (int i = 0; i < apps.size(); i++) {
-                    Drawable icon = apps.get(i).loadIcon(pm);
-                    boolean mono = false;
-                    int[] px;
-                    if (Build.VERSION.SDK_INT >= 33 && icon instanceof AdaptiveIconDrawable
-                            && ((AdaptiveIconDrawable) icon).getMonochrome() != null) {
-                        px = MonoIcon.fromMonochromeLayer(render(((AdaptiveIconDrawable) icon).getMonochrome(), false));
-                        mono = true;
-                    } else {
-                        px = MonoIcon.fromFullIcon(render(icon, true), SIZE, SIZE);
-                        auto++;
-                    }
-                    Bitmap bmp = Bitmap.createBitmap(px, SIZE, SIZE, Bitmap.Config.ARGB_8888);
-                    FileOutputStream out = new FileOutputStream(new File(dir, names.get(i) + ".png"));
                     try {
-                        bmp.compress(Bitmap.CompressFormat.PNG, 100, out);
-                    } finally {
-                        out.close();
+                        boolean mono = false;
+                        int[] px;
+                        Drawable icon = apps.get(i).loadIcon(pm);
+                        Drawable monoLayer = null;
+                        if (Build.VERSION.SDK_INT >= 33 && icon instanceof AdaptiveIconDrawable) {
+                            monoLayer = ((AdaptiveIconDrawable) icon).getMonochrome();
+                        }
+                        if (monoLayer != null) {
+                            px = MonoIcon.fromMonochromeLayer(render(new Drawable[] {monoLayer}, false));
+                            mono = true;
+                        } else if (icon instanceof AdaptiveIconDrawable) {
+                            // Unmasked layers, so mask corners are the background colour, not black.
+                            AdaptiveIconDrawable ad = (AdaptiveIconDrawable) icon;
+                            px = MonoIcon.fromFullIcon(
+                                render(new Drawable[] {ad.getBackground(), ad.getForeground()}, true), SIZE, SIZE);
+                        } else {
+                            px = MonoIcon.fromFullIcon(render(new Drawable[] {icon}, true, false), SIZE, SIZE);
+                        }
+                        Bitmap bmp = Bitmap.createBitmap(px, SIZE, SIZE, Bitmap.Config.ARGB_8888);
+                        FileOutputStream out = new FileOutputStream(new File(dir, names.get(i) + ".png"));
+                        try {
+                            bmp.compress(Bitmap.CompressFormat.PNG, 100, out);
+                        } finally {
+                            out.close();
+                        }
+                        index.write(components.get(i) + "\t" + names.get(i) + "\t" + (mono ? "mono" : "auto") + "\n");
+                        count++;
+                        if (!mono) auto++;
+                    } catch (Exception e) {
+                        failed++;
+                        new File(dir, names.get(i) + ".png").delete();
+                        Log.w("DotHome", "icon export failed for " + components.get(i), e);
                     }
-                    index.write(components.get(i) + "\t" + names.get(i) + "\t" + (mono ? "mono" : "auto") + "\n");
-                    count++;
                 }
             } finally {
                 index.close();
             }
-            return "Exported " + count + " icons (" + auto + " auto)";
+            return "Exported " + count + " icons (" + auto + " auto, " + failed + " failed)";
         } catch (Exception e) {
             return "Export failed: " + e;
         }
     }
 
+    private static int[] render(Drawable[] layers, boolean opaqueBlack) {
+        return render(layers, opaqueBlack, true);
+    }
+
     /**
-     * Renders to 192x192. Adaptive layers live on a 108dp canvas with a 72dp safe zone, so they are
-     * drawn 1.25x oversize to fill the tile. Full icons get an opaque black backing so transparent
-     * corners read as background; the monochrome layer keeps its alpha.
+     * Renders to 192x192. Raw adaptive layers live on a 108dp canvas with a 72dp safe zone, so they
+     * are drawn oversize (~1.25x) to fill the tile; legacy icons are drawn 1:1. Opaque mode puts a
+     * black backing under the layers; the monochrome layer keeps its alpha.
      */
-    private static int[] render(Drawable d, boolean opaqueBlack) {
+    private static int[] render(Drawable[] layers, boolean opaqueBlack, boolean oversize) {
         Bitmap bmp = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
         if (opaqueBlack) c.drawColor(Color.BLACK);
-        int pad = (d instanceof AdaptiveIconDrawable || !opaqueBlack) ? -SIZE / 8 : 0;
-        d.setBounds(pad, pad, SIZE - pad, SIZE - pad);
-        d.draw(c);
+        int pad = oversize ? -SIZE / 8 : 0;
+        for (Drawable d : layers) {
+            if (d == null) continue;
+            d.setBounds(pad, pad, SIZE - pad, SIZE - pad);
+            d.draw(c);
+        }
         int[] px = new int[SIZE * SIZE];
         bmp.getPixels(px, 0, SIZE, 0, 0, SIZE, SIZE);
         return px;

@@ -12,10 +12,20 @@ IN=${ICONS_DIR:-build/icons}
 
 RES=iconpack/res
 rm -rf $RES && mkdir -p $RES/drawable-nodpi $RES/xml
-cp "$IN"/*.png $RES/drawable-nodpi/
+# Only PNGs listed in index.tsv are packaged; stale files from earlier exports are ignored.
+while IFS=$'\t' read -r comp name kind; do
+  [ -n "$name" ] || continue
+  [ -f "$IN/$name.png" ] || { echo "missing $IN/$name.png for $comp" >&2; exit 1; }
+  cp "$IN/$name.png" $RES/drawable-nodpi/
+done < "$IN/index.tsv"
 if [ -d iconpack/overrides ]; then
   for f in iconpack/overrides/*.png; do
-    [ -e "$f" ] && cp "$f" $RES/drawable-nodpi/
+    [ -e "$f" ] || continue
+    if cut -f2 "$IN/index.tsv" | grep -qxF "$(basename "$f" .png)"; then
+      cp "$f" $RES/drawable-nodpi/
+    else
+      echo "ignoring override $f: not in index.tsv" >&2
+    fi
   done
 fi
 
@@ -23,6 +33,6 @@ fi
 CLS=build/appfilter-tool && rm -rf $CLS && mkdir -p $CLS
 javac -encoding UTF-8 -Xlint:-options -source 8 -target 8 -d $CLS \
   app/src/main/java/dev/gawel/dothome/core/AppFilter.java tools/AppFilterMain.java
-java -cp $CLS AppFilterMain "$IN/index.tsv" $RES/xml/appfilter.xml
+java -cp $CLS AppFilterMain "$IN/index.tsv" $RES/drawable-nodpi $RES/xml/appfilter.xml
 
 iconpack/build.sh

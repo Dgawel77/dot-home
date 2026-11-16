@@ -34,4 +34,14 @@ public final class AppFilterTest {
         T.check(xml.contains("<item component=\"ComponentInfo{com.a/com.a.Main}\" drawable=\"ic_com_a_com_a_main\"/>"), xml);
         T.check(xml.contains("</resources>"), "close");
     }
+
+    public static void testXmlMatchesDrawableNamesWithCollisions() {
+        List<String> comps = Arrays.asList("com.a/b.C", "com.a/b_C", "com.a/b.C", "com.z/Q");
+        List<String> names = AppFilter.drawableNames(comps);
+        String xml = AppFilter.xml(comps);
+        for (int i = 0; i < comps.size(); i++) {
+            T.check(xml.contains("ComponentInfo{" + comps.get(i) + "}\" drawable=\"" + names.get(i) + "\""),
+                "item " + i + " uses " + names.get(i));
+        }
+    }
 }
