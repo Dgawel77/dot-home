@@ -27,17 +27,17 @@ public final class DotMatrixFontTest {
     }
 
     public static void testRenderWidth() {
-        T.eq(25, DotMatrixFont.render("12:41").cols, "12:41 cols");
-        T.eq(19, DotMatrixFont.render("9:41").cols, "9:41 cols");
+        T.eq(29, DotMatrixFont.render("12:41").cols, "12:41 cols");
+        T.eq(23, DotMatrixFont.render("9:41").cols, "9:41 cols");
         T.eq(7, DotMatrixFont.render("9:41").rows, "rows");
     }
 
     public static void testColonCells() {
         Grid g = DotMatrixFont.render(":");
-        T.eq(1, g.cols, "colon cols");
+        T.eq(5, g.cols, "colon cols (fixed advance)");
         for (int r = 0; r < 7; r++) {
-            T.check(g.present(0, r), "present row " + r);
-            T.eq(r == 2 || r == 4, g.lit(0, r), "lit row " + r);
+            T.check(g.present(0, r) && g.present(4, r), "present row " + r);
+            T.eq(r == 2 || r == 4, g.lit(2, r), "lit row " + r);
         }
         Grid two = DotMatrixFont.render("1:");
         for (int r = 0; r < 7; r++) T.check(!two.present(5, r), "gap column absent row " + r);

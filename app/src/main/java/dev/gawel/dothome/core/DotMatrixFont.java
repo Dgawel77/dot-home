@@ -16,20 +16,50 @@ public final class DotMatrixFont {
         "01110,10001,10001,01110,10001,10001,01110", // 8
         "01110,10001,10001,01111,00001,00010,01100", // 9
     };
-    private static final String COLON = "0,0,1,0,1,0,0";
+    private static final String COLON = "00000,00000,00100,00000,00100,00000,00000";
+    private static final String DEGREE = "01100,10010,10010,01100,00000,00000,00000";
+    private static final String MINUS = "00000,00000,00000,11111,00000,00000,00000";
+    private static final String DOT = "00000,00000,00000,00000,00000,00000,00100";
+    private static final String PERCENT = "11001,11010,00010,00100,01000,01011,10011";
+    /** Every glyph has the same advance. */
+    public static final int GLYPH_COLS = 5;
 
     private DotMatrixFont() {}
 
-    /** Row-major cells (width x 7) of a glyph; true means lit. */
-    public static boolean[] glyph(char c) {
-        String[] rows;
-        if (c == ':') {
-            rows = COLON.split(",");
-        } else if (c >= '0' && c <= '9') {
-            rows = DIGITS[c - '0'].split(",");
-        } else {
-            throw new IllegalArgumentException("no glyph for '" + c + "'");
+    private static String spec(char c) {
+        switch (c) {
+            case ':': return COLON;
+            case '\u00B0': return DEGREE;
+            case '\u2212': return MINUS;
+            case '.': return DOT;
+            case '%': return PERCENT;
+            default:
+                if (c >= '0' && c <= '9') return DIGITS[c - '0'];
+                throw new IllegalArgumentException("no glyph for '" + c + "'");
         }
+    }
+
+    /** "hh:mm" with two-digit hours in both modes; 12 h shows 12 for midnight and noon. */
+    public static String clockText(int hour24, int minute, boolean is24h) {
+        int h = is24h ? hour24 : (hour24 % 12 == 0 ? 12 : hour24 % 12);
+        return (h < 10 ? "0" : "") + h + ":" + (minute < 10 ? "0" : "") + minute;
+    }
+
+    /** Row-major cells of the whole grid: 1 lit, 0 unlit, -1 absent (the gap between glyphs). */
+    public static byte[] cells(String text) {
+        Grid g = render(text);
+        byte[] out = new byte[g.cols * g.rows];
+        for (int r = 0; r < g.rows; r++) {
+            for (int c = 0; c < g.cols; c++) {
+                out[r * g.cols + c] = (byte) (!g.present(c, r) ? -1 : g.lit(c, r) ? 1 : 0);
+            }
+        }
+        return out;
+    }
+
+    /** Row-major cells (5 x 7) of a glyph; true means lit. */
+    public static boolean[] glyph(char c) {
+        String[] rows = spec(c).split(",");
         int w = rows[0].length();
         boolean[] out = new boolean[w * ROWS];
         for (int r = 0; r < ROWS; r++) {
@@ -41,9 +71,8 @@ public final class DotMatrixFont {
     }
 
     public static int width(char c) {
-        if (c == ':') return 1;
-        if (c >= '0' && c <= '9') return 5;
-        throw new IllegalArgumentException("no glyph for '" + c + "'");
+        spec(c); // validates
+        return GLYPH_COLS;
     }
 
     /** Lays glyphs out left to right with one absent column between them. */

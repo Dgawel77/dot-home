@@ -28,6 +28,7 @@ public final class AllTests {
         dev.gawel.dothome.core.DotScaleTest.class,
         DotMatrixFontTest.class,
         dev.gawel.dothome.core.BoxSetTest.class,
+        dev.gawel.dothome.core.DesignValuesTest.class,
     };
 
     public static void main(String[] args) throws Exception {
