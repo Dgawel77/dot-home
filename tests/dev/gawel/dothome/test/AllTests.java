@@ -13,6 +13,7 @@ public final class AllTests {
         MiniJsonTest.class,
         RngTest.class,
         ScoreBookTest.class,
+        TextFitTest.class,
         TiltInputTest.class,
         WeatherTest.class,
         ZonesTest.class,

@@ -28,6 +28,12 @@ public final class WeatherTest {
         T.eq(null, NwsParser.headline("<html>"), "nws html");
     }
 
+    public static void testMissingTemperatureReturnsNull() {
+        T.eq(null, OpenMeteoParser.parse("{\"current\":{}}", 0), "empty current");
+        T.eq(null, OpenMeteoParser.parse("{\"current\":{\"temperature_2m\":\"hot\"}}", 0), "non-numeric temperature");
+        T.eq(null, OpenMeteoParser.parse("{\"current\":{\"temperature_2m\":null}}", 0), "null temperature");
+    }
+
     public static void testOpenMeteoFixture() {
         Weather w = OpenMeteoParser.parse(fixture("open-meteo.json"), 12345L);
         T.check(w != null, "parsed");

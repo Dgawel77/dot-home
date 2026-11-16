@@ -17,7 +17,8 @@ public final class OpenMeteoParser {
             if (cur == null) return null;
             int offset = (int) MiniJson.num(root.get("utc_offset_seconds"), 0);
             Map<String, Object> daily = MiniJson.obj(root.get("daily"));
-            double temp = MiniJson.num(cur.get("temperature_2m"), 0);
+            if (!(cur.get("temperature_2m") instanceof Double)) return null;
+            double temp = (Double) cur.get("temperature_2m");
             int code = (int) MiniJson.num(cur.get("weather_code"), -1);
             return new Weather(
                 temp,

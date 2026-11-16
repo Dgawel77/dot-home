@@ -1,15 +1,12 @@
 package dev.gawel.dothome;
 
 import android.content.Context;
-import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.graphics.Typeface;
-import android.util.Log;
 
 import java.util.List;
 import java.util.WeakHashMap;
@@ -61,20 +58,9 @@ final class DotRenderer {
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         p.setColor(Color.WHITE);
         new Canvas(sprite).drawCircle(16, 16, 15, p);
-        textPaint.setTypeface(loadFont(context.getAssets(), "fonts/Doto-Regular.ttf"));
+        textPaint.setTypeface(Fonts.doto(context));
         textPaint.setColor(0xFFA6A6A6);
         textPaint.setTextAlign(Paint.Align.RIGHT);
-    }
-
-    private static Typeface loadFont(AssetManager assets, String path) {
-        try {
-            Typeface t = new Typeface.Builder(assets, path).setFontVariationSettings("'wght' 400").build();
-            if (t != null) return t;
-            Log.w(DotWallpaperService.TAG, "font " + path + " could not be built, using monospace");
-        } catch (RuntimeException e) {
-            Log.w(DotWallpaperService.TAG, "font " + path + " failed: " + e);
-        }
-        return Typeface.MONOSPACE;
     }
 
     /** Per-frame bookkeeping that is not part of the simulation (the ship's exhaust trail). Call after step(). */

@@ -1,10 +1,96 @@
 package dev.gawel.dothome;
 
+import android.app.PendingIntent;
+import android.appwidget.AppWidgetManager;
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.os.Bundle;
+import android.provider.AlarmClock;
+import android.util.Log;
+import android.widget.RemoteViews;
 
-/** Pushes fresh data to the home-screen widgets. Stub; filled in by the widgets task. */
+import dev.gawel.dothome.core.Weather;
+
+/** Pushes fresh data to the home-screen widgets. */
 final class WidgetUpdater {
+    private static final String TAG = "DotHome";
+    private static final String CLOCK_PKG = "com.sec.android.app.clockpackage";
+    /** What a tap on the weather half opens. Task 12 swaps this for RadarActivity. */
+    private static final Class<?> WEATHER_TARGET = SetupActivity.class;
+
+    private static final int DEFAULT_W_DP = 250, DEFAULT_H_DP = 110;
+    private static final int MAX_SIDE_PX = 1200; // keeps each RemoteViews bitmap far below the binder/memory limit
+    private static final float CLOCK_WEIGHT = 1.4f, WEATHER_WEIGHT = 1f;
+
     private WidgetUpdater() {}
 
-    static void updateAll(Context ctx) {}
+    static void updateAll(Context ctx) {
+        try {
+            AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
+            int[] ids = mgr.getAppWidgetIds(new ComponentName(ctx, ClockWidget.class));
+            if (ids == null || ids.length == 0) return;
+            Weather wx = WeatherRepo.cached(ctx);
+            long now = System.currentTimeMillis();
+            for (int id : ids) {
+                try {
+                    mgr.updateAppWidget(id, clockViews(ctx, mgr, id, wx, now));
+                } catch (RuntimeException e) {
+                    Log.w(TAG, "widget " + id + " update failed: " + e);
+                }
+            }
+        } catch (RuntimeException e) {
+            Log.w(TAG, "widget update failed: " + e);
+        }
+    }
+
+    private static RemoteViews clockViews(Context ctx, AppWidgetManager mgr, int id, Weather wx, long now) {
+        float density = ctx.getResources().getDisplayMetrics().density;
+        Bundle o = mgr.getAppWidgetOptions(id);
+        int wDp = o == null ? 0 : o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0);
+        int hDp = o == null ? 0 : o.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0);
+        if (wDp <= 0) wDp = DEFAULT_W_DP;
+        if (hDp <= 0) hDp = DEFAULT_H_DP;
+        float wPx = wDp * density, hPx = hDp * density;
+        float shrink = Math.min(1f, MAX_SIDE_PX / Math.max(wPx, hPx));
+        wPx *= shrink;
+        hPx *= shrink;
+        float total = CLOCK_WEIGHT + WEATHER_WEIGHT;
+        int clockW = Math.max(1, Math.round(wPx * CLOCK_WEIGHT / total));
+        int weatherW = Math.max(1, Math.round(wPx * WEATHER_WEIGHT / total));
+        int h = Math.max(1, Math.round(hPx));
+
+        RemoteViews rv = new RemoteViews(ctx.getPackageName(), R.layout.widget_clock);
+        Bitmap clock = safe(h, clockW, () -> WidgetArt.clock(ctx, clockW, h, now));
+        Bitmap weather = safe(h, weatherW, () -> WidgetArt.weather(ctx, weatherW, h, wx, now));
+        rv.setImageViewBitmap(R.id.clock_img, clock);
+        rv.setImageViewBitmap(R.id.weather_img, weather);
+        rv.setOnClickPendingIntent(R.id.clock_img, PendingIntent.getActivity(ctx, 1, clockIntent(ctx), flags()));
+        rv.setOnClickPendingIntent(R.id.weather_img,
+            PendingIntent.getActivity(ctx, 2, new Intent(ctx, WEATHER_TARGET).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), flags()));
+        return rv;
+    }
+
+    private interface Art { Bitmap draw(); }
+
+    /** Never lets a drawing problem reach the widget host: falls back to a transparent bitmap. */
+    private static Bitmap safe(int h, int w, Art art) {
+        try {
+            return art.draw();
+        } catch (RuntimeException | OutOfMemoryError e) {
+            Log.w(TAG, "widget art failed: " + e);
+            return Bitmap.createBitmap(Math.max(1, Math.min(w, 64)), Math.max(1, Math.min(h, 64)), Bitmap.Config.ARGB_8888);
+        }
+    }
+
+    private static Intent clockIntent(Context ctx) {
+        Intent i = ctx.getPackageManager().getLaunchIntentForPackage(CLOCK_PKG);
+        if (i == null) i = new Intent(AlarmClock.ACTION_SHOW_ALARMS);
+        return i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+    }
+
+    private static int flags() {
+        return PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE;
+    }
 }

@@ -1,6 +1,10 @@
 package dev.gawel.dothome;
 
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.os.Build;
 import android.util.Log;
 
 import java.io.ByteArrayOutputStream;
@@ -36,6 +40,13 @@ final class GameHub {
     private final List<DotWallpaperService.DotEngine> visible = new ArrayList<>();
     private FireMode fireMode;
     private String zonesJson;
+    private boolean widgetReceiversOn;
+    private final BroadcastReceiver widgetTick = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            WidgetUpdater.updateAll(appContext);
+        }
+    };
 
     static synchronized GameHub get(Context context) {
         if (instance == null) instance = new GameHub(context.getApplicationContext());
@@ -92,6 +103,8 @@ final class GameHub {
         if (wx == null || System.currentTimeMillis() - wx.fetchedAtMs > 30L * 60 * 1000) {
             WeatherJob.refreshSoon(appContext);
         }
+        registerWidgetReceivers();
+        WidgetUpdater.updateAll(appContext);
         tilt.start(e.displayRotation()); // restart = recalibrate on the first sample
     }
 
@@ -102,6 +115,46 @@ final class GameHub {
             tilt.stop();
             world.setTilt(0f, 0f);
             world.setAutoFire(false);
+            unregisterWidgetReceivers();
+        }
+    }
+
+    /** TIME_TICK can only be received by a dynamic receiver, so it lives exactly while a wallpaper engine is visible. */
+    private void registerWidgetReceivers() {
+        if (widgetReceiversOn) return;
+        IntentFilter f = new IntentFilter();
+        f.addAction(Intent.ACTION_TIME_TICK);
+        f.addAction(Intent.ACTION_SCREEN_ON);
+        try {
+            registerReceiverCompat(f);
+            widgetReceiversOn = true;
+        } catch (RuntimeException ex) {
+            Log.w("DotHome", "widget receivers not registered: " + ex);
+        }
+    }
+
+    private void unregisterWidgetReceivers() {
+        if (!widgetReceiversOn) return;
+        widgetReceiversOn = false;
+        try {
+            appContext.unregisterReceiver(widgetTick);
+        } catch (RuntimeException ex) {
+            Log.w("DotHome", "widget receivers unregister failed: " + ex);
+        }
+    }
+
+    private void registerReceiverCompat(IntentFilter f) {
+        if (Build.VERSION.SDK_INT >= 33) {
+            Api33.register(appContext, widgetTick, f);
+        } else {
+            appContext.registerReceiver(widgetTick, f);
+        }
+    }
+
+    /** Guarded so the RECEIVER_NOT_EXPORTED overload is only touched on API 33+. */
+    private static final class Api33 {
+        static void register(Context c, BroadcastReceiver r, IntentFilter f) {
+            c.registerReceiver(r, f, Context.RECEIVER_NOT_EXPORTED);
         }
     }
 
