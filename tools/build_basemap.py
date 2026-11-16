@@ -1,7 +1,8 @@
 """Build app/src/main/assets/basemap.json from Natural Earth 1:10m GeoJSON.
 
 Run from the repo root:  python3 -I tools/build_basemap.py
-Source: nvkelso/natural-earth-vector (public domain). Files are cached in
+Source: nvkelso/natural-earth-vector (public domain), pinned to commit
+ca96624a56bd078437bca8184e78163e5039ad19 (NE_COMMIT) for reproducible builds. Files are cached in
 tools/cache/ and treated as untrusted data (only ever json.load-ed).
 
 ne_10m_roads fields (inspected): feature `level` == "Interstate" marks US
@@ -16,7 +17,8 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 CACHE = os.path.join(HERE, "cache")
 OUT = os.path.join(HERE, "..", "app", "src", "main", "assets", "basemap.json")
-BASE_URL = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/"
+NE_COMMIT = "ca96624a56bd078437bca8184e78163e5039ad19"  # pinned nvkelso/natural-earth-vector commit
+BASE_URL = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/%s/geojson/" % NE_COMMIT
 FILES = ["ne_10m_lakes", "ne_10m_admin_1_states_provinces_lines",
          "ne_10m_roads", "ne_10m_populated_places_simple"]
 
@@ -164,7 +166,16 @@ def _load(name):
     os.makedirs(CACHE, exist_ok=True)
     path = os.path.join(CACHE, name + ".geojson")
     if not os.path.exists(path):
-        urllib.request.urlretrieve(BASE_URL + name + ".geojson", path)
+        part = path + ".part"
+        try:
+            urllib.request.urlretrieve(BASE_URL + name + ".geojson", part)
+            with open(part) as f:
+                json.load(f)  # sanity check: complete, valid JSON
+            os.replace(part, path)
+        except (OSError, ValueError) as e:
+            if os.path.exists(part):
+                os.remove(part)
+            raise SystemExit("failed to download %s: %s" % (name, e))
     with open(path) as f:
         return json.load(f)["features"]
 

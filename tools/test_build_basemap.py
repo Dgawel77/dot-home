@@ -43,6 +43,19 @@ class BasemapTest(unittest.TestCase):
                 self.assertTrue(bb.in_bbox(p, bbox))
         self.assertEqual(parts[0][0], (1, 5))
         self.assertEqual(parts[1][-1], (2, 8))
+        self.assertEqual(parts[0][-1], (10, 5))
+        self.assertEqual(parts[1][0], (10, 8))
+
+    def test_clip_ring_closed_and_inside_bbox(self):
+        bbox = (0, 0, 10, 10)
+        ring = [(-5, 2), (5, 2), (15, 5), (5, 8), (-5, 8), (-5, 2)]
+        out = bb.clip_ring(ring, bbox)
+        self.assertEqual(out[0], out[-1])
+        self.assertGreaterEqual(len(out), 4)
+        for p in out:
+            self.assertTrue(bb.in_bbox(p, bbox))
+        self.assertTrue(inside((5, 5), out))
+        self.assertFalse(inside((12, 5), out))
 
     def test_output_has_lake_michigan(self):
         with open(OUT) as f:
