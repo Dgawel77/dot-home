@@ -69,6 +69,13 @@
       "w": 940,
       "x": 2470,
       "y": 0
+    },
+    "HomeWidgets.dc.html": {
+      "h": 640,
+      "title": "Home widgets · real sizes",
+      "w": 960,
+      "x": 0,
+      "y": 3160
     }
   },
   "createdOnFiles": {
@@ -87,7 +94,7 @@
     "howto": {
       "fill": "gray",
       "size": 24,
-      "text": "How to try it\n\n• Press Play on Main or Cover. The ship flies itself. Move the pointer to tilt the phone: stars shift, debris falls. Click to shoot. Press Shake under the phone for a shockwave (8 s cooldown).\n• Main also demos Phase 2 in Tweaks: weather, night or day (real moon phase), charging. Play the music widget for the beat pulse.\n• To the right: the radar widget, and the dock icons up close.\n• Weather, music, scores, trains and radar are sample data, not live.",
+      "text": "How to try it\n\n• Press Play on Main or Cover. The ship flies itself. Move the pointer to tilt the phone: stars shift, debris falls. Click to shoot. Press Shake under the phone for a shockwave (8 s cooldown).\n• Compare the rocks with the rockStyle Tweak on Main or Cover: lattice (cells light up on the fixed 4 px grid) or outline (the earlier free stipple).\n• Main also demos Phase 2 in Tweaks: weather, night or day (real moon phase), charging. Play the music widget for the beat pulse.\n• To the right: the radar widget, and the dock icons up close. Bottom row: the home widgets at real size.\n• Weather, music, scores, trains and radar are sample data, not live.",
       "w": 340,
       "x": 1270,
       "y": 0
@@ -110,7 +117,8 @@
     "Radar.dc.html",
     "Widgets.dc.html",
     "AOD.dc.html",
-    "Unfold.dc.html"
+    "Unfold.dc.html",
+    "HomeWidgets.dc.html"
   ],
   "pages": [],
   "title": "Fold6 Dot Home Mockups"

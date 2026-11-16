@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Home widgets at real size</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#A6A6A6}a:hover{color:#DDDDDD}
+.lb{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;line-height:16px;letter-spacing:1px;text-transform:uppercase;color:#757575;white-space:nowrap}
+.ico{fill:none;stroke:#DDDDDD;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.ico *{vector-effect:non-scaling-stroke}
+.tb{position:absolute;top:26px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;border:0;background:transparent;padding:0}
+.ln{position:absolute;font-size:13px;line-height:16px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+</style>
+</helmet>
+<div style="width: 960px; height: 640px; box-sizing: border-box; position: relative; background: #000000; font-family: Inter, system-ui, sans-serif; color: #DDDDDD">
+<div style="position: absolute; left: 40px; top: 40px; font-size: 20px; line-height: 24px; font-weight: 600; color: #DDDDDD">Home widgets · real sizes</div>
+<div style="position: absolute; left: 40px; top: 68px; font-size: 13px; line-height: 20px; color: #A6A6A6">What the app's WidgetArt draws, at 1 px = 1 dp, straight on the black ground. Sample time, weather and track.</div>
+
+<div style="position: absolute; left: 40px; top: 120px; width: 340px; height: 120px">
+<canvas id="dh-hw-clock-c" ref="{{ setCv }}" role="img" aria-label="{{ clockLabel }}" style="position: absolute; left: 0; top: 0; width: 340px; height: 120px; display: block"></canvas>
+<div style="position: absolute; left: 16px; top: 84px; font-size: 15px; line-height: 20px; color: #A6A6A6; white-space: nowrap">{{ date }}</div>
+<svg class="ico" width="32" height="32" viewBox="0 0 24 24" aria-hidden="true" style="position: absolute; left: 224px; top: 28px; stroke: #A6A6A6"><path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.2 11 3.5 3.5 0 0 0 7 18z"></path></svg>
+<div class="ln" style="left: 220px; top: 64px; width: 112px; color: #A6A6A6">Cloudy · H 45° L 33°</div>
+<div class="ln" style="left: 220px; top: 80px; width: 112px; color: #757575">Chicago</div>
+</div>
+<div class="lb" style="position: absolute; left: 40px; top: 252px">COVER · 340 × 120 DP · CLOCK STEP 8 · TEMP STEP 4</div>
+
+<div style="position: absolute; left: 40px; top: 308px; width: 340px; height: 260px">
+<canvas id="dh-hw-radar-c" ref="{{ setCv }}" role="img" aria-label="Radar widget at cover size: a sample storm west of Chicago drawn in dots" style="position: absolute; left: 0; top: 0; width: 340px; height: 260px; display: block"></canvas>
+</div>
+<div class="lb" style="position: absolute; left: 40px; top: 580px">COVER · 340 × 260 DP · MAP AND STORM STEP 4</div>
+
+<div style="position: absolute; left: 440px; top: 120px; width: 480px; height: 140px">
+<canvas id="dh-hw-clock-m" ref="{{ setCv }}" role="img" aria-label="{{ clockLabel }}" style="position: absolute; left: 0; top: 0; width: 480px; height: 140px; display: block"></canvas>
+<div style="position: absolute; left: 16px; top: 108px; font-size: 15px; line-height: 20px; color: #A6A6A6; white-space: nowrap">{{ date }}</div>
+<svg class="ico" width="32" height="32" viewBox="0 0 24 24" aria-hidden="true" style="position: absolute; left: 364px; top: 36px; stroke: #A6A6A6"><path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.2 11 3.5 3.5 0 0 0 7 18z"></path></svg>
+<div class="ln" style="left: 320px; top: 72px; width: 152px; color: #A6A6A6">Cloudy · H 45° L 33°</div>
+<div class="ln" style="left: 320px; top: 88px; width: 152px; color: #757575">Chicago</div>
+</div>
+<div class="lb" style="position: absolute; left: 440px; top: 272px">MAIN · 480 × 140 DP · CLOCK STEP 12 · TEMP STEP 4</div>
+<div style="position: absolute; left: 440px; top: 292px; width: 480px; font-size: 13px; line-height: 20px; color: #757575">The temperature moves to step 8 once the weather half is 216 dp or wider, which is 532 dp overall beside a step 12 clock.</div>
+
+<div style="position: absolute; left: 440px; top: 364px; width: 480px; height: 96px">
+<canvas id="dh-hw-music" ref="{{ setCv }}" role="img" aria-label="Album art in halftone dots and track progress, 38 percent" style="position: absolute; left: 0; top: 0; width: 480px; height: 96px; display: block"></canvas>
+<div style="position: absolute; left: 96px; top: 24px; width: 248px; font-size: 15px; line-height: 20px; font-weight: 500; color: #DDDDDD; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Track name</div>
+<div style="position: absolute; left: 96px; top: 44px; width: 248px; font-size: 13px; line-height: 16px; color: #A6A6A6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Artist</div>
+<button class="tb" aria-label="Previous track" style="left: 348px"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 6v12M18 6l-8 6 8 6z"></path></svg></button>
+<button class="tb" aria-label="Play" style="left: 392px"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z"></path></svg></button>
+<button class="tb" aria-label="Next track" style="left: 436px"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 6v12M6 6l8 6-8 6z"></path></svg></button>
+</div>
+<div class="lb" style="position: absolute; left: 440px; top: 472px">MAIN · 480 × 96 DP · ART AND PROGRESS STEP 4</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":640}}'>
+class Component extends DCLogic {
+  componentDidMount() {
+    this._alive = true;
+    this._clock = setInterval(() => { this.setState({ now: Date.now() }); this._paintAll(); }, 10000);
+    this._find(0);
+    try { if (document.fonts && document.fonts.load) document.fonts.load('500 11px "JetBrains Mono"').then(() => { if (this._alive) { const el = document.getElementById('dh-hw-radar-c'); if (el) { el._dhKey = null; this._paint(el); } } }); } catch (err) {}
+  }
+  componentWillUnmount() { this._alive = false; clearInterval(this._clock); }
+  _find(n) {
+    if (!this._alive) return;
+    const left = this._paintAll();
+    if (left && n < 40) setTimeout(() => this._find(n + 1), 100);
+  }
+  _paintAll() {
+    let left = 0;
+    for (const id of ['dh-hw-clock-c', 'dh-hw-clock-m', 'dh-hw-music', 'dh-hw-radar-c']) {
+      const el = document.getElementById(id);
+      if (el) this._paint(el); else left++;
+    }
+    return left;
+  }
+  _rng(seed) {
+    let a = seed >>> 0;
+    return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  _cl(v, a, b) { return v < a ? a : v > b ? b : v; }
+  // The four greys as alpha on #DDDDDD over the #000000 ground: 100% #DDDDDD, 65% #A6A6A6, 46% #757575, 10% #1A1A1A
+  _L() { return this._lv || (this._lv = { L100: 1, L65: 0.75, L46: 0.53, L10: 0.12 }); }
+  // Collects round dots (centre, diameter, alpha) and fills them in one pass per alpha level
+  _batch() {
+    const bk = [];
+    for (let i = 0; i <= 100; i++) bk.push([]);
+    const put = (x, y, d, a) => {
+      if (!(d > 0.3) || !(a > 0.005)) return;
+      let q = Math.round(a * 100);
+      if (q > 100) q = 100;
+      if (q < 1) return;
+      bk[q].push(x, y, d * 0.5);
+    };
+    put.flush = (ctx) => {
+      ctx.fillStyle = '#DDDDDD';
+      for (let q = 1; q <= 100; q++) {
+        const L = bk[q];
+        if (!L.length) continue;
+        ctx.globalAlpha = q / 100;
+        ctx.beginPath();
+        for (let i = 0; i < L.length; i += 3) { ctx.moveTo(L[i] + L[i + 2], L[i + 1]); ctx.arc(L[i], L[i + 1], L[i + 2], 0, 6.2832); }
+        ctx.fill();
+        L.length = 0;
+      }
+      ctx.globalAlpha = 1;
+    };
+    return put;
+  }
+  // The app's 5x7 matrix font (DotMatrixFont): digits and symbols share one 5-column advance, the colon is one column
+  _mxF() {
+    if (this._F) return this._F;
+    this._F = { '0': ['01110', '10001', '10011', '10101', '11001', '10001', '01110'], '1': ['00100', '01100', '00100', '00100', '00100', '00100', '01110'], '2': ['01110', '10001', '00001', '00010', '00100', '01000', '11111'], '3': ['11111', '00010', '00100', '00010', '00001', '10001', '01110'], '4': ['00010', '00110', '01010', '10010', '11111', '00010', '00010'], '5': ['11111', '10000', '11110', '00001', '00001', '10001', '01110'], '6': ['00110', '01000', '10000', '11110', '10001', '10001', '01110'], '7': ['11111', '00001', '00010', '00100', '01000', '01000', '01000'], '8': ['01110', '10001', '10001', '01110', '10001', '10001', '01110'], '9': ['01110', '10001', '10001', '01111', '00001', '00010', '01100'], ':': ['0', '0', '1', '0', '1', '0', '0'], '°': ['01110', '01010', '01110', '00000', '00000', '00000', '00000'], '−': ['00000', '00000', '00000', '11111', '00000', '00000', '00000'], '.': ['00000', '00000', '00000', '00000', '00000', '00000', '00100'], '%': ['11000', '11001', '00010', '00100', '01000', '10011', '00011'] };
+    return this._F;
+  }
+  // Draws a numeral string; (x0, y0) is the centre of the top-left cell, s the step. grid > 0 also draws unlit cells.
+  _mxDraw(put, str, x0, y0, s, lit, grid, wt) {
+    const F = this._mxF();
+    let gx = x0;
+    for (const ch of String(str)) {
+      const rows = F[ch];
+      if (!rows) continue;
+      const w = rows[0].length;
+      for (let r = 0; r < 7; r++) {
+        for (let c = 0; c < w; c++) {
+          if (rows[r].charAt(c) === '1') put(gx + c * s, y0 + r * s, s * wt, lit);
+          else if (grid > 0) put(gx + c * s, y0 + r * s, s * 0.6, grid);
+        }
+      }
+      gx += (w + 1) * s;
+    }
+  }
+  _hhmm(d) { let h = d.getHours() % 12; if (h === 0) h = 12; return String(h).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+  // Clear zones: lattice cells inside a zone stay off; within 16 px of its edge they thin out in a fixed 4x4 ordered dither
+  _zoneSet(W, H, zones) {
+    const S = 4, NI = Math.floor(W / S), NJ = Math.floor(H / S), N1 = NI + 1, n = N1 * (NJ + 1);
+    const mask = new Uint8Array(n), ramp = new Float32Array(n);
+    const BY = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+    for (let j = 0; j <= NJ; j++) {
+      for (let i = 0; i <= NI; i++) {
+        const x = i * S, y = j * S;
+        let t = 0;
+        for (const z of zones) {
+          const dx = Math.max(z[0] - x, 0, x - z[0] - z[2]), dy = Math.max(z[1] - y, 0, y - z[1] - z[3]);
+          const v = 1 - Math.sqrt(dx * dx + dy * dy) / 16;
+          if (v > t) t = v;
+        }
+        const q = j * N1 + i;
+        ramp[q] = t;
+        if (t > 0 && (BY[(j & 3) * 4 + (i & 3)] + 0.5) / 16 < t) mask[q] = 1;
+      }
+    }
+    return { mask: mask, ramp: ramp, N1: N1, NI: NI, NJ: NJ };
+  }
+  // Free dots crossing a zone drop to 10%
+  _zf(Z, x, y, a) {
+    const i = Math.round(x / 4), j = Math.round(y / 4);
+    if (i < 0 || j < 0 || i > Z.NI || j > Z.NJ) return a;
+    const t = Z.ramp[j * Z.N1 + i];
+    if (t <= 0) return a;
+    const lo = a < 0.12 ? a : 0.12;
+    return a + (lo - a) * t;
+  }
+  // Rasterises a polygon onto the fixed 4 px lattice. Rim cells: regular weight x coverage; interior: light weight.
+  _rast(put, poly, a, solid, Z, W, H) {
+    const S = 4, n = poly.length;
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    for (let k = 0; k < n; k++) { const p = poly[k]; if (p[0] < x0) x0 = p[0]; if (p[0] > x1) x1 = p[0]; if (p[1] < y0) y0 = p[1]; if (p[1] > y1) y1 = p[1]; }
+    const NI = Math.floor(W / S), NJ = Math.floor(H / S);
+    const i0 = Math.max(0, Math.ceil((x0 - 2) / S)), i1 = Math.min(NI, Math.floor((x1 + 2) / S));
+    const j0 = Math.max(0, Math.ceil((y0 - 2) / S)), j1 = Math.min(NJ, Math.floor((y1 + 2) / S));
+    for (let j = j0; j <= j1; j++) {
+      const cy = j * S;
+      for (let i = i0; i <= i1; i++) {
+        if (Z && Z.mask[j * Z.N1 + i]) continue;
+        const cx = i * S;
+        let ins = false, dm = 1e9;
+        for (let k = 0, l = n - 1; k < n; l = k++) {
+          const ax = poly[l][0], ay = poly[l][1], bx = poly[k][0], by = poly[k][1], ex = bx - ax, ey = by - ay;
+          if ((ay > cy) !== (by > cy) && cx < (ex * (cy - ay)) / ey + ax) ins = !ins;
+          const wx = cx - ax, wy = cy - ay, ee = ex * ex + ey * ey;
+          let u = ee > 0 ? (wx * ex + wy * ey) / ee : 0;
+          u = u < 0 ? 0 : u > 1 ? 1 : u;
+          const dx = wx - ex * u, dy = wy - ey * u, d2 = dx * dx + dy * dy;
+          if (d2 < dm) dm = d2;
+        }
+        const sd = ins ? -Math.sqrt(dm) : Math.sqrt(dm);
+        if (sd >= S / 2) continue;
+        if (solid || sd > -S) { const cov = 0.5 - sd / S; put(cx, cy, 0.6 * S * (cov > 1 ? 1 : cov), a); }
+        else put(cx, cy, 0.3 * S, a);
+      }
+    }
+  }
+  // The app's album-art halftone: grey, 2-98% contrast stretch, square lattice at step 4, dot = sqrt(b) x 0.85 x step,
+  // cells under 10% skipped, and any dot that would cross the 12 px rounded edge is skipped, never clipped
+  _artDots(size) {
+    this._adc = this._adc || {};
+    if (this._adc[size]) return this._adc[size];
+    const n = size, k = 64 / size, lum = new Float32Array(n * n);
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        const X = x * k, Y = y * k, d1 = Math.hypot(X - 42, Y - 22) / 18, sun = Math.max(0, 1 - d1 * d1);
+        const band = Math.max(0, Math.sin((X + Y) * 0.22)) * Math.max(0, (Y - 34) / 30);
+        lum[y * n + x] = Math.round(255 * Math.min(1, sun + band * 0.8 + 0.06)) / 255;
+      }
+    }
+    const sorted = Array.from(lum).sort((a, b) => a - b);
+    const lo = sorted[Math.floor(0.02 * (sorted.length - 1))], hi = sorted[Math.floor(0.98 * (sorted.length - 1))], span = hi - lo;
+    const cells = Math.floor(n / 4), out = [], rad = 12;
+    for (let cy = 0; cy < cells; cy++) {
+      for (let cx = 0; cx < cells; cx++) {
+        let sum = 0;
+        for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) sum += lum[(cy * 4 + y) * n + cx * 4 + x];
+        const mean = sum / 16, b = span <= 1e-6 ? (mean >= 0.5 ? 1 : 0) : Math.min(1, Math.max(0, (mean - lo) / span));
+        if (b < 0.1) continue;
+        const px = (cx + 0.5) * 4, py = (cy + 0.5) * 4, d = Math.sqrt(b) * 0.85 * 4, rd = d / 2;
+        if (px - rd < 0 || py - rd < 0 || px + rd > n || py + rd > n) continue;
+        const qx = px < rad ? rad : px > n - rad ? n - rad : px, qy = py < rad ? rad : py > n - rad ? n - rad : py;
+        if (Math.hypot(px - qx, py - qy) + rd > rad) continue;
+        out.push([px, py, d]);
+      }
+    }
+    this._adc[size] = out;
+    return out;
+  }
+  _data() {
+    if (this._d) return this._d;
+    const shore = [[45.30, -86.95], [44.85, -87.22], [44.46, -87.50], [44.09, -87.65], [43.75, -87.70], [43.55, -87.78], [43.38, -87.86], [43.20, -87.90], [43.04, -87.89], [42.93, -87.85], [42.73, -87.78], [42.58, -87.82], [42.50, -87.80], [42.36, -87.82], [42.18, -87.79], [42.06, -87.67], [41.98, -87.65], [41.90, -87.62], [41.86, -87.61], [41.80, -87.58], [41.76, -87.54], [41.71, -87.51], [41.69, -87.47], [41.66, -87.43], [41.62, -87.34], [41.61, -87.20], [41.63, -87.05], [41.68, -86.92], [41.80, -86.75], [42.00, -86.55], [42.10, -86.48], [42.40, -86.28], [42.67, -86.21], [43.00, -86.23], [43.23, -86.35], [43.42, -86.43], [43.70, -86.47], [43.95, -86.45], [44.25, -86.32], [44.62, -86.24], [44.90, -86.05], [45.10, -85.75]];
+    this._d = {
+      shore: shore,
+      lake: shore.concat([[46.20, -85.75], [46.20, -86.95]]),
+      borders: [
+        [[42.50, -87.80], [42.50, -90.64]],
+        [[41.70, -87.525], [39.00, -87.53]],
+        [[41.76, -86.82], [41.76, -84.80]],
+        [[44.00, -91.50], [43.50, -91.22], [43.10, -91.18], [42.75, -91.05], [42.51, -90.64], [42.25, -90.42], [41.95, -90.17], [41.75, -90.20], [41.55, -90.45], [41.45, -90.85], [41.15, -91.00], [40.65, -91.10], [40.38, -91.42], [39.85, -91.40]]
+      ],
+      cells: [[41.30, -88.85, 0.18, 0.8], [41.55, -88.70, 0.20, 1.0], [41.80, -88.55, 0.16, 1.1], [42.00, -88.45, 0.18, 0.95], [42.25, -88.40, 0.20, 0.85], [42.50, -88.50, 0.18, 0.7], [42.75, -88.70, 0.22, 0.55], [41.90, -89.30, 0.45, 0.35], [42.30, -89.40, 0.50, 0.30], [41.40, -89.40, 0.45, 0.30], [41.80, -91.20, 0.35, 0.6], [42.20, -91.00, 0.30, 0.5], [42.15, -87.35, 0.22, 0.18]],
+      area: {
+        lon0: -88.40, lon1: -87.10, latC: 41.90, G: 8, grat: 0.25, seed: 5,
+        cities: [['Chicago', 41.88, -87.63], ["O'Hare", 41.98, -87.90], ['Midway', 41.79, -87.75], ['Evanston', 42.05, -87.69], ['Skokie', 42.03, -87.74], ['Oak Park', 41.885, -87.79], ['Schaumburg', 42.03, -88.08], ['Oak Brook', 41.83, -87.93], ['Naperville', 41.75, -88.15], ['Aurora', 41.76, -88.32], ['Elgin', 42.04, -88.28], ['Joliet', 41.53, -88.08], ['Orland Park', 41.63, -87.85], ['Hammond', 41.58, -87.50], ['Gary', 41.60, -87.34], ['Arlington Hts', 42.09, -87.98]],
+        labels: [['LAKE MICHIGAN', 41.95, -87.36]],
+        roads: [
+          ['90', [[41.98, -87.90], [41.97, -87.80], [41.95, -87.73], [41.92, -87.69], [41.89, -87.655], [41.875, -87.643], [41.85, -87.635], [41.80, -87.63], [41.75, -87.627], [41.72, -87.625]]],
+          ['94', [[41.72, -87.625], [41.66, -87.60], [41.60, -87.56], [41.57, -87.50], [41.58, -87.35]]],
+          ['90', [[41.75, -87.627], [41.73, -87.57], [41.70, -87.53], [41.67, -87.46], [41.64, -87.40], [41.62, -87.30]]],
+          ['94', [[41.97, -87.73], [42.02, -87.75], [42.08, -87.77], [42.15, -87.80], [42.25, -87.88], [42.40, -87.94]]],
+          ['290', [[41.875, -87.643], [41.875, -87.70], [41.875, -87.77], [41.865, -87.85], [41.88, -87.92], [41.93, -87.98], [41.99, -88.02], [42.06, -88.05]]],
+          ['55', [[41.86, -87.64], [41.835, -87.69], [41.81, -87.76], [41.78, -87.86], [41.74, -87.96], [41.66, -88.08], [41.57, -88.17], [41.45, -88.27], [41.35, -88.35]]],
+          ['88', [[41.86, -87.93], [41.83, -88.02], [41.81, -88.12], [41.80, -88.22], [41.79, -88.35], [41.80, -88.50]]],
+          ['294', [[42.25, -87.84], [42.12, -87.86], [42.03, -87.87], [41.97, -87.89], [41.88, -87.91], [41.80, -87.88], [41.72, -87.80], [41.66, -87.72], [41.62, -87.62], [41.59, -87.53]]],
+          ['80', [[41.52, -88.40], [41.52, -88.15], [41.54, -87.95], [41.57, -87.75], [41.58, -87.55], [41.58, -87.30], [41.58, -87.10]]],
+          ['57', [[41.72, -87.645], [41.65, -87.70], [41.56, -87.75], [41.45, -87.80], [41.30, -87.86]]],
+          ['90', [[41.99, -87.92], [42.02, -88.00], [42.04, -88.10], [42.05, -88.22], [42.08, -88.40]]],
+          ['355', [[42.03, -88.04], [41.92, -88.04], [41.83, -88.03], [41.72, -88.04], [41.60, -88.06], [41.55, -88.06]]]
+        ]
+      }
+    };
+    return this._d;
+  }
+  _proj(v, W, H) {
+    const kx = W / (v.lon1 - v.lon0), ky = kx / Math.cos((v.latC * Math.PI) / 180);
+    return {
+      x: (lon) => (lon - v.lon0) * kx,
+      y: (lat) => H / 2 - (lat - v.latC) * ky,
+      lon: (x) => v.lon0 + x / kx,
+      lat: (y) => v.latC - (y - H / 2) / ky
+    };
+  }
+  // Mono caps label drawn char by char so the +1 px tracking never depends on canvas letterSpacing support
+  _lbl(ctx, s, x, y, col, align) {
+    ctx.font = '500 11px "JetBrains Mono", ui-monospace, monospace';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = 1; ctx.fillStyle = col;
+    const cw = ctx.measureText('0').width + 1, w = s.length * cw - 1;
+    const x0 = align === 'center' ? x - w / 2 : align === 'right' ? x - w : x;
+    for (let i = 0; i < s.length; i++) ctx.fillText(s.charAt(i), x0 + i * cw, y);
+  }
+  // The map on the 4 px lattice, cached per view: a code per cell (what to draw) and an off mask (clear zones, label boxes)
+  // codes: 1 land speckle, 2 lake, 3 graticule (light, 46%) · 4 road, 5 state line, 6 shore, 8 route box (regular, 46%) · 7 city (regular, 65%)
+  _mapBase(key, v, p, W, H, zones) {
+    this._bases = this._bases || {};
+    if (this._bases[key]) return this._bases[key];
+    const d = this._data(), S = 4, NI = Math.floor(W / S), NJ = Math.floor(H / S), N1 = NI + 1, N = N1 * (NJ + 1);
+    const Z = this._zoneSet(W, H, zones);
+    const code = new Uint8Array(N), off = new Uint8Array(N);
+    for (let q = 0; q < N; q++) off[q] = Z.mask[q];
+    const poly = d.lake.map((q) => [p.x(q[1]), p.y(q[0])]);
+    const inLake = (x, y) => {
+      let c = false;
+      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+        if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
+      }
+      return c;
+    };
+    const rnd = this._rng(v.seed);
+    for (let j = 0; j <= NJ; j++) {
+      for (let i = 0; i <= NI; i++) {
+        const q = j * N1 + i, r = rnd();
+        if (inLake(i * S, j * S)) { if ((i + j) % 2 === 0) code[q] = 2; }
+        else if (r < 0.07) code[q] = 1;
+      }
+    }
+    const mark = (x, y, c) => {
+      const i = Math.round(x / S), j = Math.round(y / S);
+      if (i < 0 || j < 0 || i > NI || j > NJ) return;
+      const q = j * N1 + i;
+      if (code[q] < c) code[q] = c;
+    };
+    const line = (pts, c, dash) => {
+      let s = 0;
+      for (let k = 0; k < pts.length - 1; k++) {
+        const x1 = p.x(pts[k][1]), y1 = p.y(pts[k][0]), x2 = p.x(pts[k + 1][1]), y2 = p.y(pts[k + 1][0]);
+        const Ln = Math.hypot(x2 - x1, y2 - y1), n = Math.max(1, Math.ceil(Ln));
+        for (let m = 0; m < n; m++) { const u = m / n; if (!dash || Math.floor((s + u * Ln) / 8) % 2 === 0) mark(x1 + (x2 - x1) * u, y1 + (y2 - y1) * u, c); }
+        s += Ln;
+      }
+    };
+    const g = v.grat;
+    for (let lat = Math.ceil(p.lat(H) / g) * g; lat <= p.lat(0); lat += g) { const j = Math.round(p.y(lat) / S); if (j >= 0 && j <= NJ) for (let i = 0; i <= NI; i += 4) { const q = j * N1 + i; if (code[q] < 3) code[q] = 3; } }
+    for (let lon = Math.ceil(p.lon(0) / g) * g; lon <= p.lon(W); lon += g) { const i = Math.round(p.x(lon) / S); if (i >= 0 && i <= NI) for (let j = 0; j <= NJ; j += 4) { const q = j * N1 + i; if (code[q] < 3) code[q] = 3; } }
+    for (const r of v.roads) line(r[1], 4, false);
+    for (const b of d.borders) line(b, 5, true);
+    line(d.shore, 6, false);
+    const rects = [], texts = [], tw = (s) => s.length * 7.6 - 1;
+    const hit = (r) => {
+      if (r[0] < 8 || r[1] < 8 || r[0] + r[2] > W - 8 || r[1] + r[3] > H - 8) return true;
+      for (const z of zones) if (r[0] < z[0] + z[2] + 8 && r[0] + r[2] > z[0] - 8 && r[1] < z[1] + z[3] + 8 && r[1] + r[3] > z[1] - 8) return true;
+      for (const q of rects) if (r[0] < q[0] + q[2] && r[0] + r[2] > q[0] && r[1] < q[1] + q[3] && r[1] + r[3] > q[1]) return true;
+      return false;
+    };
+    const clear = (r) => {
+      for (let j = Math.max(0, Math.ceil(r[1] / S)); j <= Math.min(NJ, Math.floor((r[1] + r[3]) / S)); j++) {
+        for (let i = Math.max(0, Math.ceil(r[0] / S)); i <= Math.min(NI, Math.floor((r[0] + r[2]) / S)); i++) off[j * N1 + i] = 1;
+      }
+    };
+    const city = (c, force) => {
+      const x = Math.round(p.x(c[2]) / S) * S, y = Math.round(p.y(c[1]) / S) * S, me = c[0] === 'Chicago', s = c[0].toUpperCase();
+      const r = [x + 6, y - 8, tw(s) + 4, 16];
+      if (!force && hit(r)) return;
+      if (x < 4 || y < 4 || x > W - 4 || y > H - 4) return;
+      rects.push(r); clear(r);
+      if (!me) { const q = (y / S) * N1 + x / S; code[q] = 7; off[q] = 0; }
+      texts.push([s, x + 8, y + 4, me ? '#DDDDDD' : '#A6A6A6', 'left']);
+    };
+    for (const c of v.cities) if (c[0] === 'Chicago') city(c, true);
+    for (const l of v.labels) {
+      const x = Math.round(p.x(l[2]) / S) * S, y = Math.round(p.y(l[1]) / S) * S, w = tw(l[0]);
+      const r = [x - w / 2 - 2, y - 12, w + 4, 16];
+      if (hit(r)) continue;
+      rects.push(r); clear(r);
+      texts.push([l[0], x, y, '#757575', 'center']);
+    }
+    for (const rd of v.roads) {
+      const m = rd[1][Math.floor(rd[1].length / 2)];
+      const cx = Math.round(p.x(m[1]) / S) * S, cy = Math.round(p.y(m[0]) / S) * S;
+      const hw = Math.ceil((tw(rd[0]) / 2 + 5) / S) * S, box = [cx - hw, cy - 8, hw * 2, 16];
+      if (hit(box)) continue;
+      rects.push(box);
+      const i0 = (cx - hw) / S, i1 = (cx + hw) / S, j0 = (cy - 8) / S, j1 = (cy + 8) / S;
+      for (let j = j0; j <= j1; j++) {
+        for (let i = i0; i <= i1; i++) {
+          const q = j * N1 + i;
+          if (j === j0 || j === j1 || i === i0 || i === i1) { code[q] = 8; off[q] = 0; } else off[q] = 1;
+        }
+      }
+      texts.push([rd[0], cx, cy + 4, '#A6A6A6', 'center']);
+    }
+    for (const c of v.cities) if (c[0] !== 'Chicago') city(c, false);
+    this._bases[key] = { code: code, off: off, texts: texts, Z: Z, N1: N1, NI: NI, NJ: NJ };
+    return this._bases[key];
+  }
+  // The storm through the halftone filter: contrast stretch (fixed range so frames don't pump), b < 10% skipped later
+  _storm(d, p, NI, NJ, N1, m) {
+    const n = N1 * (NJ + 1);
+    if (!this._sfBuf || this._sfBuf.length !== n) this._sfBuf = new Float32Array(n);
+    const out = this._sfBuf;
+    const cur = d.cells.map((c) => [c[0] + 0.12 * (m / 60), c[1] + 0.5 * (m / 60), 2 * c[2] * c[2], c[3]]);
+    const lon = new Float32Array(NI + 1);
+    for (let i = 0; i <= NI; i++) lon[i] = p.lon(i * 4);
+    for (let j = 0; j <= NJ; j++) {
+      const lat = p.lat(j * 4), cl = Math.cos((lat * Math.PI) / 180);
+      for (let i = 0; i <= NI; i++) {
+        let I = 0;
+        for (let k = 0; k < cur.length; k++) {
+          const c = cur[k], dy = lat - c[0], dx = (lon[i] - c[1]) * cl, q = (dx * dx + dy * dy) / c[2];
+          if (q < 6) I += c[3] * Math.exp(-q);
+        }
+        if (I > 0) I *= 0.85 + 0.15 * Math.sin(lat * 41 + lon[i] * 29 + m * 0.05);
+        const b = I / 1.15;
+        out[j * N1 + i] = b > 1 ? 1 : b;
+      }
+    }
+    return out;
+  }
+  // Draws the map cells, the storm and the label text. Storm cells win over map cells; route boxes win over the storm.
+  _drawMap(ctx, put, B, sf) {
+    const L = this._L(), S = 4;
+    const SZ = [0, 1.2, 1.2, 1.2, 2.4, 2.4, 2.4, 2.4, 2.4], AL = [0, L.L46, L.L46, L.L46, L.L46, L.L46, L.L46, L.L65, L.L46];
+    for (let j = 0; j <= B.NJ; j++) {
+      for (let i = 0; i <= B.NI; i++) {
+        const q = j * B.N1 + i;
+        if (B.off[q]) continue;
+        const c = B.code[q];
+        if (c === 8) { put(i * S, j * S, 2.4, L.L46); continue; }
+        const b = sf[q];
+        if (b >= 0.1) { put(i * S, j * S, Math.sqrt(b) * 0.85 * S, L.L100); continue; }
+        if (c) put(i * S, j * S, SZ[c], AL[c]);
+      }
+    }
+  }
+  // Mirrors WidgetArt: cells sit at origin + (col + 0.5) x step; origins are snapped to 4 dp
+  _paint(el) {
+    const sizes = { 'dh-hw-clock-c': [340, 120], 'dh-hw-clock-m': [480, 140], 'dh-hw-music': [480, 96], 'dh-hw-radar-c': [340, 260] };
+    const z = sizes[el.id];
+    if (!z) return;
+    const W = z[0], H = z[1], dpr = Math.min(3, Math.max(1, window.devicePixelRatio || 1)), t = this._hhmm(new Date());
+    const key = (el.id.indexOf('clock') >= 0 || el.id.indexOf('radar') >= 0 ? t : '') + '|' + dpr;
+    if (el._dhKey === key) return;
+    const ctx = el.getContext('2d'); if (!ctx) return;
+    el._dhKey = key;
+    el.width = Math.round(W * dpr); el.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+    const L = this._L(), put = this._batch();
+    if (el.id === 'dh-hw-clock-c') {
+      // clock half 216 dp: 16 dp pad + 25 columns at step 8; weather half 124 dp: temperature at step 4, 8 dp pad
+      this._mxDraw(put, t, 20, 24, 8, L.L100, L.L10, 0.6);
+      this._mxDraw(put, '41°', 266, 30, 4, L.L65, 0, 0.6);
+    } else if (el.id === 'dh-hw-clock-m') {
+      // clock half 316 dp: 16 dp pad + 25 columns at step 12; weather half 164 dp: temperature at step 4
+      this._mxDraw(put, t, 22, 22, 12, L.L100, L.L10, 0.6);
+      this._mxDraw(put, '41°', 406, 38, 4, L.L65, 0, 0.6);
+    } else if (el.id === 'dh-hw-music') {
+      for (const c of this._artDots(64)) put(16 + c[0], 16 + c[1], c[2], L.L100);
+      const total = 62, done = Math.round(total * 0.38);
+      for (let i = 0; i < total; i++) put(98 + i * 4, 70, 2.4, i < done ? L.L100 : L.L10);
+    } else {
+      const d = this._data(), v = d.area, p = this._proj(v, W, H);
+      const B = this._mapBase('hw', v, p, W, H, [[12, H - 44, 176, 32]]);
+      ctx.globalAlpha = 1; ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, W, H);
+      this._drawMap(ctx, put, B, this._storm(d, p, B.NI, B.NJ, B.N1, 0));
+      const lx = Math.round(p.x(-87.63) / 4) * 4, ly = Math.round(p.y(41.88) / 4) * 4;
+      put(lx, ly, 3.4, L.L100);
+      for (let i = 0; i < 16; i++) { const a = (i / 16) * 6.2832; put(lx + Math.cos(a) * 10, ly + Math.sin(a) * 10, 1.2, L.L46); }
+      this._mxDraw(put, t, 68, H - 40, 4, L.L65, 0, 0.6);
+      put.flush(ctx);
+      for (const tx of B.texts) this._lbl(ctx, tx[0], tx[1], tx[2], tx[3], tx[4]);
+      this._lbl(ctx, 'RADAR', 16, H - 24, '#A6A6A6', 'left');
+      return;
+    }
+    put.flush(ctx);
+  }
+  renderVals() {
+    if (!this._h) this._h = { setCv: (el) => { if (el) this._paint(el); } };
+    const st = this.state || {};
+    const d = new Date(st.now || Date.now());
+    return { setCv: this._h.setCv, clockLabel: this._hhmm(d), date: d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) };
+  }
+}
+</script>
+</body>
+</html>

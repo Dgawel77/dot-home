@@ -8,36 +8,31 @@
 <body>
 <x-dc>
 <helmet>
-<link href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
 <style>
 body{margin:0}
-a{color:#bdbdbd}a:hover{color:#ffffff}
-.seg{display:flex;padding:3px;border-radius:22px;background:rgba(11,11,11,0.8);box-shadow:0 0 0 1px #222222;pointer-events:auto}
-.sb{height:38px;min-width:78px;padding:0 16px;border-radius:19px;border:0;background:transparent;color:#8E8E8E;font:500 13px Inter,system-ui,sans-serif;cursor:pointer}
-.area .b1,.region .b2{background:#DDDDDD;color:#0B0B0B}
+a{color:#A6A6A6}a:hover{color:#DDDDDD}
+.lb{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;line-height:16px;letter-spacing:1px;text-transform:uppercase;color:#A6A6A6;white-space:nowrap}
+.sb{height:40px;width:80px;padding:0;border-radius:20px;border:0;background:transparent;color:#A6A6A6;font:500 13px Inter,system-ui,sans-serif;cursor:pointer}
+.sb:hover{color:#DDDDDD}
+.area .b1,.region .b2{background:#DDDDDD;color:#000000}
 </style>
 </helmet>
-<div style="width: 700px; height: 860px; box-sizing: border-box; padding: 40px 40px 0; background: #111111; display: flex; flex-direction: column; align-items: center; gap: 18px; font-family: Inter, system-ui, sans-serif; color: #ffffff">
-<div style="position: relative; width: 620px; height: 722px; flex-shrink: 0; border-radius: 36px; overflow: hidden; background: #0B0B0B; color: #DDDDDD; box-shadow: 0 0 0 1px #2c2c2c">
+<div style="width: 700px; height: 860px; box-sizing: border-box; padding: 40px 40px 0; background: #111111; display: flex; flex-direction: column; align-items: center; gap: 16px; font-family: Inter, system-ui, sans-serif; color: #DDDDDD">
+<div style="position: relative; width: 620px; height: 722px; flex-shrink: 0; border-radius: 36px; overflow: hidden; background: #000000; color: #DDDDDD; box-shadow: 0 0 0 1px #2c2c2c">
 <canvas id="dh-radar-cv" ref="{{ setCanvas }}" onPointerDown="{{ toggle }}" role="img" aria-label="Sample radar map drawn in dots around Chicago" style="position: absolute; left: 0; top: 0; width: 620px; height: 722px; display: block; cursor: pointer"></canvas>
-<div style="position: absolute; left: 0; top: 0; width: 620px; height: 120px; background: linear-gradient(180deg, rgba(11,11,11,0.92) 0%, rgba(11,11,11,0.6) 60%, rgba(11,11,11,0) 100%); pointer-events: none"></div>
-<div style="position: absolute; left: 28px; top: 30px; display: flex; flex-direction: column; gap: 4px; pointer-events: none">
-<div style="font-size: 20px; font-weight: 600">Radar</div>
-<div style="font-size: 13px; color: #8E8E8E">Chicago · sample echo, not live</div>
+<div style="position: absolute; left: 24px; top: 24px; display: flex; flex-direction: column; gap: 4px; pointer-events: none">
+<div style="font-size: 20px; line-height: 24px; font-weight: 600; color: #DDDDDD">Radar</div>
+<div style="font-size: 13px; line-height: 16px; color: #A6A6A6">Chicago · sample echo, not live</div>
 </div>
-<div class="seg {{ viewClass }}" style="position: absolute; right: 24px; top: 30px">
-<button class="sb b1" onClick="{{ showArea }}">Area</button>
-<button class="sb b2" onClick="{{ showRegion }}">Region</button>
+<div class="{{ viewClass }}" style="position: absolute; left: 432px; top: 24px; display: flex; gap: 4px">
+<button class="sb b1" aria-pressed="{{ isArea }}" onClick="{{ showArea }}">Area</button>
+<button class="sb b2" aria-pressed="{{ isRegion }}" onClick="{{ showRegion }}">Region</button>
 </div>
-<div style="position: absolute; right: 26px; top: 668px; display: flex; align-items: center; gap: 8px; font-size: 11px; color: #8E8E8E; letter-spacing: 1px; pointer-events: none">
-<div>LIGHT</div>
-<div style="width: 3px; height: 3px; border-radius: 50%; background: #DDDDDD; opacity: 0.6"></div>
-<div style="width: 5px; height: 5px; border-radius: 50%; background: #DDDDDD; opacity: 0.8"></div>
-<div style="width: 7px; height: 7px; border-radius: 50%; background: #DDDDDD"></div>
-<div>HEAVY</div>
+<div class="lb" style="position: absolute; left: 484px; top: 668px; pointer-events: none">LIGHT</div>
+<div class="lb" style="position: absolute; left: 556px; top: 668px; pointer-events: none">HEAVY</div>
 </div>
-</div>
-<div style="font-size: 12px; color: #a0a0a0; text-align: center; line-height: 1.5; max-width: 600px">Tap the map or the buttons to switch views. The storm is made up and the roads are approximate. The real screen would use NWS radar via Iowa State's Mesonet and real map data.</div>
+<div style="font-size: 13px; line-height: 20px; color: #A6A6A6; text-align: center; max-width: 600px">Tap the map or the buttons to switch views. The storm is made up and the roads are approximate. The real screen would use NWS radar via Iowa State's Mesonet and real map data.</div>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":700,"height":860}}'>
@@ -56,6 +51,119 @@ class Component extends DCLogic {
   _rng(seed) {
     let a = seed >>> 0;
     return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  _cl(v, a, b) { return v < a ? a : v > b ? b : v; }
+  // The four greys as alpha on #DDDDDD over the #000000 ground: 100% #DDDDDD, 65% #A6A6A6, 46% #757575, 10% #1A1A1A
+  _L() { return this._lv || (this._lv = { L100: 1, L65: 0.75, L46: 0.53, L10: 0.12 }); }
+  // Collects round dots (centre, diameter, alpha) and fills them in one pass per alpha level
+  _batch() {
+    const bk = [];
+    for (let i = 0; i <= 100; i++) bk.push([]);
+    const put = (x, y, d, a) => {
+      if (!(d > 0.3) || !(a > 0.005)) return;
+      let q = Math.round(a * 100);
+      if (q > 100) q = 100;
+      if (q < 1) return;
+      bk[q].push(x, y, d * 0.5);
+    };
+    put.flush = (ctx) => {
+      ctx.fillStyle = '#DDDDDD';
+      for (let q = 1; q <= 100; q++) {
+        const L = bk[q];
+        if (!L.length) continue;
+        ctx.globalAlpha = q / 100;
+        ctx.beginPath();
+        for (let i = 0; i < L.length; i += 3) { ctx.moveTo(L[i] + L[i + 2], L[i + 1]); ctx.arc(L[i], L[i + 1], L[i + 2], 0, 6.2832); }
+        ctx.fill();
+        L.length = 0;
+      }
+      ctx.globalAlpha = 1;
+    };
+    return put;
+  }
+  // The app's 5x7 matrix font (DotMatrixFont): digits and symbols share one 5-column advance, the colon is one column
+  _mxF() {
+    if (this._F) return this._F;
+    this._F = { '0': ['01110', '10001', '10011', '10101', '11001', '10001', '01110'], '1': ['00100', '01100', '00100', '00100', '00100', '00100', '01110'], '2': ['01110', '10001', '00001', '00010', '00100', '01000', '11111'], '3': ['11111', '00010', '00100', '00010', '00001', '10001', '01110'], '4': ['00010', '00110', '01010', '10010', '11111', '00010', '00010'], '5': ['11111', '10000', '11110', '00001', '00001', '10001', '01110'], '6': ['00110', '01000', '10000', '11110', '10001', '10001', '01110'], '7': ['11111', '00001', '00010', '00100', '01000', '01000', '01000'], '8': ['01110', '10001', '10001', '01110', '10001', '10001', '01110'], '9': ['01110', '10001', '10001', '01111', '00001', '00010', '01100'], ':': ['0', '0', '1', '0', '1', '0', '0'], '°': ['01110', '01010', '01110', '00000', '00000', '00000', '00000'], '−': ['00000', '00000', '00000', '11111', '00000', '00000', '00000'], '.': ['00000', '00000', '00000', '00000', '00000', '00000', '00100'], '%': ['11000', '11001', '00010', '00100', '01000', '10011', '00011'] };
+    return this._F;
+  }
+  // Draws a numeral string; (x0, y0) is the centre of the top-left cell, s the step. grid > 0 also draws unlit cells.
+  _mxDraw(put, str, x0, y0, s, lit, grid, wt) {
+    const F = this._mxF();
+    let gx = x0;
+    for (const ch of String(str)) {
+      const rows = F[ch];
+      if (!rows) continue;
+      const w = rows[0].length;
+      for (let r = 0; r < 7; r++) {
+        for (let c = 0; c < w; c++) {
+          if (rows[r].charAt(c) === '1') put(gx + c * s, y0 + r * s, s * wt, lit);
+          else if (grid > 0) put(gx + c * s, y0 + r * s, s * 0.6, grid);
+        }
+      }
+      gx += (w + 1) * s;
+    }
+  }
+  _hhmm(d) { let h = d.getHours() % 12; if (h === 0) h = 12; return String(h).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+  // Clear zones: lattice cells inside a zone stay off; within 16 px of its edge they thin out in a fixed 4x4 ordered dither
+  _zoneSet(W, H, zones) {
+    const S = 4, NI = Math.floor(W / S), NJ = Math.floor(H / S), N1 = NI + 1, n = N1 * (NJ + 1);
+    const mask = new Uint8Array(n), ramp = new Float32Array(n);
+    const BY = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+    for (let j = 0; j <= NJ; j++) {
+      for (let i = 0; i <= NI; i++) {
+        const x = i * S, y = j * S;
+        let t = 0;
+        for (const z of zones) {
+          const dx = Math.max(z[0] - x, 0, x - z[0] - z[2]), dy = Math.max(z[1] - y, 0, y - z[1] - z[3]);
+          const v = 1 - Math.sqrt(dx * dx + dy * dy) / 16;
+          if (v > t) t = v;
+        }
+        const q = j * N1 + i;
+        ramp[q] = t;
+        if (t > 0 && (BY[(j & 3) * 4 + (i & 3)] + 0.5) / 16 < t) mask[q] = 1;
+      }
+    }
+    return { mask: mask, ramp: ramp, N1: N1, NI: NI, NJ: NJ };
+  }
+  // Free dots crossing a zone drop to 10%
+  _zf(Z, x, y, a) {
+    const i = Math.round(x / 4), j = Math.round(y / 4);
+    if (i < 0 || j < 0 || i > Z.NI || j > Z.NJ) return a;
+    const t = Z.ramp[j * Z.N1 + i];
+    if (t <= 0) return a;
+    const lo = a < 0.12 ? a : 0.12;
+    return a + (lo - a) * t;
+  }
+  // Rasterises a polygon onto the fixed 4 px lattice. Rim cells: regular weight x coverage; interior: light weight.
+  _rast(put, poly, a, solid, Z, W, H) {
+    const S = 4, n = poly.length;
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    for (let k = 0; k < n; k++) { const p = poly[k]; if (p[0] < x0) x0 = p[0]; if (p[0] > x1) x1 = p[0]; if (p[1] < y0) y0 = p[1]; if (p[1] > y1) y1 = p[1]; }
+    const NI = Math.floor(W / S), NJ = Math.floor(H / S);
+    const i0 = Math.max(0, Math.ceil((x0 - 2) / S)), i1 = Math.min(NI, Math.floor((x1 + 2) / S));
+    const j0 = Math.max(0, Math.ceil((y0 - 2) / S)), j1 = Math.min(NJ, Math.floor((y1 + 2) / S));
+    for (let j = j0; j <= j1; j++) {
+      const cy = j * S;
+      for (let i = i0; i <= i1; i++) {
+        if (Z && Z.mask[j * Z.N1 + i]) continue;
+        const cx = i * S;
+        let ins = false, dm = 1e9;
+        for (let k = 0, l = n - 1; k < n; l = k++) {
+          const ax = poly[l][0], ay = poly[l][1], bx = poly[k][0], by = poly[k][1], ex = bx - ax, ey = by - ay;
+          if ((ay > cy) !== (by > cy) && cx < (ex * (cy - ay)) / ey + ax) ins = !ins;
+          const wx = cx - ax, wy = cy - ay, ee = ex * ex + ey * ey;
+          let u = ee > 0 ? (wx * ex + wy * ey) / ee : 0;
+          u = u < 0 ? 0 : u > 1 ? 1 : u;
+          const dx = wx - ex * u, dy = wy - ey * u, d2 = dx * dx + dy * dy;
+          if (d2 < dm) dm = d2;
+        }
+        const sd = ins ? -Math.sqrt(dm) : Math.sqrt(dm);
+        if (sd >= S / 2) continue;
+        if (solid || sd > -S) { const cov = 0.5 - sd / S; put(cx, cy, 0.6 * S * (cov > 1 ? 1 : cov), a); }
+        else put(cx, cy, 0.3 * S, a);
+      }
+    }
   }
   _data() {
     if (this._d) return this._d;
@@ -120,10 +228,23 @@ class Component extends DCLogic {
       lat: (y) => v.latC - (y - H / 2) / ky
     };
   }
-  _base(name, v, p, W, H) {
+  // Mono caps label drawn char by char so the +1 px tracking never depends on canvas letterSpacing support
+  _lbl(ctx, s, x, y, col, align) {
+    ctx.font = '500 11px "JetBrains Mono", ui-monospace, monospace';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = 1; ctx.fillStyle = col;
+    const cw = ctx.measureText('0').width + 1, w = s.length * cw - 1;
+    const x0 = align === 'center' ? x - w / 2 : align === 'right' ? x - w : x;
+    for (let i = 0; i < s.length; i++) ctx.fillText(s.charAt(i), x0 + i * cw, y);
+  }
+  // The map on the 4 px lattice, cached per view: a code per cell (what to draw) and an off mask (clear zones, label boxes)
+  // codes: 1 land speckle, 2 lake, 3 graticule (light, 46%) · 4 road, 5 state line, 6 shore, 8 route box (regular, 46%) · 7 city (regular, 65%)
+  _mapBase(key, v, p, W, H, zones) {
     this._bases = this._bases || {};
-    if (this._bases[name]) return this._bases[name];
-    const d = this._data();
+    if (this._bases[key]) return this._bases[key];
+    const d = this._data(), S = 4, NI = Math.floor(W / S), NJ = Math.floor(H / S), N1 = NI + 1, N = N1 * (NJ + 1);
+    const Z = this._zoneSet(W, H, zones);
+    const code = new Uint8Array(N), off = new Uint8Array(N);
+    for (let q = 0; q < N; q++) off[q] = Z.mask[q];
     const poly = d.lake.map((q) => [p.x(q[1]), p.y(q[0])]);
     const inLake = (x, y) => {
       let c = false;
@@ -133,23 +254,127 @@ class Component extends DCLogic {
       }
       return c;
     };
-    const lake = [], land = [];
-    let row = 0;
-    for (let y = 3; y < H; y += 5, row++) {
-      for (let x = 3 + (row % 2) * 2.5; x < W; x += 5) if (inLake(x, y)) lake.push([x, y]);
-    }
     const rnd = this._rng(v.seed);
-    for (let i = 0; i < 1400; i++) {
-      const x = rnd() * W, y = rnd() * H;
-      if (!inLake(x, y)) land.push([x, y, 0.05 + rnd() * 0.1]);
+    for (let j = 0; j <= NJ; j++) {
+      for (let i = 0; i <= NI; i++) {
+        const q = j * N1 + i, r = rnd();
+        if (inLake(i * S, j * S)) { if ((i + j) % 2 === 0) code[q] = 2; }
+        else if (r < 0.07) code[q] = 1;
+      }
     }
-    this._bases[name] = { lake: lake, land: land };
-    return this._bases[name];
+    const mark = (x, y, c) => {
+      const i = Math.round(x / S), j = Math.round(y / S);
+      if (i < 0 || j < 0 || i > NI || j > NJ) return;
+      const q = j * N1 + i;
+      if (code[q] < c) code[q] = c;
+    };
+    const line = (pts, c, dash) => {
+      let s = 0;
+      for (let k = 0; k < pts.length - 1; k++) {
+        const x1 = p.x(pts[k][1]), y1 = p.y(pts[k][0]), x2 = p.x(pts[k + 1][1]), y2 = p.y(pts[k + 1][0]);
+        const Ln = Math.hypot(x2 - x1, y2 - y1), n = Math.max(1, Math.ceil(Ln));
+        for (let m = 0; m < n; m++) { const u = m / n; if (!dash || Math.floor((s + u * Ln) / 8) % 2 === 0) mark(x1 + (x2 - x1) * u, y1 + (y2 - y1) * u, c); }
+        s += Ln;
+      }
+    };
+    const g = v.grat;
+    for (let lat = Math.ceil(p.lat(H) / g) * g; lat <= p.lat(0); lat += g) { const j = Math.round(p.y(lat) / S); if (j >= 0 && j <= NJ) for (let i = 0; i <= NI; i += 4) { const q = j * N1 + i; if (code[q] < 3) code[q] = 3; } }
+    for (let lon = Math.ceil(p.lon(0) / g) * g; lon <= p.lon(W); lon += g) { const i = Math.round(p.x(lon) / S); if (i >= 0 && i <= NI) for (let j = 0; j <= NJ; j += 4) { const q = j * N1 + i; if (code[q] < 3) code[q] = 3; } }
+    for (const r of v.roads) line(r[1], 4, false);
+    for (const b of d.borders) line(b, 5, true);
+    line(d.shore, 6, false);
+    const rects = [], texts = [], tw = (s) => s.length * 7.6 - 1;
+    const hit = (r) => {
+      if (r[0] < 8 || r[1] < 8 || r[0] + r[2] > W - 8 || r[1] + r[3] > H - 8) return true;
+      for (const z of zones) if (r[0] < z[0] + z[2] + 8 && r[0] + r[2] > z[0] - 8 && r[1] < z[1] + z[3] + 8 && r[1] + r[3] > z[1] - 8) return true;
+      for (const q of rects) if (r[0] < q[0] + q[2] && r[0] + r[2] > q[0] && r[1] < q[1] + q[3] && r[1] + r[3] > q[1]) return true;
+      return false;
+    };
+    const clear = (r) => {
+      for (let j = Math.max(0, Math.ceil(r[1] / S)); j <= Math.min(NJ, Math.floor((r[1] + r[3]) / S)); j++) {
+        for (let i = Math.max(0, Math.ceil(r[0] / S)); i <= Math.min(NI, Math.floor((r[0] + r[2]) / S)); i++) off[j * N1 + i] = 1;
+      }
+    };
+    const city = (c, force) => {
+      const x = Math.round(p.x(c[2]) / S) * S, y = Math.round(p.y(c[1]) / S) * S, me = c[0] === 'Chicago', s = c[0].toUpperCase();
+      const r = [x + 6, y - 8, tw(s) + 4, 16];
+      if (!force && hit(r)) return;
+      if (x < 4 || y < 4 || x > W - 4 || y > H - 4) return;
+      rects.push(r); clear(r);
+      if (!me) { const q = (y / S) * N1 + x / S; code[q] = 7; off[q] = 0; }
+      texts.push([s, x + 8, y + 4, me ? '#DDDDDD' : '#A6A6A6', 'left']);
+    };
+    for (const c of v.cities) if (c[0] === 'Chicago') city(c, true);
+    for (const l of v.labels) {
+      const x = Math.round(p.x(l[2]) / S) * S, y = Math.round(p.y(l[1]) / S) * S, w = tw(l[0]);
+      const r = [x - w / 2 - 2, y - 12, w + 4, 16];
+      if (hit(r)) continue;
+      rects.push(r); clear(r);
+      texts.push([l[0], x, y, '#757575', 'center']);
+    }
+    for (const rd of v.roads) {
+      const m = rd[1][Math.floor(rd[1].length / 2)];
+      const cx = Math.round(p.x(m[1]) / S) * S, cy = Math.round(p.y(m[0]) / S) * S;
+      const hw = Math.ceil((tw(rd[0]) / 2 + 5) / S) * S, box = [cx - hw, cy - 8, hw * 2, 16];
+      if (hit(box)) continue;
+      rects.push(box);
+      const i0 = (cx - hw) / S, i1 = (cx + hw) / S, j0 = (cy - 8) / S, j1 = (cy + 8) / S;
+      for (let j = j0; j <= j1; j++) {
+        for (let i = i0; i <= i1; i++) {
+          const q = j * N1 + i;
+          if (j === j0 || j === j1 || i === i0 || i === i1) { code[q] = 8; off[q] = 0; } else off[q] = 1;
+        }
+      }
+      texts.push([rd[0], cx, cy + 4, '#A6A6A6', 'center']);
+    }
+    for (const c of v.cities) if (c[0] !== 'Chicago') city(c, false);
+    this._bases[key] = { code: code, off: off, texts: texts, Z: Z, N1: N1, NI: NI, NJ: NJ };
+    return this._bases[key];
   }
+  // The storm through the halftone filter: contrast stretch (fixed range so frames don't pump), b < 10% skipped later
+  _storm(d, p, NI, NJ, N1, m) {
+    const n = N1 * (NJ + 1);
+    if (!this._sfBuf || this._sfBuf.length !== n) this._sfBuf = new Float32Array(n);
+    const out = this._sfBuf;
+    const cur = d.cells.map((c) => [c[0] + 0.12 * (m / 60), c[1] + 0.5 * (m / 60), 2 * c[2] * c[2], c[3]]);
+    const lon = new Float32Array(NI + 1);
+    for (let i = 0; i <= NI; i++) lon[i] = p.lon(i * 4);
+    for (let j = 0; j <= NJ; j++) {
+      const lat = p.lat(j * 4), cl = Math.cos((lat * Math.PI) / 180);
+      for (let i = 0; i <= NI; i++) {
+        let I = 0;
+        for (let k = 0; k < cur.length; k++) {
+          const c = cur[k], dy = lat - c[0], dx = (lon[i] - c[1]) * cl, q = (dx * dx + dy * dy) / c[2];
+          if (q < 6) I += c[3] * Math.exp(-q);
+        }
+        if (I > 0) I *= 0.85 + 0.15 * Math.sin(lat * 41 + lon[i] * 29 + m * 0.05);
+        const b = I / 1.15;
+        out[j * N1 + i] = b > 1 ? 1 : b;
+      }
+    }
+    return out;
+  }
+  // Draws the map cells, the storm and the label text. Storm cells win over map cells; route boxes win over the storm.
+  _drawMap(ctx, put, B, sf) {
+    const L = this._L(), S = 4;
+    const SZ = [0, 1.2, 1.2, 1.2, 2.4, 2.4, 2.4, 2.4, 2.4], AL = [0, L.L46, L.L46, L.L46, L.L46, L.L46, L.L46, L.L65, L.L46];
+    for (let j = 0; j <= B.NJ; j++) {
+      for (let i = 0; i <= B.NI; i++) {
+        const q = j * B.N1 + i;
+        if (B.off[q]) continue;
+        const c = B.code[q];
+        if (c === 8) { put(i * S, j * S, 2.4, L.L46); continue; }
+        const b = sf[q];
+        if (b >= 0.1) { put(i * S, j * S, Math.sqrt(b) * 0.85 * S, L.L100); continue; }
+        if (c) put(i * S, j * S, SZ[c], AL[c]);
+      }
+    }
+  }
+  _zonesR() { return [[24, 24, 240, 44], [432, 24, 164, 40], [24, 648, 248, 52], [480, 664, 116, 24]]; }
   _start() {
     if (this._running || !this._cv || !this._alive) return;
     const ctx = this._cv.getContext('2d'); if (!ctx) return;
-    this._running = true; this._ctx = ctx;
+    this._running = true; this._ctx = ctx; this._B = this._batch();
     const W = 620, H = 722, dpr = Math.min(2, window.devicePixelRatio || 1);
     this._dpr = dpr; this._cv.width = Math.round(W * dpr); this._cv.height = Math.round(H * dpr);
     const t0 = performance.now();
@@ -157,105 +382,38 @@ class Component extends DCLogic {
     const step = (now) => {
       if (!this._alive) { this._running = false; return; }
       frame++;
-      if (frame % 2 === 0) this._draw((now - t0) / 1000, W, H);
+      if (frame % 2 === 0) this._draw((now - t0) / 1000, W, H, frame);
       this._raf = requestAnimationFrame(step);
     };
     this._raf = requestAnimationFrame(step);
   }
-  _draw(t, W, H) {
-    const ctx = this._ctx, dpr = this._dpr, d = this._data();
+  _draw(t, W, H, frame) {
+    const ctx = this._ctx, dpr = this._dpr, d = this._data(), L = this._L(), put = this._B;
     const st = this.state || {};
     const name = st.view === 'region' ? 'region' : 'area';
-    const v = d.views[name];
-    const p = this._proj(v, W, H);
-    const base = this._base(name, v, p, W, H);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.globalAlpha = 1; ctx.fillStyle = '#0B0B0B'; ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = '#DDDDDD';
-    const dot = (x, y, r, a) => { if (a <= 0.01 || r <= 0.05) return; ctx.globalAlpha = a > 1 ? 1 : a; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill(); };
-    for (const q of base.land) dot(q[0], q[1], 0.65, q[2]);
-    for (const q of base.lake) dot(q[0], q[1], 0.75, 0.2);
-    const poly = (pts, step, r, a) => {
-      for (let i = 0; i < pts.length - 1; i++) {
-        const x1 = p.x(pts[i][1]), y1 = p.y(pts[i][0]), x2 = p.x(pts[i + 1][1]), y2 = p.y(pts[i + 1][0]);
-        const L = Math.hypot(x2 - x1, y2 - y1), n = Math.max(1, Math.round(L / step));
-        for (let j = 0; j < n; j++) { const u = j / n, xx = x1 + (x2 - x1) * u, yy = y1 + (y2 - y1) * u; if (xx > -4 && xx < W + 4 && yy > -4 && yy < H + 4) dot(xx, yy, r, a); }
-      }
-    };
-    ctx.font = '500 9px Inter, system-ui, sans-serif'; ctx.textBaseline = 'alphabetic';
-    const g = v.grat;
-    for (let lat = Math.ceil(p.lat(H) / g) * g; lat <= p.lat(0); lat += g) {
-      const y = p.y(lat);
-      for (let x = 4; x < W; x += 9) dot(x, y, 0.55, 0.1);
-    }
-    for (let lon = Math.ceil(p.lon(0) / g) * g; lon <= p.lon(W); lon += g) {
-      const x = p.x(lon);
-      for (let y = 4; y < H; y += 9) dot(x, y, 0.55, 0.1);
-    }
-    for (const b of d.borders) poly(b, 6, 0.9, 0.38);
-    for (const r of v.roads) poly(r[1], 3.4, 0.8, 0.42);
-    poly(d.shore, 3.2, 1.2, 0.85);
-    ctx.textAlign = 'center';
-    ctx.font = '600 11px Inter, system-ui, sans-serif';
-    for (const l of v.labels) {
-      const x = p.x(l[2]), y = p.y(l[1]);
-      if (y < 130 || y > H - 100) continue;
-      ctx.globalAlpha = 0.42;
-      ctx.fillText(l[0].split('').join('  '), x, y);
-    }
-    ctx.font = '600 9px Inter, system-ui, sans-serif';
-    for (const r of v.roads) {
-      const q = r[1][Math.floor(r[1].length / 2)];
-      const x = p.x(q[1]), y = p.y(q[0]);
-      if (x < 16 || x > W - 16 || y < 130 || y > H - 100) continue;
-      const tw = ctx.measureText(r[0]).width + 8;
-      ctx.globalAlpha = 0.95; ctx.fillStyle = '#0B0B0B';
-      ctx.beginPath(); ctx.rect(x - tw / 2, y - 7, tw, 13); ctx.fill();
-      ctx.globalAlpha = 0.6; ctx.strokeStyle = '#DDDDDD'; ctx.lineWidth = 0.8;
-      ctx.beginPath(); ctx.rect(x - tw / 2 + 0.5, y - 6.5, tw - 1, 12); ctx.stroke();
-      ctx.fillStyle = '#DDDDDD'; ctx.globalAlpha = 0.8; ctx.fillText(r[0], x, y + 3);
-    }
-    ctx.textAlign = 'left';
+    const v = d.views[name], p = this._proj(v, W, H), B = this._mapBase(name, v, p, W, H, this._zonesR());
     const cyc = 7.5, ph = t % cyc, k = Math.min(1, ph / 6), m = -60 + k * 60;
-    const G = v.G, vlon = 0.5, vlat = 0.12;
-    const cur = d.cells.map((c) => [c[0] + vlat * (m / 60), c[1] + vlon * (m / 60), 2 * c[2] * c[2], c[3]]);
-    ctx.fillStyle = '#DDDDDD';
-    for (let y = G / 2; y < H; y += G) {
-      const lat = p.lat(y), cl = Math.cos((lat * Math.PI) / 180);
-      for (let x = G / 2; x < W; x += G) {
-        const lon = p.lon(x);
-        let I = 0;
-        for (const c of cur) {
-          const dy = lat - c[0], dx = (lon - c[1]) * cl;
-          const q = (dx * dx + dy * dy) / c[2];
-          if (q < 6) I += c[3] * Math.exp(-q);
-        }
-        I *= 0.85 + 0.15 * Math.sin(lat * 41 + lon * 29 + m * 0.05);
-        if (I > 0.08) { const n = I > 1 ? 1 : I; dot(x, y, G * 0.46 * Math.pow(n, 0.7), 0.4 + 0.6 * n); }
-      }
-    }
-    ctx.font = '500 11px Inter, system-ui, sans-serif';
-    for (const c of v.cities) {
-      const x = p.x(c[2]), y = p.y(c[1]);
-      if (x < 8 || x > W - 8 || y < 130 || y > H - 100) continue;
-      const me = c[0] === 'Chicago';
-      ctx.fillStyle = '#DDDDDD';
-      if (!me) dot(x, y, 1.8, 0.75);
-      ctx.globalAlpha = me ? 0.95 : 0.62;
-      ctx.fillText(c[0], x + 8, y + 4);
-    }
-    const yx = p.x(-87.63), yy = p.y(41.88);
-    dot(yx, yy, 3.4, 1);
+    if (!this._sf || this._sfName !== name || frame % 4 === 0) { this._sf = this._storm(d, p, B.NI, B.NJ, B.N1, m); this._sfName = name; }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalAlpha = 1; ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, W, H);
+    this._drawMap(ctx, put, B, this._sf);
+    // you are here: a heavy lattice dot with a 2 s ping of free dots
+    const lx = Math.round(p.x(-87.63) / 4) * 4, ly = Math.round(p.y(41.88) / 4) * 4;
+    put(lx, ly, 3.4, L.L100);
     const pr = (t % 2) / 2, rad = 8 + pr * 22;
-    for (let i = 0; i < 20; i++) { const a = (i / 20) * 6.2832; dot(yx + Math.cos(a) * rad, yy + Math.sin(a) * rad, 1.3, (1 - pr) * 0.9); }
-    ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(11,11,11,0.8)'; ctx.fillRect(0, H - 92, 300, 92);
-    ctx.fillStyle = '#DDDDDD';
-    const lineY = H - 66;
-    for (let x = 28; x <= 268; x += 6) dot(x, lineY, 1, 0.35);
-    dot(28 + k * 240, lineY, 3.2, 1);
+    for (let i = 0; i < 20; i++) { const a = (i / 20) * 6.2832, x = lx + Math.cos(a) * rad, y = ly + Math.sin(a) * rad; put(x, y, 2.4, this._zf(B.Z, x, y, L.L65 * (1 - pr))); }
+    // time scrubber: one S4 dot row, elapsed L100 with a heavy head, the rest L10
+    const lit = Math.round(k * 60);
+    for (let i = 0; i <= 60; i++) put(24 + i * 4, 656, i === lit ? 3.4 : 2.4, i <= lit ? L.L100 : L.L10);
+    const mm = Math.round(-m / 5) * 5, num = '−' + mm;
+    if (mm > 0) this._mxDraw(put, num, 24, 672, 4, L.L100, 0, 0.6);
+    // legend: the halftone sizes for 25%, 50% and 100%
+    put(532, 676, 1.7, L.L100); put(540, 676, 2.4, L.L100); put(548, 676, 3.4, L.L100);
+    put.flush(ctx);
+    for (const tx of B.texts) this._lbl(ctx, tx[0], tx[1], tx[2], tx[3], tx[4]);
+    if (mm > 0) this._lbl(ctx, 'MIN', 24 + (num.length * 6 - 2) * 4 + 10, 697, '#A6A6A6', 'left');
+    else this._lbl(ctx, 'NOW', 24, 690, '#DDDDDD', 'left');
     ctx.globalAlpha = 1;
-    ctx.font = '500 24px Inter, system-ui, sans-serif';
-    ctx.fillText(m > -1 ? 'NOW' : '−' + Math.round(-m) + ' MIN', 28, H - 28);
   }
   renderVals() {
     if (!this._h) {
@@ -266,10 +424,10 @@ class Component extends DCLogic {
         toggle: () => { const st = this.state || {}; this.setState({ view: st.view === 'region' ? 'area' : 'region' }); }
       };
     }
-    const st = this.state || {};
+    const st = this.state || {}, region = st.view === 'region';
     return {
       setCanvas: this._h.setCanvas, showArea: this._h.showArea, showRegion: this._h.showRegion, toggle: this._h.toggle,
-      viewClass: st.view === 'region' ? 'region' : 'area'
+      viewClass: region ? 'region' : 'area', isArea: !region, isRegion: region
     };
   }
 }

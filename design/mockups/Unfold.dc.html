@@ -8,22 +8,22 @@
 <body>
 <x-dc>
 <helmet>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
 <style>
 body{margin:0}
-a{color:#bdbdbd}a:hover{color:#ffffff}
-.rb{height:44px;padding:0 20px;border-radius:22px;border:0;background:#ffffff;color:#000000;font:500 14px Inter,system-ui,sans-serif;cursor:pointer}
-.rb:hover{background:#d9d9d9}
+a{color:#A6A6A6}a:hover{color:#DDDDDD}
+.rb{height:44px;padding:0 20px;border-radius:22px;border:0;background:#DDDDDD;color:#000000;font:500 15px Inter,system-ui,sans-serif;cursor:pointer}
+.rb:hover{background:#A6A6A6}
 </style>
 </helmet>
-<div style="width: 700px; height: 860px; box-sizing: border-box; padding: 40px 40px 0; background: #111111; display: flex; flex-direction: column; align-items: center; gap: 18px; font-family: Inter, system-ui, sans-serif; color: #ffffff">
+<div style="width: 700px; height: 860px; box-sizing: border-box; padding: 40px 40px 0; background: #111111; display: flex; flex-direction: column; align-items: center; gap: 16px; font-family: Inter, system-ui, sans-serif; color: #DDDDDD">
 <div style="position: relative; width: 620px; height: 722px; flex-shrink: 0; border-radius: 36px; overflow: hidden; background: #000000; box-shadow: 0 0 0 1px #2c2c2c">
 <canvas id="dh-unfold-cv" ref="{{ setCanvas }}" role="img" aria-label="Dots bursting outward from a narrow column to fill the screen" style="position: absolute; left: 0; top: 0; width: 620px; height: 722px; display: block"></canvas>
-<div style="position: absolute; left: 0; top: 650px; width: 620px; display: flex; justify-content: center">
+<div style="position: absolute; left: 0; top: 652px; width: 620px; display: flex; justify-content: center">
 <button class="rb" onClick="{{ replay }}">Unfold again</button>
 </div>
 </div>
-<div style="font-size: 13px; color: #a0a0a0; text-align: center; line-height: 1.5">Unfolding: the cover screen's scene bursts out to fill the big screen<br>Slowed down here, about 0.6 s on the phone · folding plays it in reverse</div>
+<div style="font-size: 13px; line-height: 20px; color: #A6A6A6; text-align: center">Unfolding: the cover screen's scene bursts out to fill the big screen, and the rock dots land on the lattice<br>Slowed down here, about 0.6 s on the phone · folding plays it in reverse</div>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":700,"height":860}}'>
@@ -40,28 +40,138 @@ class Component extends DCLogic {
     let a = seed >>> 0;
     return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   }
+  _cl(v, a, b) { return v < a ? a : v > b ? b : v; }
+  // The four greys as alpha on #DDDDDD over the #000000 ground: 100% #DDDDDD, 65% #A6A6A6, 46% #757575, 10% #1A1A1A
+  _L() { return this._lv || (this._lv = { L100: 1, L65: 0.75, L46: 0.53, L10: 0.12 }); }
+  // Collects round dots (centre, diameter, alpha) and fills them in one pass per alpha level
+  _batch() {
+    const bk = [];
+    for (let i = 0; i <= 100; i++) bk.push([]);
+    const put = (x, y, d, a) => {
+      if (!(d > 0.3) || !(a > 0.005)) return;
+      let q = Math.round(a * 100);
+      if (q > 100) q = 100;
+      if (q < 1) return;
+      bk[q].push(x, y, d * 0.5);
+    };
+    put.flush = (ctx) => {
+      ctx.fillStyle = '#DDDDDD';
+      for (let q = 1; q <= 100; q++) {
+        const L = bk[q];
+        if (!L.length) continue;
+        ctx.globalAlpha = q / 100;
+        ctx.beginPath();
+        for (let i = 0; i < L.length; i += 3) { ctx.moveTo(L[i] + L[i + 2], L[i + 1]); ctx.arc(L[i], L[i + 1], L[i + 2], 0, 6.2832); }
+        ctx.fill();
+        L.length = 0;
+      }
+      ctx.globalAlpha = 1;
+    };
+    return put;
+  }
+  // The app's 5x7 matrix font (DotMatrixFont): digits and symbols share one 5-column advance, the colon is one column
+  _mxF() {
+    if (this._F) return this._F;
+    this._F = { '0': ['01110', '10001', '10011', '10101', '11001', '10001', '01110'], '1': ['00100', '01100', '00100', '00100', '00100', '00100', '01110'], '2': ['01110', '10001', '00001', '00010', '00100', '01000', '11111'], '3': ['11111', '00010', '00100', '00010', '00001', '10001', '01110'], '4': ['00010', '00110', '01010', '10010', '11111', '00010', '00010'], '5': ['11111', '10000', '11110', '00001', '00001', '10001', '01110'], '6': ['00110', '01000', '10000', '11110', '10001', '10001', '01110'], '7': ['11111', '00001', '00010', '00100', '01000', '01000', '01000'], '8': ['01110', '10001', '10001', '01110', '10001', '10001', '01110'], '9': ['01110', '10001', '10001', '01111', '00001', '00010', '01100'], ':': ['0', '0', '1', '0', '1', '0', '0'], '°': ['01110', '01010', '01110', '00000', '00000', '00000', '00000'], '−': ['00000', '00000', '00000', '11111', '00000', '00000', '00000'], '.': ['00000', '00000', '00000', '00000', '00000', '00000', '00100'], '%': ['11000', '11001', '00010', '00100', '01000', '10011', '00011'] };
+    return this._F;
+  }
+  // Draws a numeral string; (x0, y0) is the centre of the top-left cell, s the step. grid > 0 also draws unlit cells.
+  _mxDraw(put, str, x0, y0, s, lit, grid, wt) {
+    const F = this._mxF();
+    let gx = x0;
+    for (const ch of String(str)) {
+      const rows = F[ch];
+      if (!rows) continue;
+      const w = rows[0].length;
+      for (let r = 0; r < 7; r++) {
+        for (let c = 0; c < w; c++) {
+          if (rows[r].charAt(c) === '1') put(gx + c * s, y0 + r * s, s * wt, lit);
+          else if (grid > 0) put(gx + c * s, y0 + r * s, s * 0.6, grid);
+        }
+      }
+      gx += (w + 1) * s;
+    }
+  }
+  _hhmm(d) { let h = d.getHours() % 12; if (h === 0) h = 12; return String(h).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+  // Clear zones: lattice cells inside a zone stay off; within 16 px of its edge they thin out in a fixed 4x4 ordered dither
+  _zoneSet(W, H, zones) {
+    const S = 4, NI = Math.floor(W / S), NJ = Math.floor(H / S), N1 = NI + 1, n = N1 * (NJ + 1);
+    const mask = new Uint8Array(n), ramp = new Float32Array(n);
+    const BY = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+    for (let j = 0; j <= NJ; j++) {
+      for (let i = 0; i <= NI; i++) {
+        const x = i * S, y = j * S;
+        let t = 0;
+        for (const z of zones) {
+          const dx = Math.max(z[0] - x, 0, x - z[0] - z[2]), dy = Math.max(z[1] - y, 0, y - z[1] - z[3]);
+          const v = 1 - Math.sqrt(dx * dx + dy * dy) / 16;
+          if (v > t) t = v;
+        }
+        const q = j * N1 + i;
+        ramp[q] = t;
+        if (t > 0 && (BY[(j & 3) * 4 + (i & 3)] + 0.5) / 16 < t) mask[q] = 1;
+      }
+    }
+    return { mask: mask, ramp: ramp, N1: N1, NI: NI, NJ: NJ };
+  }
+  // Free dots crossing a zone drop to 10%
+  _zf(Z, x, y, a) {
+    const i = Math.round(x / 4), j = Math.round(y / 4);
+    if (i < 0 || j < 0 || i > Z.NI || j > Z.NJ) return a;
+    const t = Z.ramp[j * Z.N1 + i];
+    if (t <= 0) return a;
+    const lo = a < 0.12 ? a : 0.12;
+    return a + (lo - a) * t;
+  }
+  // Rasterises a polygon onto the fixed 4 px lattice. Rim cells: regular weight x coverage; interior: light weight.
+  _rast(put, poly, a, solid, Z, W, H) {
+    const S = 4, n = poly.length;
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    for (let k = 0; k < n; k++) { const p = poly[k]; if (p[0] < x0) x0 = p[0]; if (p[0] > x1) x1 = p[0]; if (p[1] < y0) y0 = p[1]; if (p[1] > y1) y1 = p[1]; }
+    const NI = Math.floor(W / S), NJ = Math.floor(H / S);
+    const i0 = Math.max(0, Math.ceil((x0 - 2) / S)), i1 = Math.min(NI, Math.floor((x1 + 2) / S));
+    const j0 = Math.max(0, Math.ceil((y0 - 2) / S)), j1 = Math.min(NJ, Math.floor((y1 + 2) / S));
+    for (let j = j0; j <= j1; j++) {
+      const cy = j * S;
+      for (let i = i0; i <= i1; i++) {
+        if (Z && Z.mask[j * Z.N1 + i]) continue;
+        const cx = i * S;
+        let ins = false, dm = 1e9;
+        for (let k = 0, l = n - 1; k < n; l = k++) {
+          const ax = poly[l][0], ay = poly[l][1], bx = poly[k][0], by = poly[k][1], ex = bx - ax, ey = by - ay;
+          if ((ay > cy) !== (by > cy) && cx < (ex * (cy - ay)) / ey + ax) ins = !ins;
+          const wx = cx - ax, wy = cy - ay, ee = ex * ex + ey * ey;
+          let u = ee > 0 ? (wx * ex + wy * ey) / ee : 0;
+          u = u < 0 ? 0 : u > 1 ? 1 : u;
+          const dx = wx - ex * u, dy = wy - ey * u, d2 = dx * dx + dy * dy;
+          if (d2 < dm) dm = d2;
+        }
+        const sd = ins ? -Math.sqrt(dm) : Math.sqrt(dm);
+        if (sd >= S / 2) continue;
+        if (solid || sd > -S) { const cov = 0.5 - sd / S; put(cx, cy, 0.6 * S * (cov > 1 ? 1 : cov), a); }
+        else put(cx, cy, 0.3 * S, a);
+      }
+    }
+  }
+  // Stars and the ship are free dots; rock dots are lattice cells, so they start on the cover's lattice (snapped) and land on the main one
   _scene() {
     if (this._pts) return this._pts;
-    const W = 620, H = 722, CX = W / 2, rnd = this._rng(3), pts = [];
-    for (let i = 0; i < 200; i++) pts.push({ x1: rnd() * W, y1: rnd() * H, a: 0.08 + rnd() * 0.3, r: 0.7, star: true });
+    const W = 620, H = 722, CX = W / 2, rnd = this._rng(3), pts = [], L = this._L();
+    for (let i = 0; i < 200; i++) pts.push({ x1: rnd() * W, y1: rnd() * H, a: L.L65, d: 1.2, star: true, free: true });
     const rocks = [[150, 250, 34], [470, 330, 30], [380, 560, 22], [120, 520, 26], [540, 160, 16], [260, 150, 14]];
     for (const rk of rocks) {
-      const nv = 10, v = [];
-      for (let i = 0; i < nv; i++) { const a = (i / nv) * 6.2832; const rr = rk[2] * (0.72 + rnd() * 0.4); v.push([Math.cos(a) * rr, Math.sin(a) * rr]); }
-      for (let i = 0; i < nv; i++) {
-        const a = v[i], b = v[(i + 1) % nv], L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.round(L / 4));
-        for (let k = 0; k < n; k++) { const t = k / n; pts.push({ x1: rk[0] + a[0] + (b[0] - a[0]) * t, y1: rk[1] + a[1] + (b[1] - a[1]) * t, a: 0.9, r: 1.2 }); }
-      }
-      const m = Math.round((rk[2] * rk[2] * 2.2) / (16 * 3.2));
-      for (let k = 0; k < m; k++) { const ang = rnd() * 6.2832, rr = Math.sqrt(rnd()) * rk[2] * 0.6; pts.push({ x1: rk[0] + Math.cos(ang) * rr, y1: rk[1] + Math.sin(ang) * rr, a: 0.25, r: 0.9 }); }
+      const nv = 10, poly = [];
+      for (let i = 0; i < nv; i++) { const a = (i / nv) * 6.2832, rr = rk[2] * (0.72 + rnd() * 0.4); poly.push([rk[0] + Math.cos(a) * rr, rk[1] + Math.sin(a) * rr]); }
+      this._rast((x, y, d, a) => pts.push({ x1: x, y1: y, a: a, d: d }), poly, L.L65, false, null, W, H);
     }
     const sv = [[15, 0], [-10, -9.5], [-5, 0], [-10, 9.5]], sx = 310, sy = 400, sa = -Math.PI / 2;
     for (let i = 0; i < 4; i++) {
-      const a = sv[i], b = sv[(i + 1) % 4], L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.round(L / 2.2));
-      for (let k = 0; k < n; k++) { const t = k / n, px = a[0] + (b[0] - a[0]) * t, py = a[1] + (b[1] - a[1]) * t; pts.push({ x1: sx + px * Math.cos(sa) - py * Math.sin(sa), y1: sy + px * Math.sin(sa) + py * Math.cos(sa), a: 1, r: 1.25 }); }
+      const a = sv[i], b = sv[(i + 1) % 4], Ln = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.round(Ln / 4));
+      for (let k = 0; k < n; k++) { const t = k / n, px = a[0] + (b[0] - a[0]) * t, py = a[1] + (b[1] - a[1]) * t; pts.push({ x1: sx + px * Math.cos(sa) - py * Math.sin(sa), y1: sy + px * Math.sin(sa) + py * Math.cos(sa), a: L.L100, d: 3.4, free: true }); }
     }
     for (const p of pts) {
-      p.x0 = CX + (p.x1 - CX) * 0.474;
+      const x0 = CX + (p.x1 - CX) * 0.474;
+      p.x0 = p.free ? x0 : Math.round(x0 / 4) * 4;
       p.y0 = p.y1;
       p.dl = (Math.abs(p.x1 - CX) / CX) * 0.22 + rnd() * 0.06;
       p.j = (rnd() - 0.5) * 16;
@@ -76,6 +186,7 @@ class Component extends DCLogic {
     this._running = true; this._ctx = ctx;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     this._dpr = dpr; this._cv.width = Math.round(620 * dpr); this._cv.height = Math.round(722 * dpr);
+    this._B = this._batch();
     this._t0 = performance.now();
     const step = (now) => {
       if (!this._alive) { this._running = false; return; }
@@ -85,28 +196,28 @@ class Component extends DCLogic {
     this._raf = requestAnimationFrame(step);
   }
   _draw(t) {
-    const ctx = this._ctx, dpr = this._dpr, W = 620, H = 722, CX = W / 2, pts = this._scene();
+    const ctx = this._ctx, dpr = this._dpr, W = 620, H = 722, CX = W / 2, pts = this._scene(), L = this._L(), put = this._B;
     const u = t % 4.8;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.globalAlpha = 1; ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = '#ffffff';
-    const dot = (x, y, r, a) => { if (a <= 0.01) return; ctx.globalAlpha = a > 1 ? 1 : a; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill(); };
     const c1 = 1.70158, c3 = c1 + 1;
     const back = (x) => 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
-    const edgeA = u < 0.5 ? 0.35 : Math.max(0, 0.35 - (u - 0.5) * 1.2);
-    if (edgeA > 0) { for (let y = 6; y < H; y += 8) { dot(CX - 147, y, 0.7, edgeA); dot(CX + 147, y, 0.7, edgeA); } }
+    const ea = u < 0.5 ? 1 : Math.max(0, 1 - (u - 0.5) / 0.3);
+    if (ea > 0) { for (let y = 4; y < H; y += 4) { put(CX - 146, y, 2.4, L.L46 * ea); put(CX + 146, y, 2.4, L.L46 * ea); } }
+    const br = (t * 6.2832) / 4;
     for (const p of pts) {
       const l = Math.max(0, Math.min(1, (u - 0.5 - p.dl) / 0.85));
       const e = back(l);
       const x = p.x0 + (p.x1 - p.x0) * e;
       const y = p.y0 + (p.y1 - p.y0) * e + Math.sin(Math.PI * l) * p.j;
-      const tw = p.star ? 0.7 + 0.3 * Math.sin(t * 1.5 + p.tw) : 1;
-      dot(x, y, p.r, p.a * tw);
+      const tw = p.star ? 0.55 + 0.45 * Math.sin(br + p.tw) : 1;
+      put(x, y, p.d, p.a * tw);
     }
     if (u > 0.5 && u < 1.3) {
       const k = (u - 0.5) / 0.8, rad = 10 + k * 260, n = 64;
-      for (let i = 0; i < n; i++) { const a = (i / n) * 6.2832; dot(CX + Math.cos(a) * rad, H / 2 + Math.sin(a) * rad * 0.9, 1.1, (1 - k) * 0.8); }
+      for (let i = 0; i < n; i++) { const a = (i / n) * 6.2832; put(CX + Math.cos(a) * rad, H / 2 + Math.sin(a) * rad * 0.9, 2.4, (1 - k) * L.L65); }
     }
+    put.flush(ctx);
   }
   renderVals() {
     if (!this._h) {
