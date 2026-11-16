@@ -81,11 +81,27 @@ final class RadarView extends View {
         rebuild();
     }
 
+    /** Cancels any in-flight build and tile download (also on detach); the view is reusable via setPlace. */
+    void release() {
+        running = false;
+        gen++;
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        rebuild(); // no-op until sized; recovers a view that was detached (and cancelled) mid-load
+    }
+
     @Override
     protected void onDetachedFromWindow() {
-        gen++; // abandons any in-flight build
+        release();
         super.onDetachedFromWindow();
     }
+
+    double lat() { return lat; }
+
+    double lon() { return lon; }
 
     private void rebuild() {
         final int w = getWidth(), h = getHeight();
@@ -118,7 +134,7 @@ final class RadarView extends View {
             });
 
             float gp = (reg ? 7f : 8f) * u;
-            List<RadarTiles.Frame> frames = RadarTiles.load(p, reg ? 6 : 9);
+            List<RadarTiles.Frame> frames = RadarTiles.load(p, reg ? 6 : 9, () -> g != gen);
             if (g != gen) return;
             int c = (int) Math.ceil(w / gp), r = (int) Math.ceil(h / gp);
             double[] lons = new double[c], lats = new double[r];

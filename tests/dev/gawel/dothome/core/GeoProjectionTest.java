@@ -7,8 +7,8 @@ public final class GeoProjectionTest {
 
     public static void testProjectionRoundTrip() {
         GeoProjection p = GeoProjection.area(41.88, -87.63, 620f, 722f);
-        T.near(-87.63, p.lon(p.x(-87.63)), 1e-4, "lon");
-        T.near(41.88, p.lat(p.y(41.88)), 1e-4, "lat");
+        T.near(-87.63, p.lon(p.x(-87.63)), 1e-6, "lon");
+        T.near(41.88, p.lat(p.y(41.88)), 1e-6, "lat");
     }
 
     public static void testAreaViewPutsChicagoRightOfCentre() {

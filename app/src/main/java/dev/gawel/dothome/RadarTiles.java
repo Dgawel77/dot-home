@@ -12,10 +12,15 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BooleanSupplier;
 
 import dev.gawel.dothome.core.GeoProjection;
 import dev.gawel.dothome.core.TileMath;
@@ -86,6 +91,14 @@ final class RadarTiles {
      * network is unreachable so the caller can show "Radar unavailable".
      */
     static List<Frame> load(GeoProjection p, int zoom) {
+        return load(p, zoom, () -> false);
+    }
+
+    /**
+     * As {@link #load(GeoProjection, int)}, but abandons the work (disconnecting in-flight requests and returning
+     * an empty list) as soon as cancelled.getAsBoolean() is true.
+     */
+    static List<Frame> load(GeoProjection p, int zoom, BooleanSupplier cancelled) {
         int n = 1 << zoom;
         double[] lons = {p.lon(0), p.lon(p.w)}, lats = {p.lat(0), p.lat(p.h)};
         int x0 = clamp(TileMath.tileX(lons[0], zoom), n), x1 = clamp(TileMath.tileX(lons[1], zoom), n);
@@ -95,7 +108,8 @@ final class RadarTiles {
         int k = 0;
         for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++) { tx[k] = x; ty[k] = y; k++; }
 
-        final boolean[] down = {false};
+        final AtomicBoolean down = new AtomicBoolean();
+        final Set<HttpURLConnection> active = ConcurrentHashMap.newKeySet();
         ExecutorService pool = Executors.newFixedThreadPool(6);
         try {
             List<Future<Bitmap[]>> futures = new ArrayList<>();
@@ -105,22 +119,35 @@ final class RadarTiles {
                 minutes[f] = minutesAgo;
                 futures.add(pool.submit((Callable<Bitmap[]>) () -> {
                     Bitmap[] out = new Bitmap[tx.length];
-                    for (int i = 0; i < tx.length; i++) out[i] = tile(layer(minutesAgo), zoom, tx[i], ty[i], down);
+                    for (int i = 0; i < tx.length; i++) out[i] = tile(layer(minutesAgo), zoom, tx[i], ty[i], down, active, cancelled);
                     return out;
                 }));
             }
             List<Frame> frames = new ArrayList<>();
             for (int f = 0; f < FRAMES; f++) {
                 try {
-                    frames.add(new Frame(minutes[f], zoom, futures.get(f).get(), tx, ty));
+                    Bitmap[] tiles = null;
+                    while (tiles == null) {
+                        if (cancelled.getAsBoolean()) return new ArrayList<>();
+                        try {
+                            tiles = futures.get(f).get(100, TimeUnit.MILLISECONDS);
+                        } catch (java.util.concurrent.TimeoutException wait) {
+                            // keep polling so a cancel is noticed within 100 ms
+                        }
+                    }
+                    frames.add(new Frame(minutes[f], zoom, tiles, tx, ty));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return new ArrayList<>();
                 } catch (Exception e) {
                     Log.w(TAG, "radar frame failed: " + e);
                 }
             }
-            if (down[0] && !anyTile(frames)) return new ArrayList<>();
+            if (down.get() && !anyTile(frames)) return new ArrayList<>();
             return frames;
         } finally {
             pool.shutdownNow();
+            for (HttpURLConnection c : active) c.disconnect(); // unblocks reads still in flight after a cancel
         }
     }
 
@@ -131,17 +158,19 @@ final class RadarTiles {
 
     private static int clamp(int v, int n) { return Math.max(0, Math.min(n - 1, v)); }
 
-    private static Bitmap tile(String layer, int z, int x, int y, boolean[] down) {
+    private static Bitmap tile(String layer, int z, int x, int y, AtomicBoolean down, Set<HttpURLConnection> active,
+                               BooleanSupplier cancelled) {
         String key = layer + "/" + z + "/" + x + "/" + y;
         long now = System.currentTimeMillis();
         synchronized (CACHE) {
             Cached e = CACHE.get(key);
             if (e != null && now - e.at < TTL_MS) return e.bmp;
         }
-        if (down[0]) return null;
+        if (down.get() || cancelled.getAsBoolean()) return null;
         HttpURLConnection c = null;
         try {
             c = (HttpURLConnection) new URL(url(layer, z, x, y)).openConnection();
+            active.add(c);
             c.setConnectTimeout(10_000);
             c.setReadTimeout(10_000);
             c.setRequestProperty("User-Agent", "DotHome/0.1 (personal Android app)");
@@ -152,19 +181,23 @@ final class RadarTiles {
                     bmp = BitmapFactory.decodeStream(in);
                 }
             } else if (code != 404) {
-                return null; // server trouble: draw without this tile, retry next time
+                down.set(true); // server trouble: stop hammering it; an all-failed load reports unavailable
+                return null;
             }
             synchronized (CACHE) { CACHE.put(key, new Cached(bmp, now)); }
             return bmp;
         } catch (IOException e) {
-            down[0] = true;
+            down.set(true);
             Log.w(TAG, "radar tile failed: " + e);
             return null;
         } catch (RuntimeException | OutOfMemoryError e) {
             Log.w(TAG, "radar tile decode failed: " + e);
             return null;
         } finally {
-            if (c != null) c.disconnect();
+            if (c != null) {
+                active.remove(c);
+                c.disconnect();
+            }
         }
     }
 }
