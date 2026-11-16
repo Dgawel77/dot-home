@@ -52,7 +52,8 @@ final class DotRenderer {
 
     DotRenderer(Context context) {
         density = context.getResources().getDisplayMetrics().density;
-        textPaint.setTypeface(Fonts.doto(context));
+        softDot.prewarm(DotScale.radiusPx(density));
+        textPaint.setTypeface(Fonts.inter(context));
         textPaint.setColor(DotStyle.FG2);
         textPaint.setTextAlign(Paint.Align.RIGHT);
     }

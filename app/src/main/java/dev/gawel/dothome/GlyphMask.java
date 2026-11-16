@@ -20,10 +20,11 @@ final class GlyphMask {
         this.h = h;
     }
 
-    /** Text size whose cap height is capPx, shrunk so the string is at most maxWidthPx wide. */
+    /** Text size whose cap height is capPx, shrunk so the (tabular-figure) template is at most maxWidthPx wide. */
     static float fitSize(String text, Typeface face, float capPx, float maxWidthPx) {
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         p.setTypeface(face);
+        p.setFontFeatureSettings("'tnum'");
         float size = Math.max(1f, capPx / CAP_RATIO);
         p.setTextSize(size);
         float width = p.measureText(text);
@@ -35,6 +36,7 @@ final class GlyphMask {
     static GlyphMask render(String text, Typeface face, float textSize) {
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         p.setTypeface(face);
+        p.setFontFeatureSettings("'tnum'");
         p.setTextSize(textSize);
         Rect b = new Rect();
         p.getTextBounds(text, 0, text.length(), b);

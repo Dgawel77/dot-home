@@ -57,8 +57,9 @@ final class WidgetArt {
 
         float padL = pad;
         float cap = Math.min(CLOCK_CAP_DP * dens, hPx - 2f * pad - gap - dateH);
+        // sized against a worst-case template, so the cap height does not change from minute to minute
         GlyphMask m = GlyphMask.render(time, Fonts.interBold(ctx),
-            GlyphMask.fitSize(time, Fonts.interBold(ctx), cap, wPx - padL - pad));
+            GlyphMask.fitSize("00:00", Fonts.interBold(ctx), cap, wPx - padL - pad));
         float pitch = DotScale.pitchPx(dens);
         DotFill.Dots dots = DotFill.sample(m.alpha, m.w, m.h, pitch, DotFill.DEFAULT_THRESHOLD);
         float gridH = (float) Math.ceil(m.h / pitch) * pitch;
@@ -111,7 +112,7 @@ final class WidgetArt {
         float iconW = w == null ? 0f : 40f * k;
         float cap = Math.min(WEATHER_CAP_DP * dens, hPx * 0.4f);
         GlyphMask m = GlyphMask.render(temp, Fonts.interBold(ctx),
-            GlyphMask.fitSize(temp, Fonts.interBold(ctx), cap, maxW - iconW));
+            GlyphMask.fitSize("100°", Fonts.interBold(ctx), cap, maxW - iconW));
         DotFill.Dots dots = DotFill.sample(m.alpha, m.w, m.h, pitch, DotFill.DEFAULT_THRESHOLD);
         int cols = Math.max(1, (int) Math.ceil(m.w / pitch - 1e-4));
         float tempH = (float) Math.ceil(m.h / pitch) * pitch, gap = 7f * k;
@@ -161,7 +162,7 @@ final class WidgetArt {
 
         // art square: dark, halftone dots on the shared pitch grid (staggered rows), larger toward a "sun" and a lower band
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        p.setColor(0xFF0A0A0A);
+        p.setColor(DotStyle.BG);
         c.drawRect(artX, artY, artX + artS, artY + artS, p);
         SoftDot dot = new SoftDot(DotStyle.FG);
         float pitch = DotScale.pitchPx(dens), rMax = DotScale.radiusPx(dens);
@@ -173,7 +174,7 @@ final class WidgetArt {
                 double band = Math.max(0, Math.sin((nx + ny) * 0.22)) * Math.max(0, (ny - 34) / 30);
                 double b = Math.min(1, sun + band * 0.8 + 0.06);
                 float r = (float) (rMax * Math.sqrt(b));
-                if (r < 0.25f * rMax) continue;
+                if (r < 0.13f * rMax) continue;
                 dot.draw(c, artX + x, artY + y, r, 1f);
             }
         }
