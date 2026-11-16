@@ -12,6 +12,7 @@ import java.util.Map;
 final class Fonts {
     static final String DOTO = "fonts/Doto-Regular.ttf";
     static final String INTER = "fonts/Inter-Regular.ttf";
+    static final String INTER_MEDIUM = "fonts/Inter-Medium.ttf";
 
     private static final Map<String, Typeface> CACHE = new HashMap<>();
 
@@ -20,6 +21,8 @@ final class Fonts {
     static Typeface doto(Context c) { return load(c.getAssets(), DOTO, 400); }
 
     static Typeface inter(Context c) { return load(c.getAssets(), INTER, 400); }
+
+    static Typeface interMedium(Context c) { return load(c.getAssets(), INTER_MEDIUM, 500); }
 
     static synchronized Typeface load(AssetManager assets, String path, int weight) {
         String key = path + "@" + weight;

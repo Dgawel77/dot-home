@@ -103,7 +103,12 @@ public class SetupActivity extends Activity {
     private boolean notificationAccessEnabled() {
         try {
             String s = Settings.Secure.getString(getContentResolver(), "enabled_notification_listeners");
-            return s != null && s.contains(getPackageName() + "/");
+            if (s == null) return false;
+            ComponentName me = new ComponentName(this, MediaWatcher.class);
+            for (String part : s.split(":")) {
+                if (me.equals(ComponentName.unflattenFromString(part))) return true;
+            }
+            return false;
         } catch (RuntimeException e) {
             return false;
         }

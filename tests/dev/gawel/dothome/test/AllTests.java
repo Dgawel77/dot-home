@@ -11,6 +11,7 @@ public final class AllTests {
     static final Class<?>[] SUITES = {
         DotMatrixFontTest.class,
         MiniJsonTest.class,
+        NowPlayingTest.class,
         RngTest.class,
         ScoreBookTest.class,
         TextFitTest.class,

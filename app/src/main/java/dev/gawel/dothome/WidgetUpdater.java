@@ -11,6 +11,7 @@ import android.provider.AlarmClock;
 import android.util.Log;
 import android.widget.RemoteViews;
 
+import dev.gawel.dothome.core.NowPlaying;
 import dev.gawel.dothome.core.Weather;
 
 /** Pushes fresh data to the home-screen widgets. */
@@ -70,6 +71,39 @@ final class WidgetUpdater {
         rv.setOnClickPendingIntent(R.id.weather_img,
             PendingIntent.getActivity(ctx, 2, new Intent(ctx, WEATHER_TARGET).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), flags()));
         return rv;
+    }
+
+    private static final int MUSIC_DEFAULT_W_DP = 330, MUSIC_DEFAULT_H_DP = 76;
+
+    /** The music widget's views: hidden when np is null, otherwise art/text bitmap plus transport buttons. */
+    static RemoteViews musicViews(Context ctx, AppWidgetManager mgr, int id, NowPlaying np) {
+        RemoteViews rv = new RemoteViews(ctx.getPackageName(), R.layout.widget_music);
+        if (np == null) {
+            rv.setViewVisibility(R.id.music_root, android.view.View.GONE);
+            return rv;
+        }
+        float density = ctx.getResources().getDisplayMetrics().density;
+        Bundle o = mgr.getAppWidgetOptions(id);
+        int wDp = o == null ? 0 : o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0);
+        int hDp = o == null ? 0 : o.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0);
+        if (wDp <= 0) wDp = MUSIC_DEFAULT_W_DP;
+        if (hDp <= 0) hDp = MUSIC_DEFAULT_H_DP;
+        float wPx = wDp * density, hPx = hDp * density;
+        float shrink = Math.min(1f, MAX_SIDE_PX / Math.max(wPx, hPx));
+        int w = Math.max(1, Math.round(wPx * shrink)), h = Math.max(1, Math.round(hPx * shrink));
+        Bitmap art = safe(h, w, () -> WidgetArt.music(ctx, w, h, np));
+        rv.setViewVisibility(R.id.music_root, android.view.View.VISIBLE);
+        rv.setImageViewBitmap(R.id.music_img, art);
+        rv.setImageViewResource(R.id.music_play, np.playing ? R.drawable.ic_pause : R.drawable.ic_play);
+        rv.setOnClickPendingIntent(R.id.music_prev, commandIntent(ctx, 10, MediaCommandReceiver.PREV));
+        rv.setOnClickPendingIntent(R.id.music_play, commandIntent(ctx, 11, MediaCommandReceiver.PLAY_PAUSE));
+        rv.setOnClickPendingIntent(R.id.music_next, commandIntent(ctx, 12, MediaCommandReceiver.NEXT));
+        return rv;
+    }
+
+    private static PendingIntent commandIntent(Context ctx, int code, String action) {
+        Intent i = new Intent(action).setClass(ctx, MediaCommandReceiver.class);
+        return PendingIntent.getBroadcast(ctx, code, i, flags());
     }
 
     private interface Art { Bitmap draw(); }

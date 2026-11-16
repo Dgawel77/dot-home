@@ -5,4 +5,8 @@
     <string name="nws_contact">contact-pending</string>
     <string name="widget_clock_desc">Dot-matrix clock and weather</string>
     <string name="widget_weather_desc">Weather</string>
+    <string name="widget_music_desc">Now playing</string>
+    <string name="music_prev">Previous</string>
+    <string name="music_play_pause">Play or pause</string>
+    <string name="music_next">Next</string>
 </resources>

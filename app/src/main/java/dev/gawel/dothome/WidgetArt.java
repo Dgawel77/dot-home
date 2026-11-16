@@ -13,6 +13,7 @@ import java.util.Date;
 import java.util.Locale;
 
 import dev.gawel.dothome.core.DotMatrixFont;
+import dev.gawel.dothome.core.NowPlaying;
 import dev.gawel.dothome.core.TextFit;
 import dev.gawel.dothome.core.Weather;
 import dev.gawel.dothome.core.WeatherCodes;
@@ -131,6 +132,70 @@ final class WidgetArt {
             line.setTextSize(13f * k);
             line.setColor(Color.WHITE);
             c.drawText(TextFit.fit(alert, maxW, line::measureText), right, y + 13f * k * 0.8f, line);
+        }
+        return bmp;
+    }
+
+    /**
+     * The music widget body: 64k dotted art square, title (Inter Medium 15k), artist (13k) and a 2k progress
+     * hairline. k is the display density (capped so the art fits the height). The right 132 dp is left clear
+     * for the three transport buttons.
+     */
+    static Bitmap music(Context ctx, int wPx, int hPx, NowPlaying np) {
+        Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(bmp);
+        float density = ctx.getResources().getDisplayMetrics().density;
+        float k = Math.max(0.1f, Math.min(density, hPx / 72f));
+        float artS = 64f * k, artY = (hPx - artS) / 2f, artX = 4f * k;
+
+        // art square: black, dots on a staggered 4k grid brightest toward a "sun" and a lower band
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        p.setColor(0xFF0A0A0A);
+        c.drawRect(artX, artY, artX + artS, artY + artS, p);
+        p.setColor(Color.WHITE);
+        int row = 0;
+        for (float y = 2f; y < 64f; y += 4f, row++) {
+            for (float x = 2f + (row % 2) * 2f; x < 64f; x += 4f) {
+                double d1 = Math.hypot(x - 42, y - 22) / 18, sun = Math.max(0, 1 - d1 * d1);
+                double band = Math.max(0, Math.sin((x + y) * 0.22)) * Math.max(0, (y - 34) / 30);
+                double b = Math.min(1, sun + band * 0.8 + 0.06);
+                float r = (float) (1.9 * Math.sqrt(b));
+                if (r < 0.25f) continue;
+                c.drawCircle(artX + x * k, artY + y * k, r * k, p);
+            }
+        }
+        p.setStyle(Paint.Style.STROKE);
+        p.setStrokeWidth(Math.max(1f, k));
+        p.setColor(0xFF262626);
+        c.drawRect(artX + p.getStrokeWidth() / 2f, artY + p.getStrokeWidth() / 2f,
+            artX + artS - p.getStrokeWidth() / 2f, artY + artS - p.getStrokeWidth() / 2f, p);
+
+        if (np == null) return bmp;
+        float textX = artX + artS + 14f * k;
+        float maxW = Math.max(1f, wPx - 132f * density - textX - 4f * k);
+        Paint title = new Paint(Paint.ANTI_ALIAS_FLAG);
+        title.setTypeface(Fonts.interMedium(ctx));
+        title.setTextSize(15f * k);
+        title.setColor(Color.WHITE);
+        Paint artist = new Paint(Paint.ANTI_ALIAS_FLAG);
+        artist.setTypeface(Fonts.inter(ctx));
+        artist.setTextSize(13f * k);
+        artist.setColor(0xFF9C9C9C);
+
+        float blockH = 15f * k + 3f * k + 13f * k + 9f * k + 2f * k;
+        float y = (hPx - blockH) / 2f;
+        c.drawText(TextFit.fit(np.title, maxW, title::measureText), textX, y + 15f * k * 0.8f, title);
+        y += 15f * k + 3f * k;
+        c.drawText(TextFit.fit(np.artist, maxW, artist::measureText), textX, y + 13f * k * 0.8f, artist);
+        y += 13f * k + 9f * k;
+
+        Paint bar = new Paint();
+        bar.setColor(0xFF2A2A2A);
+        c.drawRect(textX, y, textX + maxW, y + 2f * k, bar);
+        if (np.durationMs > 0) {
+            float frac = Math.max(0f, Math.min(1f, np.positionMs / (float) np.durationMs));
+            bar.setColor(Color.WHITE);
+            c.drawRect(textX, y, textX + maxW * frac, y + 2f * k, bar);
         }
         return bmp;
     }
