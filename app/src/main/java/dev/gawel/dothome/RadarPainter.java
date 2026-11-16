@@ -8,7 +8,6 @@ import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Random;
 
 import dev.gawel.dothome.core.BoxSet;
 import dev.gawel.dothome.core.ClearZones;
@@ -22,7 +21,7 @@ import dev.gawel.dothome.core.Lattice;
 import dev.gawel.dothome.core.RadarScale;
 
 /**
- * Draws the dotted radar map on the 4 dp lattice anchored at the canvas origin: land speckle and lake texture at
+ * Draws the dotted radar map on the 4 dp lattice anchored at the canvas origin: lake texture at
  * light weight, borders, roads and shore as dot rows at regular weight, mono caps
  * labels, and the echo storm as a {@link Halftone} of the intensity grid. Shared by the full-screen
  * {@link RadarView} and the radar widget. Not thread-safe (it owns Paints and a bitset): one per thread.
@@ -227,15 +226,8 @@ final class RadarPainter {
             }
             bb[k] = new float[] {minx, miny, maxx, maxy};
         }
-        // land speckle first, one light dot per about 20 lattice cells, never on a lake
-        dot.setColor(DotStyle.L46);
-        Random rnd = new Random(region ? 9 : 5);
-        int speckles = (int) Math.min(6000, cols * (long) rows / 20);
-        for (int i = 0; i < speckles; i++) {
-            float x = (rnd.nextInt(cols) + 0.5f) * step, y = (rnd.nextInt(rows) + 0.5f) * step;
-            if (keep(x, y, rLight) && !inLake(px, py, bb, x, y)) c.drawCircle(x, y, rLight, dot);
-        }
         // lake texture: light dots on alternate lattice cells
+        dot.setColor(DotStyle.L46);
         for (int j = 0; j < rows; j++) {
             float y = (j + 0.5f) * step;
             for (int i = j & 1; i < cols; i += 2) {

@@ -67,7 +67,7 @@ public class RadarActivity extends Activity {
         });
 
         radar = new RadarView(this);
-        radar.setContentDescription("Weather radar map drawn in dots. Tap to switch between Local and Region.");
+        radar.setContentDescription("Weather radar map drawn in dots. Tap the map to switch between Local and Region. Play button and scrubber step through the last hour.");
         radar.setOnClickListener(v -> setRegion(!radar.isRegion()));
         root.addView(radar, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT));
