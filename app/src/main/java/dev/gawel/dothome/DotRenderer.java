@@ -67,8 +67,8 @@ final class DotRenderer {
 
     /** Target parallax tilt in [-1, 1]; the drawn offset eases toward it. */
     void setParallax(float tx, float ty) {
-        parTx = tx;
-        parTy = ty;
+        parTx = clamp(tx == tx ? tx : 0f, -1f, 1f);
+        parTy = clamp(ty == ty ? ty : 0f, -1f, 1f);
     }
 
     /** Per-frame bookkeeping that is not part of the simulation (the ship's exhaust trail). Call after step(). */
@@ -241,7 +241,9 @@ final class DotRenderer {
                 int n = Math.max(12, Math.round(TAU * rad / (6f * k)));
                 for (int j = 0; j < n; j++) {
                     float ang = j * TAU / n;
-                    dot(c, sw.x + (float) Math.cos(ang) * rad, sw.y + (float) Math.sin(ang) * rad, ds * 1.2f, al);
+                    float wx = sw.x + (float) Math.cos(ang) * rad, wy = sw.y + (float) Math.sin(ang) * rad;
+                    if (wx < -ds * 2 || wy < -ds * 2 || wx > w.width() + ds * 2 || wy > w.height() + ds * 2) continue;
+                    dot(c, wx, wy, ds * 1.2f, al);
                 }
             }
         }

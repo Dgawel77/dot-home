@@ -8,6 +8,7 @@ import android.hardware.SensorManager;
 import android.view.Display;
 import android.view.WindowManager;
 
+import dev.gawel.dothome.core.ShakeDetector;
 import dev.gawel.dothome.core.TiltInput;
 
 /**
@@ -19,8 +20,6 @@ final class SensorTilt implements SensorEventListener {
 
     private static final float ALPHA = 0.15f;
     private static final float G_ALPHA = 0.9f; // gravity low-pass when deriving linear acceleration
-    private static final float SHAKE_PEAK = 14f;
-    private static final long SHAKE_WINDOW_NS = 600_000_000L, SHAKE_QUIET_NS = 1_500_000_000L;
 
     private final Context context;
     private final TiltInput input;
@@ -28,8 +27,7 @@ final class SensorTilt implements SensorEventListener {
     private SensorManager manager;
     private boolean running, needCalibrate, needFilterSeed, useAccel, haveLinear;
     private float gx, gy, gz;
-    private boolean gSeeded, peakAbove;
-    private long firstPeakNs, quietUntilNs;
+    private boolean gSeeded;
     private int rotation;
     private float fx, fy;
 
@@ -64,11 +62,9 @@ final class SensorTilt implements SensorEventListener {
         needFilterSeed = true;
         running = manager.registerListener(this, s, SensorManager.SENSOR_DELAY_GAME);
         Sensor lin = manager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION);
-        haveLinear = lin != null && manager.registerListener(this, lin, SensorManager.SENSOR_DELAY_GAME);
+        haveLinear = running && lin != null && manager.registerListener(this, lin, SensorManager.SENSOR_DELAY_GAME);
         gSeeded = false;
-        peakAbove = false;
-        firstPeakNs = 0;
-        quietUntilNs = 0;
+        shake.reset();
     }
 
     /** Fully unregisters; safe to call repeatedly. */
@@ -121,24 +117,10 @@ final class SensorTilt implements SensorEventListener {
     }
 
     private final float[] lx = new float[3];
+    private final ShakeDetector shake = new ShakeDetector();
 
-    /** Two separate peaks above SHAKE_PEAK within 600 ms fire onShake, then a 1.5 s quiet period. */
     private void detectShake(float[] v, long ns) {
-        if (v.length < 3 || ns < quietUntilNs) return;
-        float m = (float) Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
-        if (m <= SHAKE_PEAK) {
-            peakAbove = false;
-            return;
-        }
-        if (peakAbove) return; // still inside the same peak
-        peakAbove = true;
-        if (firstPeakNs != 0 && ns - firstPeakNs <= SHAKE_WINDOW_NS) {
-            firstPeakNs = 0;
-            quietUntilNs = ns + SHAKE_QUIET_NS;
-            listener.onShake();
-        } else {
-            firstPeakNs = ns;
-        }
+        if (v.length >= 3 && shake.onSample(v[0], v[1], v[2], ns)) listener.onShake();
     }
 
     @Override
