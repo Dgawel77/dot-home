@@ -115,15 +115,21 @@ final class DotRenderer {
     /**
      * Renders the current world into a new bitmap of the given size. dim (0..1) darkens the picture with black;
      * rock and particle dots above clearTopFraction of the height are skipped so that band stays clear.
+     * The world is scaled uniformly to cover the target and centred (excess is cropped), so dots never stretch.
      */
     Bitmap renderStill(GameWorld w, int width, int height, float dim, float clearTopFraction) {
         Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
         c.drawColor(Color.BLACK);
         if (w.width() > 0 && w.height() > 0) {
+            // uniform "cover" scale, centred: dots stay round when the target aspect differs from the world's
+            float s = Math.max(width / w.width(), height / w.height());
             c.save();
-            c.scale(width / w.width(), height / w.height());
-            clearTopY = clearTopFraction * w.height();
+            c.translate(width / 2f, height / 2f);
+            c.scale(s, s);
+            c.translate(-w.width() / 2f, -w.height() / 2f);
+            // world y that lands at clearTopFraction of the target height
+            clearTopY = (clearTopFraction * height - height / 2f) / s + w.height() / 2f;
             try {
                 drawScene(c, w, false);
             } finally {

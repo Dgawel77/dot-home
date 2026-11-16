@@ -48,6 +48,16 @@ public class SetupActivity extends Activity {
             safeStart(i);
         });
 
+        android.widget.Button export = findViewById(R.id.btn_export);
+        export.setOnClickListener(v -> {
+            export.setEnabled(false);
+            LockStills.export(this, msg -> {
+                export.setText(msg);
+                export.setEnabled(true);
+                android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_LONG).show();
+            });
+        });
+
         FireMode[] modes = {FireMode.TAP_COMMAND, FireMode.TAP_TOUCH, FireMode.AUTO};
         String[] names = {"Tap (home screen tap)", "Tap (raw touch)", "Auto-fire"};
         FireMode current;
