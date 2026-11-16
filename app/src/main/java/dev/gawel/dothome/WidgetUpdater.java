@@ -23,8 +23,8 @@ final class WidgetUpdater {
     private static final String CLOCK_PKG = "com.sec.android.app.clockpackage";
     private static final int DEFAULT_W_DP = 250, DEFAULT_H_DP = 110;
     static final int MAX_SIDE_PX = 1200; // keeps each RemoteViews bitmap far below the binder/memory limit
-    /** Clock bottom row: the weather's left margin, the least it gets, and slack on the measured date width. */
-    private static final float WEATHER_MARGIN_DP = 12f, MIN_WEATHER_DP = 64f, DATE_SLACK_DP = 4f;
+    /** Slack on the measured date width. */
+    private static final float DATE_SLACK_DP = 4f;
 
     private WidgetUpdater() {}
 
@@ -85,14 +85,32 @@ final class WidgetUpdater {
         float effD = density * shrink(dateDp * density);
         int dw = Math.max(1, Math.round(dateDp * effD)), dh = Math.max(1, Math.round(ClockFit.ROW_DP * effD));
         rv.setImageViewBitmap(R.id.date_img, safe(dh, dw, () -> WidgetArt.date(ctx, now, ClockFit.ROW_DP, dateDp, effD)));
-        float maxDp = Math.max(MIN_WEATHER_DP, innerDp - WEATHER_MARGIN_DP - dateDp);
-        float effRow = density * shrink(maxDp * density);
-        int rowH = Math.max(1, Math.round(ClockFit.ROW_DP * effRow));
-        rv.setImageViewBitmap(R.id.weather_img, safe(rowH, Math.round(maxDp * effRow),
-            () -> WidgetArt.weather(ctx, wx, now, ClockFit.ROW_DP, maxDp, effRow)));
+
+        // the weather: a right-hand block beside the time column when it fits, else a compact row under the date
+        float timeColDp = Math.max(ClockFit.timeWidthDp(cell, ClockFit.MINUTES_COLS) + ClockFit.SECS_GAP_DP
+            + ClockFit.SECS_W_DP, dateDp);
+        float availDp = ClockFit.weatherAvailDp(innerDp, timeColDp);
+        int wxStep = ClockFit.weatherStepDp(availDp);
+        if (wxStep > 0) {
+            float wxDp = ClockFit.weatherNeedDp(wxStep);
+            float effW = density * shrink(wxDp * density);
+            int bw = Math.max(1, Math.round(wxDp * effW));
+            rv.setImageViewBitmap(R.id.weather_img, safe(bw, bw, () -> WidgetArt.weatherBlock(ctx, wx, now, wxStep, wxDp, effW)));
+            rv.setViewVisibility(R.id.weather_img, View.VISIBLE);
+            rv.setViewVisibility(R.id.weather_row_img, View.GONE);
+        } else {
+            float rowW = Math.max(1f, innerDp);
+            float effR = density * shrink(rowW * density);
+            int rh = Math.max(1, Math.round(ClockFit.ROW_DP * effR));
+            rv.setImageViewBitmap(R.id.weather_row_img, safe(rh, Math.round(rowW * effR),
+                () -> WidgetArt.weatherCompact(ctx, wx, ClockFit.ROW_DP, rowW, effR)));
+            rv.setViewVisibility(R.id.weather_img, View.GONE);
+            rv.setViewVisibility(R.id.weather_row_img, View.VISIBLE);
+        }
 
         rv.setOnClickPendingIntent(R.id.clock_root, PendingIntent.getActivity(ctx, 1, clockIntent(ctx), flags()));
         rv.setOnClickPendingIntent(R.id.weather_img, radarTap(ctx));
+        rv.setOnClickPendingIntent(R.id.weather_row_img, radarTap(ctx));
         return rv;
     }
 

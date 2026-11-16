@@ -31,4 +31,24 @@ public final class ClockFit {
     public static int timeHeightDp(int cellDp) {
         return cellDp * DotMatrixFont.ROWS;
     }
+
+    /** Weather block: icon box, its gap to the temperature, the margin to the time column, and the widest reading ("\u221200\u00B0"). */
+    public static final int WX_ICON_DP = 32, WX_ICON_GAP_DP = 8, WX_MARGIN_DP = 12, WX_WORST_COLS = 23;
+
+    /** Width the weather block needs at a matrix step: icon, gap and the worst-case temperature. */
+    public static int weatherNeedDp(int stepDp) {
+        return WX_ICON_DP + WX_ICON_GAP_DP + WX_WORST_COLS * stepDp;
+    }
+
+    /** Width left for the weather beside the time column (timeColDp = widest of time+seconds and the date). */
+    public static float weatherAvailDp(float innerDp, float timeColDp) {
+        return innerDp - timeColDp - WX_MARGIN_DP;
+    }
+
+    /** Matrix step of the right-hand weather block for the room it has: 8, else 4, else 0 (it goes under the date). */
+    public static int weatherStepDp(float availDp) {
+        if (availDp >= weatherNeedDp(8)) return 8;
+        if (availDp >= weatherNeedDp(4)) return 4;
+        return 0;
+    }
 }

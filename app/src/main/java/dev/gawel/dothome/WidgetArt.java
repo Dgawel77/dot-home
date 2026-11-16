@@ -41,10 +41,6 @@ final class WidgetArt {
     private static final long STALE_MS = 90L * 60 * 1000;
     static final String DATE_PATTERN = "EEEE, MMMM d"; // the clock's date, drawn by date()
     static final float DATE_SIZE_DP = 15f;
-    private static final float WEATHER_ICON_DP = 20f;
-    /** Below this much room the weather row drops its text and keeps the icon and temperature. */
-    private static final float MIN_TEXT_DP = 24f;
-    private static final String SEP = " \u00B7 ";
     private static final float ART_RADIUS_DP = 12f;
     private static final float ICON_STROKE_DP = 1.6f;
     /** Right part of the music widget kept clear for widget_music.xml's three 56 dp buttons and 4 dp end margin. */
@@ -154,61 +150,103 @@ final class WidgetArt {
     }
 
     /**
-     * The weather for the clock's bottom row, one line rowDp tall, as wide as its content and at most maxWDp: the
-     * line-art icon, the temperature (Inter 15, L100), then
-     * the condition (Inter 13, L65; an active alert replaces it in L100) and the place and data age (L46). Text is
-     * cut with an ellipsis, the place before the condition; with too little room only the icon and temperature
-     * remain. dens is the effective density, so every size is true dp.
+     * The right-hand weather block (as it was before the text row): the line-art icon and the temperature in 5x7
+     * matrix dots (lit cells only, L65) at stepDp (8, or 4 when narrow), then the condition with H/L (Inter 13, L65),
+     * the place and data age (Inter 13, L46) and an alert (Inter 13, L100). Right-aligned in a wDp-wide bitmap whose
+     * height fits the block. dens is the effective density, so every size is true dp.
      */
-    static Bitmap weather(Context ctx, Weather w, long nowMs, float rowDp, float maxWDp, float dens) {
-        float h = rowDp * dens;
+    static Bitmap weatherBlock(Context ctx, Weather w, long nowMs, int stepDp, float wDp, float dens) {
         String temp = w == null ? "\u2212\u2212\u00B0" : tempText(Math.round(w.tempF));
-        Paint tempPaint = text(Fonts.inter(ctx), 15f, dens, DotStyle.L100);
-        float tempW = tempPaint.measureText(temp);
+        byte[] cells = DotMatrixFont.cells(temp);
+        int cols = cells.length / DotMatrixFont.ROWS;
+        float s = stepDp * dens, r = s * Lattice.Weight.REGULAR.ratio / 2f;
+        float wPx = wDp * dens, maxW = Math.max(1f, wPx - 4f * dens);
+        Paint line = text(Fonts.inter(ctx), 13f, dens, DotStyle.L65);
+        line.setTextAlign(Paint.Align.RIGHT);
+        float lineH = 16f * dens, gap = 8f * dens, icon = ClockFit.WX_ICON_DP * dens;
 
-        float icon = w == null ? 0f : WEATHER_ICON_DP * dens;
-        float tempX = w == null ? 0f : icon + 8f * dens;
-        float textX = tempX + tempW + 12f * dens;
-        float textMax = maxWDp * dens - textX;
+        String cond = null, place = "", age = null;
+        String alert = w == null ? null : w.alert;
+        if (w != null) {
+            cond = w.condition + " \u00B7 H " + Math.round(w.highF) + "\u00B0 L " + Math.round(w.lowF) + "\u00B0";
+            place = w.place == null ? "" : w.place;
+            age = ageText(nowMs - w.fetchedAtMs);
+        }
+        boolean hasAlert = alert != null && !alert.isEmpty();
+        boolean hasPlace = !place.isEmpty() || age != null;
+        int lines = w == null ? 1 : 1 + (hasPlace ? 1 : 0) + (hasAlert ? 1 : 0);
+        float gridH = Math.max(DotMatrixFont.ROWS * s, w == null ? 0f : icon);
+        float gridTop = (gridH - DotMatrixFont.ROWS * s) / 2f;
+        Bitmap bmp = Bitmap.createBitmap(Math.max(1, Math.round(wPx)),
+            Math.max(1, Math.round(gridH + gap + lines * lineH)), Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(bmp);
 
-        boolean alert = w != null && w.alert != null && !w.alert.isEmpty();
-        Paint first = w == null ? label(ctx, dens, DotStyle.L46) : text(Fonts.inter(ctx), 13f, dens, alert ? DotStyle.L100 : DotStyle.L65);
-        Paint second = text(Fonts.inter(ctx), 13f, dens, DotStyle.L46);
-        String one = "", two = "";
-        if (textMax >= MIN_TEXT_DP * dens) {
-            if (w == null) {
-                one = TextFit.fit("NO DATA", textMax, first::measureText);
-            } else {
-                one = TextFit.fit(alert ? w.alert : w.condition, textMax, first::measureText);
-                String place = w.place == null ? "" : w.place;
-                String age = ageText(nowMs - w.fetchedAtMs);
-                String suffix = age == null ? "" : (place.isEmpty() ? age : " \u00B7 " + age);
-                float room = textMax - first.measureText(one) - second.measureText(SEP);
-                // the place and age follow the whole condition, and only once three letters of the place fit
-                String least = place.length() > 3 ? place.substring(0, 3) + "\u2026" : place;
-                if (!one.endsWith("\u2026") && !(place.isEmpty() && suffix.isEmpty())
-                        && room >= second.measureText(least + suffix)) {
-                    two = SEP + TextFit.fitWithSuffix(place, suffix, room, second::measureText);
-                }
+        float right = wPx;
+        float gx = right - cols * s;
+        Paint dots = fill(DotStyle.L65);
+        for (int row = 0; row < DotMatrixFont.ROWS; row++) {
+            for (int col = 0; col < cols; col++) {
+                if (cells[row * cols + col] == 1) dot(c, gx, gridTop, s, col, row, r, dots); // lit cells only
             }
         }
-        float oneW = first.measureText(one), twoW = second.measureText(two);
-        float right = one.isEmpty() ? tempX + tempW : textX + oneW + twoW;
-
-        Bitmap bmp = Bitmap.createBitmap(Math.max(1, (int) Math.ceil(right)), Math.max(1, Math.round(h)),
-            Bitmap.Config.ARGB_8888);
-        Canvas c = new Canvas(bmp);
-        if (w != null) drawGlyph(c, WeatherCodes.glyph(w.code), 0f, (h - icon) / 2f, icon, dens);
-        c.drawText(temp, tempX, baseline(tempPaint, 0f, h), tempPaint);
-        if (!one.isEmpty()) {
-            float base = baseline(second, 0f, h);
-            c.drawText(one, textX, w == null ? baseline(first, 0f, h) : base, first);
-            if (!two.isEmpty()) c.drawText(two, textX + oneW, base, second);
+        if (w != null) {
+            float ix = gx - ClockFit.WX_ICON_GAP_DP * dens - icon;
+            if (ix >= 0f) drawGlyph(c, WeatherCodes.glyph(w.code), ix, (gridH - icon) / 2f, icon, dens);
+        }
+        float y = gridH + gap;
+        if (w == null) {
+            Paint lab = label(ctx, dens, DotStyle.L46);
+            lab.setTextAlign(Paint.Align.RIGHT);
+            c.drawText("NO DATA", right, baseline(lab, y, lineH), lab);
+            return bmp;
+        }
+        c.drawText(TextFit.fit(cond, maxW, line::measureText), right, baseline(line, y, lineH), line);
+        y += lineH;
+        if (hasPlace) {
+            line.setColor(DotStyle.L46);
+            String suffix = age == null ? "" : (place.isEmpty() ? age : " \u00B7 " + age);
+            c.drawText(TextFit.fitWithSuffix(place, suffix, maxW, line::measureText), right, baseline(line, y, lineH), line);
+            y += lineH;
+        }
+        if (hasAlert) {
+            line.setColor(DotStyle.L100);
+            c.drawText(TextFit.fit(alert, maxW, line::measureText), right, baseline(line, y, lineH), line);
         }
         return bmp;
     }
 
-    /** "41\u00B0" or "\u22125\u00B0": Inter has a true minus, not a hyphen. */
+    /**
+     * The compact weather for the cover, under the date row: icon (24 dp), the temperature in matrix dots at step 4
+     * (L65) and the condition line (Inter 13, L65; an alert replaces it in L100), left-aligned, rowDp tall, wDp wide.
+     */
+    static Bitmap weatherCompact(Context ctx, Weather w, float rowDp, float wDp, float dens) {
+        String temp = w == null ? "\u2212\u2212\u00B0" : tempText(Math.round(w.tempF));
+        byte[] cells = DotMatrixFont.cells(temp);
+        int cols = cells.length / DotMatrixFont.ROWS;
+        float s = 4f * dens, r = s * Lattice.Weight.REGULAR.ratio / 2f, h = rowDp * dens;
+        Bitmap bmp = Bitmap.createBitmap(Math.max(1, Math.round(wDp * dens)), Math.max(1, Math.round(h)),
+            Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(bmp);
+        float icon = w == null ? 0f : 24f * dens;
+        if (w != null) drawGlyph(c, WeatherCodes.glyph(w.code), 0f, (h - icon) / 2f, icon, dens);
+        float gx = icon == 0f ? 0f : icon + 8f * dens, gy = (h - DotMatrixFont.ROWS * s) / 2f;
+        Paint dots = fill(DotStyle.L65);
+        for (int row = 0; row < DotMatrixFont.ROWS; row++) {
+            for (int col = 0; col < cols; col++) {
+                if (cells[row * cols + col] == 1) dot(c, gx, gy, s, col, row, r, dots);
+            }
+        }
+        float tx = gx + cols * s + 12f * dens;
+        boolean alert = w != null && w.alert != null && !w.alert.isEmpty();
+        Paint line = w == null ? label(ctx, dens, DotStyle.L46)
+            : text(Fonts.inter(ctx), 13f, dens, alert ? DotStyle.L100 : DotStyle.L65);
+        String t = w == null ? "NO DATA" : (alert ? w.alert : w.condition);
+        float room = wDp * dens - tx - 4f * dens;
+        if (room > 0f) c.drawText(TextFit.fit(t, room, line::measureText), tx, baseline(line, 0f, h), line);
+        return bmp;
+    }
+
+    /** "41\u00B0" or "\u22125\u00B0": the matrix font has a true minus, not a hyphen. */
     private static String tempText(long t) {
         return (t < 0 ? "\u2212" + (-t) : String.valueOf(t)) + "\u00B0";
     }

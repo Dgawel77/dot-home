@@ -23,4 +23,12 @@ public final class ClockFitTest {
         T.eq(ClockFit.MINUTES_COLS, DotMatrixFont.render("12:41").cols, "minutes");
         T.eq(84, ClockFit.timeHeightDp(12), "height");
     }
+
+    public static void testWeatherStepByRoom() {
+        T.eq(224, ClockFit.weatherNeedDp(8), "S8 worst case");
+        T.eq(132, ClockFit.weatherNeedDp(4), "S4 worst case");
+        T.eq(8, ClockFit.weatherStepDp(ClockFit.weatherAvailDp(649, 356)), "main fits S8");
+        T.eq(4, ClockFit.weatherStepDp(200), "narrow: S4");
+        T.eq(0, ClockFit.weatherStepDp(ClockFit.weatherAvailDp(300, 256)), "cover: under the date");
+    }
 }
