@@ -15,6 +15,7 @@ import java.util.TimeZone;
 import dev.gawel.dothome.core.FireMode;
 import dev.gawel.dothome.core.GameWorld;
 import dev.gawel.dothome.core.Rng;
+import dev.gawel.dothome.core.Weather;
 import dev.gawel.dothome.core.TiltInput;
 import dev.gawel.dothome.core.ScoreBook;
 import dev.gawel.dothome.core.Zones;
@@ -86,6 +87,10 @@ final class GameHub {
         // the zone may have changed since the last visible period; keep the persisted keys/values
         scoreBook = new ScoreBook(prefs, System::currentTimeMillis, TimeZone.getDefault());
         world.setAutoFire(fireMode == FireMode.AUTO);
+        Weather wx = WeatherRepo.cached(appContext);
+        if (wx == null || System.currentTimeMillis() - wx.fetchedAtMs > 30L * 60 * 1000) {
+            WeatherJob.refreshSoon(appContext);
+        }
         tilt.start(e.displayRotation()); // restart = recalibrate on the first sample
     }
 

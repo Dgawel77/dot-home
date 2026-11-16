@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">Dot Home</string>
     <string name="wallpaper_description">An endless dot-drawn space shooter behind your icons.</string>
+    <string name="nws_contact">contact-pending</string>
 </resources>
