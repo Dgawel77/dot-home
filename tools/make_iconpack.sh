@@ -5,6 +5,7 @@
 #        tools/iconfix.py turns it into stippled build/icons-final/<drawable>.png, and only those final
 #        PNGs (one per index.tsv row) are packaged; tone layers never are.
 #        Hand-made iconpack/overrides/<drawable>.png win.
+# ICONFIX_ARGS is passed to iconfix.py, e.g. ICONFIX_ARGS=--auto-shapes tools/make_iconpack.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
 TOOLS=${TOOLS:-$HOME/androidtools}
@@ -13,7 +14,7 @@ export PATH=$JAVA_HOME/bin:$PATH
 SRC=${ICONS_DIR:-build/icons}
 [ -f "$SRC/index.tsv" ] || { echo "missing $SRC/index.tsv" >&2; exit 1; }
 IN=build/icons-final
-python3 tools/iconfix.py "$SRC" "$IN"
+python3 tools/iconfix.py ${ICONFIX_ARGS:-} "$SRC" "$IN"
 
 RES=iconpack/res
 rm -rf $RES && mkdir -p $RES/drawable-nodpi $RES/xml

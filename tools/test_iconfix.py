@@ -15,8 +15,11 @@ sys.path.insert(0, HERE)
 import iconfix as ix  # noqa: E402
 
 S = ix.SIZE
-SOLID_SVG = (b'<svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">'
-             b'<path d="M0 0h24v24H0z"/></svg>')
+SVG = b'<svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path %s/></svg>'
+SOLID_SVG = SVG % b'd="M0 0h24v24H0z"'
+WIDE_SVG = SVG % b'd="M0 9h24v6H0z"'  # 4:1 bar, a wordmark's proportions
+FRAME_SVG = SVG % b'fill-rule="evenodd" d="M2 2h20v20H2zM4.5 4.5v15h15v-15z"'  # square, fill ~0.44
+HAIRLINE_SVG = SVG % b'fill-rule="evenodd" d="M2 2h20v20H2zM2.2 2.2v19.6h19.6V2.2z"'  # too thin for dots
 
 
 # ---------------------------------------------------------------- fixtures
@@ -38,6 +41,16 @@ def ring(size=S, r0=0.22, r1=0.36):
     yy, xx = np.mgrid[0:size, 0:size] + 0.5
     d = np.hypot(xx - size / 2.0, yy - size / 2.0) / size
     return ((d >= r0) & (d <= r1)).astype(np.float32)
+
+
+def specks(n=12, r=12, size=S):
+    """n small discs far apart: a noisy mask that stipples into n separate clusters."""
+    yy, xx = np.mgrid[0:size, 0:size] + 0.5
+    m = np.zeros((size, size), bool)
+    for k in range(n):
+        cx, cy = 90 + (k % 4) * 84, 120 + (k // 4) * 96
+        m |= np.hypot(xx - cx, yy - cy) <= r
+    return m.astype(np.float32)
 
 
 def blobs(size=S):
@@ -178,6 +191,8 @@ class Grid(unittest.TestCase):
     def test_hex_grid(self):
         pts = ix.hex_grid()
         ys = sorted({round(y, 6) for _, y in pts})
+        self.assertEqual(len(ys), 33)
+        self.assertAlmostEqual(ys[16], S / 2.0)  # middle row on the centre line
         steps = np.diff(ys)
         self.assertTrue(np.allclose(steps, ix.P * math.sqrt(3) / 2), steps)
         rows = [sorted(x for x, y in pts if abs(y - ry) < 1e-6) for ry in ys]
@@ -189,9 +204,24 @@ class Grid(unittest.TestCase):
             self.assertTrue(ix.P / 2 - 1e-9 <= y <= S - ix.P / 2 + 1e-9)
         a = np.array(pts)
         mid = a[np.argmin(np.hypot(a[:, 0] - S / 2, a[:, 1] - S / 2))]
+        self.assertTrue(np.allclose(mid, (S / 2.0, S / 2.0)))  # a dot on the tile centre
         d = np.hypot(a[:, 0] - mid[0], a[:, 1] - mid[1])
         self.assertAlmostEqual(np.sort(d)[1], ix.P)  # nearest neighbours are P apart
         self.assertEqual(int(np.sum(np.abs(d - ix.P) < 1e-6)), 6)  # hex: six of them
+        self.assertEqual(len(pts), 17 * 29 + 16 * 30)
+
+    def test_hex_grid_is_mirror_symmetric(self):
+        key = lambda x, y: (round(x, 6), round(y, 6))  # noqa: E731
+        pts = {key(x, y) for x, y in ix.hex_grid()}
+        self.assertEqual(pts, {key(S - x, y) for x, y in pts})
+        self.assertEqual(pts, {key(x, S - y) for x, y in pts})
+
+    def test_symmetric_glyph_stipples_symmetrically(self):
+        dots = ix.place_dots(u8(ring()), lambda xs, ys: 1.0)
+        key = lambda x, y: (round(x, 6), round(y, 6))  # noqa: E731
+        pts = {key(x, y) for x, y, _ in dots}
+        self.assertEqual(pts, {key(x, S - y) for x, y in pts})
+        self.assertEqual(pts, {key(S - x, y) for x, y in pts})
 
     def test_gradient(self):
         self.assertAlmostEqual(ix.gradient(0, 0), 1.0)
@@ -363,8 +393,8 @@ class ToneLayer(unittest.TestCase):
         self.assertAlmostEqual(ix.load_tone(t).mean(), 0.7152, delta=0.003)
 
 
-class Pipeline(unittest.TestCase):
-    """fix() end to end on a synthetic export (needs the simple-icons cache)."""
+class ExportFixture(unittest.TestCase):
+    """A synthetic phone export in a temp dir, run through fix() (needs the simple-icons cache)."""
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
@@ -393,6 +423,8 @@ class Pipeline(unittest.TestCase):
     def final(self, name):
         return np.asarray(Image.open(os.path.join(self.out, name + ".png")))
 
+
+class Pipeline(ExportFixture):
     def test_blank_and_blob_mono_fall_back(self):
         self.add("com.example.blank", "mono", "Blank", 0.0)
         self.add("com.example.ring", "mono", "Ring", ring())
@@ -459,10 +491,20 @@ class Initial(unittest.TestCase):
         m = ix.letter_mask("i")
         self.assertEqual((m.shape, m.dtype), ((S, S), np.uint8))
         ys, xs = np.nonzero(m >= 128)
-        self.assertAlmostEqual((ys.max() - ys.min() + 1) / S, ix.LETTER_H, delta=0.01)
+        self.assertAlmostEqual((ys.max() - ys.min() + 1) / S, ix.LETTER_H, delta=0.01)  # fallback height
         self.assertAlmostEqual((ys.max() + ys.min()) / 2.0, S / 2.0, delta=2)
         stem = xs.max() - xs.min() + 1  # capital I: one stem
         self.assertGreater(stem, 2 * ix.P)  # bold enough to stipple at least two dots across
+
+    def test_letter_is_fitted_into_the_box(self):
+        for ch, box in (("W", (150.0, 200.0)), ("I", (150.0, 200.0)), ("Q", (230.0, 230.0))):
+            x0, y0, x1, y1 = ix.ink_bbox(ix.letter_mask(ch, box))
+            w, h = x1 - x0, y1 - y0
+            self.assertLessEqual(w, box[0] + 2, ch)
+            self.assertLessEqual(h, box[1] + 2, ch)
+            self.assertTrue(w >= box[0] - 4 or h >= box[1] - 4, "%s %dx%d" % (ch, w, h))  # touches one side
+            self.assertAlmostEqual((x0 + x1) / 2.0, S / 2.0, delta=2)
+            self.assertAlmostEqual((y0 + y1) / 2.0, S / 2.0, delta=2)
 
     def test_initial_stipples_like_any_icon(self):
         img = ix.stipple(ix.letter_mask("F"), 0.7)
@@ -471,6 +513,220 @@ class Initial(unittest.TestCase):
         self.assertEqual({tuple(p) for p in a[on][:, :3]}, {ix.FG})
         self.assertLess(ix.fill_ratio(a[:, :, 3]), 0.3)
         self.assertGreater(len(ix.stipple_dots(ix.letter_mask("F"), 0.7)), 40)
+
+
+class Wordmark(unittest.TestCase):
+    def test_wide_glyph_is_rejected(self):
+        img = ix.brand_icon(WIDE_SVG)
+        self.assertLess(ix.brand_fill(img), ix.MAX_FILL)  # not a blob: rejected for its shape
+        self.assertEqual(ix.brand_problem(img), "wordmark")
+        tall = ix.glyph_from_alpha(Image.fromarray(np.ascontiguousarray(np.asarray(img.getchannel("A")).T)))
+        self.assertTrue(ix.wordmark(np.asarray(tall.getchannel("A"))))  # either way round
+
+    def test_square_glyph_passes(self):
+        img = ix.brand_icon(FRAME_SVG)
+        self.assertIsNone(ix.brand_problem(img))
+        self.assertTrue(ix.brand_ok(img))
+
+    def test_glyph_spanning_too_few_dot_rows_is_rejected(self):
+        img = ix.brand_icon(HAIRLINE_SVG)
+        a = np.asarray(img.getchannel("A"))
+        self.assertFalse(ix.too_empty(ix.brand_fill(img)))
+        self.assertLess(ix.row_span(ix.stipple_dots(a)), ix.MIN_ROWS)
+        self.assertEqual(ix.brand_problem(img), "wordmark")
+
+    def test_blob_check_uses_the_square_padded_box(self):
+        icons = os.path.join(ix.ensure_simple_icons(), "icons")
+        with open(os.path.join(icons, "snapchat.svg"), "rb") as f:
+            ghost = ix.brand_icon(f.read(), (220.0, 208.0))  # solid silhouette, tightly fitted
+        x0, y0, x1, y1 = ix.ink_bbox(np.asarray(ghost.getchannel("A")))
+        own = ix.fill_ratio(np.asarray(ghost.getchannel("A"))[y0:y1, x0:x1])
+        self.assertGreater(own, ix.MAX_FILL)  # its own bbox would call it a blob
+        self.assertLess(ix.brand_fill(ghost, (220.0, 208.0)), ix.MAX_FILL)
+        self.assertTrue(ix.brand_ok(ghost, (220.0, 208.0)))
+        self.assertFalse(ix.brand_ok(ix.brand_icon(SOLID_SVG, (220.0, 208.0)), (220.0, 208.0)))  # still a blob
+
+    def test_real_wordmarks_and_glyphs(self):
+        icons = os.path.join(ix.ensure_simple_icons(), "icons")
+        for slug, wordmark in (("discover", True), ("sony", True), ("netgear", True),
+                               ("netflix", False), ("paypal", False), ("snapchat", False)):
+            with open(os.path.join(icons, slug + ".svg"), "rb") as f:
+                self.assertEqual(ix.brand_problem(ix.brand_icon(f.read())) == "wordmark", wordmark, slug)
+
+    def test_wordmark_falls_back_in_the_pipeline(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            inp, out = os.path.join(tmp, "in"), os.path.join(tmp, "out")
+            os.makedirs(inp)
+            write_png(os.path.join(inp, "ic_x.png"), ring())
+            with open(os.path.join(inp, "index.tsv"), "w") as f:
+                f.write("com.discoverfinancial.mobile/.Main\tic_x\tauto\tDiscover\n")
+            lines = []
+            self.assertEqual(ix.fix(inp, out, None, log=lines.append), {"initial": 1})
+            self.assertIn("brand discover rejected (wordmark)", "\n".join(lines))
+        finally:
+            shutil.rmtree(tmp)
+
+
+class GlyphSize(unittest.TestCase):
+    def test_box_is_the_median_mono_bbox(self):
+        shapes = []
+        for k in range(9):
+            m = np.zeros((S, S), np.uint8)
+            w, h = 150 + 10 * k, 100 + 20 * k
+            m[50:50 + h, 60:60 + w] = 255
+            shapes.append(m)
+        self.assertEqual(ix.glyph_box(shapes), (190.0, 180.0))
+        self.assertIsNone(ix.glyph_box(shapes[:ix.MIN_MONO - 1]))
+        self.assertIsNone(ix.glyph_box([np.zeros((S, S), np.uint8)] * 20))  # blank shapes don't count
+
+    def test_fallback_boxes(self):
+        self.assertEqual(ix.brand_box(), (S * (1 - 2 * 0.24),) * 2)
+        self.assertEqual(ix.letter_box(), (S * (1 - 2 * 0.24), S * 0.50))
+        self.assertEqual(ix.brand_box((200.0, 150.0)), (200.0, 150.0))
+
+    def test_brand_glyph_is_fitted_and_centred(self):
+        icons = os.path.join(ix.ensure_simple_icons(), "icons")
+        for slug in ("netflix", "paypal", "snapchat"):
+            with open(os.path.join(icons, slug + ".svg"), "rb") as f:
+                svg = f.read()
+            for box in ((150.0, 200.0), (230.0, 230.0)):
+                x0, y0, x1, y1 = ix.ink_bbox(np.asarray(ix.brand_icon(svg, box).getchannel("A")))
+                w, h = x1 - x0, y1 - y0
+                self.assertLessEqual(w, box[0] + 2, slug)
+                self.assertLessEqual(h, box[1] + 2, slug)
+                self.assertTrue(w >= box[0] - 3 or h >= box[1] - 3, "%s %dx%d in %s" % (slug, w, h, box))
+                self.assertAlmostEqual((x0 + x1) / 2.0, S / 2.0, delta=1.5)
+                self.assertAlmostEqual((y0 + y1) / 2.0, S / 2.0, delta=1.5)
+
+    def test_replacements_take_the_runs_mono_glyph_size(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            inp, out = os.path.join(tmp, "in"), os.path.join(tmp, "out")
+            os.makedirs(inp)
+            mono = u8(ring(r0=0.15, r1=0.25))  # ~216 px across
+            rows = []
+            for k in range(ix.MIN_MONO):
+                write_png(os.path.join(inp, "ic_m%d.png" % k), mono / 255.0)
+                rows.append("com.m%d/.Main\tic_m%d\tmono\tM%d\n" % (k, k, k))
+            write_png(os.path.join(inp, "ic_q.png"), ring())
+            write_png(os.path.join(inp, "ic_n.png"), ring())
+            rows += ["com.example.quux/.Main\tic_q\tauto\tQuux\n",
+                     "com.netflix.mediaclient/.Main\tic_n\tauto\tNetflix\n"]
+            with open(os.path.join(inp, "index.tsv"), "w") as f:
+                f.writelines(rows)
+            ix.fix(inp, out, None, log=lambda *_: None)
+            box = ix.glyph_box([mono] * ix.MIN_MONO)
+            self.assertAlmostEqual(box[0], 216, delta=2)
+            got = np.asarray(Image.open(os.path.join(out, "ic_q.png")))
+            self.assertTrue(np.array_equal(got, np.asarray(ix.stipple(ix.letter_mask("Q", box), 0.7))))
+            with open(os.path.join(ix.ensure_simple_icons(), "icons", "netflix.svg"), "rb") as f:
+                brand = np.asarray(ix.brand_icon(f.read(), box).getchannel("A"))
+            got = np.asarray(Image.open(os.path.join(out, "ic_n.png")))
+            self.assertTrue(np.array_equal(got, np.asarray(ix.stipple(brand, 0.7))))
+        finally:
+            shutil.rmtree(tmp)
+
+
+class AutoShapes(ExportFixture):
+    def run_fix(self, auto_shapes=True):
+        with open(os.path.join(self.inp, "index.tsv"), "w") as f:
+            f.writelines(self.rows)
+        return ix.fix(self.inp, self.out, None, log=self.lines.append, auto_shapes=auto_shapes)
+
+    def test_gate_reasons(self):
+        self.assertIsNone(ix.shape_problem(u8(ring())))
+        self.assertEqual(ix.shape_problem(u8(specks())), "12 parts")
+        framed = ring()
+        framed[:20, :] = 1.0  # background ink along the top edge
+        self.assertTrue(ix.shape_problem(u8(framed)).startswith("edge"))
+        self.assertTrue(ix.shape_problem(np.full((S, S), 255, np.uint8)).startswith("fill"))
+        self.assertEqual(ix.shape_problem(u8(np.zeros((S, S)))), "fill 0.00")
+        bar = np.zeros((S, S), np.float32)
+        bar[200:240, 60:372] = 1.0
+        bar[210:230, 70:362] = 0.0  # outlined, so it is not merely solid
+        self.assertEqual(ix.shape_problem(u8(bar)), "wordmark")
+        square = np.zeros((S, S), np.float32)
+        square[136:296, 136:296] = 1.0  # fill 0.14 of the tile, but a featureless solid
+        self.assertEqual(ix.shape_problem(u8(square)), "solid 1.00")
+        disc = np.hypot(*(np.mgrid[0:S, 0:S] + 0.5 - S / 2.0)) <= 80
+        self.assertTrue(ix.shape_problem(u8(disc)).startswith("solid 0.7"))
+
+    def test_dot_parts_and_edge_share(self):
+        self.assertEqual(ix.dot_parts([]), 0)
+        self.assertEqual(ix.dot_parts(ix.stipple_dots(u8(ring()))), 1)
+        self.assertEqual(ix.dot_parts(ix.stipple_dots(u8(specks()))), 12)
+        self.assertEqual(ix.edge_share(u8(ring())), 0.0)
+        m = np.zeros((S, S), np.uint8)
+        m[:, :ix.EDGE_BAND] = 255
+        m[100:300, 100:300] = 255
+        self.assertAlmostEqual(ix.edge_share(m), S * ix.EDGE_BAND / float(S * ix.EDGE_BAND + 200 * 200))
+
+    def test_clean_own_shape_is_stippled_with_its_tone(self):
+        cols = np.linspace(0, 1, S)[None, :] * np.ones((S, 1))
+        name = self.add("com.example.quux", "auto", "Quux", ring(), cols)
+        self.assertEqual(self.run_fix(), {"auto": 1})
+        want = ix.stipple(ix.load_shape(os.path.join(self.inp, name + ".png")),
+                          ix.load_tone(os.path.join(self.inp, name + ".tone.png")))
+        self.assertTrue(np.array_equal(self.final(name), np.asarray(want)))
+
+    def test_noisy_or_edge_shapes_fall_back_to_initials(self):
+        self.add("com.example.noisy", "auto", "Noisy", specks())
+        framed = ring()
+        framed[:20, :] = 1.0
+        self.add("com.example.framed", "auto", "Framed", framed)
+        self.assertEqual(self.run_fix(), {"initial": 2})
+        log = "\n".join(self.lines)
+        self.assertIn("com.example.noisy: own shape rejected (12 parts)", log)
+        self.assertIn("com.example.framed: own shape rejected (edge", log)
+
+    def test_order_is_brand_then_own_shape_then_initial(self):
+        self.add("com.netflix.mediaclient", "auto", "Netflix", ring())  # brand wins
+        self.add("com.example.quux", "auto", "Quux", ring())  # own shape
+        self.add("com.example.mono", "mono", "Blob", 1.0)  # mono rows never use their own (rejected) shape
+        self.assertEqual(self.run_fix(), {"brand": 1, "auto": 1, "initial": 1})
+
+    def test_off_by_default(self):
+        self.add("com.example.quux", "auto", "Quux", ring())
+        self.assertEqual(self.run_fix(auto_shapes=False), {"initial": 1})
+        self.assertEqual(ix.MARK["auto"], "A")
+
+    def test_command_line_flag(self):
+        a = ix.parse_args(["iconfix.py", "--auto-shapes", "in", "out"])
+        self.assertEqual((a.in_dir, a.out_dir, a.auto_shapes), ("in", "out", True))
+        a = ix.parse_args(["iconfix.py"])
+        self.assertFalse(a.auto_shapes)
+        self.assertTrue(a.in_dir.endswith(os.path.join("build", "icons")))
+
+
+class Determinism(ExportFixture):
+    def test_two_runs_are_byte_identical(self):
+        cols = np.linspace(0, 1, S)[None, :] * np.ones((S, 1))
+        for k in range(ix.MIN_MONO):
+            self.add("com.m%d" % k, "mono", "M%d" % k, ring(r0=0.12 + 0.01 * k, r1=0.3), cols)
+        self.add("com.netflix.mediaclient", "auto", "Netflix", ring(), 0.3)
+        self.add("com.example.quux", "auto", "Quux", ring(), cols)
+        self.add("com.example.noisy", "auto", "Noisy", specks())
+        self.add("com.example.blank", "mono", "Blank", 0.0)
+        with open(os.path.join(self.inp, "index.tsv"), "w") as f:
+            f.writelines(self.rows)
+
+        def snapshot(d):
+            out = {}
+            for n in sorted(os.listdir(d)):
+                with open(os.path.join(d, n), "rb") as f:
+                    out[n] = f.read()
+            return out
+
+        for auto in (False, True):
+            a, b = os.path.join(self.tmp, "a%d" % auto), os.path.join(self.tmp, "b%d" % auto)
+            ix.fix(self.inp, a, None, log=lambda *_: None, auto_shapes=auto)
+            first = snapshot(a)
+            ix.fix(self.inp, b, None, log=lambda *_: None, auto_shapes=auto)
+            ix.fix(self.inp, a, None, log=lambda *_: None, auto_shapes=auto)  # re-run in place
+            self.assertEqual(len(first), len(self.rows) + 2)  # PNGs + index.tsv + contact.png
+            self.assertEqual(snapshot(b), first)
+            self.assertEqual(snapshot(a), first)
 
 
 class Bootstrap(unittest.TestCase):

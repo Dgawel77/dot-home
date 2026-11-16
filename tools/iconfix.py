@@ -14,10 +14,14 @@ Per index.tsv row (component, drawable, mono|auto[, label]):
                                                      <drawable>.tone.png
   * kind auto, or fill ratio outside that range   -> shape replaced, first of:
       1. Simple Icons glyph (explicit PACKAGE_TO_SLUG, then, auto rows only, exact normalised
-         label == title), rasterised at 432 px with 14% padding; rejected if it fills > 55% (or
-         < 1%) of the padded box
-      2. Inter Bold capital initial of the label
-    stippled at the colour icon's mean luminance (0.7 without a tone layer)
+         label == title); rejected if it fills > 55% (or < 1%) of its box, or is a wordmark
+         (aspect > 2.5 or fewer than 4 dot rows)
+      2. with --auto-shapes, auto rows only: the row's own mask + tone, if it passes the
+         cleanliness gate (shape_problem: fill, edge ink, solidity, dot clusters, wordmark)
+      3. Inter Bold capital initial of the label
+    brand glyphs and initials are fitted into the median mono glyph box of the run, and stippled at
+    the colour icon's mean luminance (0.7 without a tone layer)
+Usage: iconfix.py [--auto-shapes] [in_dir [out_dir]]
 Also writes contact.png (every final icon on BG with label and source marker).
 
 First run creates tools/.venv with pinned wheels (skia-python draws the anti-aliased dots and renders
@@ -59,10 +63,27 @@ FG = (0xDD, 0xDD, 0xDD)
 BG = (0x0B, 0x0B, 0x0B)
 FG2 = (0x8E, 0x8E, 0x8E)
 SIZE = 432
-PAD = 0.14
 MAX_FILL = 0.55
 MIN_FILL = 0.01
-LETTER_H = 0.60
+# Brand glyphs and initials are fitted into the typical mono glyph box: the median ink bbox (w, h) of
+# this run's mono shapes. With fewer than MIN_MONO of them: brand box 1 - 2 PAD square, initial box
+# 1 - 2 PAD wide and LETTER_H tall (fractions of the tile).
+MIN_MONO = 8
+PAD = 0.24
+LETTER_H = 0.50
+# Wordmark gate: a glyph whose ink bbox is more than 2.5x longer one way than the other, or whose
+# stipple spans fewer than 4 dot rows, does not read as dots.
+WORDMARK_ASPECT = 2.5
+MIN_ROWS = 4
+# --auto-shapes cleanliness gate for an auto row's own fromFullIcon mask (calibrated on the 80 auto
+# rows of the 2026-11-16 export): clean glyphs stipple into 1-3 dot clusters, keep clear of the
+# border and have some inner structure; masks of gradient or photo backgrounds break into many clusters
+# (10-21 seen) or carry background ink into the outer band (6-12% seen), and featureless solids
+# (squares, discs: 0.76-1.0 of their own bbox filled) say less than an initial (real glyphs <= 0.74).
+MAX_PARTS = 4                    # connected dot clusters (dots P apart are connected)
+EDGE_BAND = 14                   # px from the tile border (~P)
+MAX_EDGE = 0.02                  # share of the mask's ink inside that band
+MAX_SOLID = 0.75                 # fill ratio of the mask's own ink bbox
 
 # Stipple (Task 6): hex grid, dot where the shape covers >= half of a +-P/4 box; tone -> dot radius.
 P = SIZE / 30.0                  # 14.4 px pitch: nearest-neighbour distance on the hex grid
@@ -75,7 +96,8 @@ L_DEFAULT = 0.7                  # luminance without a tone layer
 SS = 4                           # dots are drawn at SS x and area-averaged down (see render_dots)
 
 # Checked against simple-icons 16.36.0 (test_iconfix asserts every slug resolves). Packages from
-# this phone's auto list whose brand is in Simple Icons; the rest get a dot initial.
+# this phone's auto list whose brand is in Simple Icons; the rest get an initial. Wordmark slugs stay
+# listed: the wordmark gate decides at run time.
 PACKAGE_TO_SLUG = {
     "com.alltrails.alltrails": "alltrails",
     "com.anthropic.claude": "claude",
@@ -252,42 +274,169 @@ def check_table(pkg_dir, table=None):
 
 # ---------------------------------------------------------------- shapes
 
-def _padded_box():
-    """(offset, size) of the 14% padded box that brand glyphs are drawn into."""
-    inner = round(SIZE * (1 - 2 * PAD))
-    return (SIZE - inner) // 2, inner
+def ink_bbox(alpha):
+    """(x0, y0, x1, y1), end-exclusive, of the pixels with alpha >= 128; None when there are none."""
+    a = np.asarray(alpha) >= 128
+    ys, xs = np.flatnonzero(a.any(axis=1)), np.flatnonzero(a.any(axis=0))
+    if not len(ys):
+        return None
+    return int(xs[0]), int(ys[0]), int(xs[-1]) + 1, int(ys[-1]) + 1
 
 
-def brand_icon(svg_bytes):
-    """Simple Icons SVG -> 432 px RGBA, FG on transparent, inside the padded box."""
+def glyph_box(shapes):
+    """Typical mono glyph size: (median ink bbox width, median height) of the given shapes, or None
+    when fewer than MIN_MONO of them have ink."""
+    sizes = [(b[2] - b[0], b[3] - b[1]) for b in map(ink_bbox, shapes) if b]
+    if len(sizes) < MIN_MONO:
+        return None
+    return float(np.median([w for w, _ in sizes])), float(np.median([h for _, h in sizes]))
+
+
+def brand_box(box=None):
+    return box or (SIZE * (1 - 2 * PAD),) * 2
+
+
+def letter_box(box=None):
+    return box or (SIZE * (1 - 2 * PAD), SIZE * LETTER_H)
+
+
+def _box_region(box):
+    """Slices of the (w, h) box centred in the tile."""
+    w, h = int(round(box[0])), int(round(box[1]))
+    x0, y0 = (SIZE - w) // 2, (SIZE - h) // 2
+    return slice(y0, y0 + h), slice(x0, x0 + w)
+
+
+def _render_svg(dom, tx=0.0, ty=0.0, scale=1.0):
+    """Alpha (uint8, SIZE x SIZE) of the SVG laid out in a SIZE x SIZE container, then scaled and moved."""
+    import skia
+    surface = skia.Surface(SIZE, SIZE)
+    canvas = surface.getCanvas()
+    canvas.clear(skia.ColorTRANSPARENT)
+    canvas.translate(tx, ty)
+    canvas.scale(scale, scale)
+    dom.setContainerSize(skia.Size(SIZE, SIZE))
+    dom.render(canvas)
+    return np.ascontiguousarray(surface.makeImageSnapshot().toarray()[:, :, 3])
+
+
+def brand_icon(svg_bytes, box=None):
+    """Simple Icons SVG -> 432 px RGBA, FG on transparent: the glyph's ink bbox fitted into the box
+    (default brand_box()) and centred in the tile."""
     import skia
     from PIL import Image
     svg = re.sub(rb"<svg ", b'<svg fill="#000" ', svg_bytes, count=1)
-    stream = skia.MemoryStream(svg, len(svg))
-    dom = skia.SVGDOM.MakeFromStream(stream)
+    dom = skia.SVGDOM.MakeFromStream(skia.MemoryStream(svg, len(svg)))
     if dom is None:
         return None
-    off, inner = _padded_box()
-    surface = skia.Surface(SIZE, SIZE)
-    canvas = surface.getCanvas()
-    canvas.translate(off, off)
-    dom.setContainerSize(skia.Size(inner, inner))
-    dom.render(canvas)
-    arr = surface.makeImageSnapshot().toarray()
-    return glyph_from_alpha(Image.fromarray(np.ascontiguousarray(arr[:, :, 3])))
+    a = _render_svg(dom)
+    bb = ink_bbox(a)
+    if bb is not None:
+        bw, bh = brand_box(box)
+        s = min(bw / (bb[2] - bb[0]), bh / (bb[3] - bb[1]))
+        a = _render_svg(dom, SIZE / 2.0 - s * (bb[0] + bb[2]) / 2.0, SIZE / 2.0 - s * (bb[1] + bb[3]) / 2.0, s)
+    return glyph_from_alpha(Image.fromarray(a))
 
 
-def brand_fill(img):
-    """Fill ratio of a brand glyph inside its padded box (the tile-wide ratio can never exceed ~0.52)."""
-    off, inner = _padded_box()
-    return fill_ratio(np.asarray(img.getchannel("A"))[off:off + inner, off:off + inner])
+def brand_fill(img, box=None):
+    """Fill ratio of a brand glyph inside its padded box, not the whole tile (where it could never
+    reach 0.55): the centred square of side max(box), as the reviewed M4 check measured it, so a glyph
+    fitted tightly into a non-square box is not judged against its own bbox."""
+    side = max(brand_box(box))
+    ys, xs = _box_region((side, side))
+    return fill_ratio(np.asarray(img.getchannel("A"))[ys, xs])
 
 
-def brand_ok(img):
+def row_span(dots):
+    """Number of lattice rows from the top dot to the bottom one (0 without dots)."""
+    if not dots:
+        return 0
+    rows = [int(round((cy - SIZE / 2.0) / (P * math.sqrt(3) / 2))) for _, cy, _ in dots]
+    return max(rows) - min(rows) + 1
+
+
+def wordmark(alpha):
+    """True for an elongated glyph (ink bbox aspect > WORDMARK_ASPECT either way) or one whose stipple
+    spans fewer than MIN_ROWS dot rows: neither reads as dots."""
+    bb = ink_bbox(alpha)
+    if bb is None:
+        return True
+    w, h = bb[2] - bb[0], bb[3] - bb[1]
+    if max(w, h) > WORDMARK_ASPECT * min(w, h):
+        return True
+    return row_span(stipple_dots(alpha)) < MIN_ROWS
+
+
+def brand_problem(img, box=None):
+    """Why a rendered brand glyph is rejected (blob, empty, wordmark), or None if it is usable."""
     if img is None:
-        return False
-    f = brand_fill(img)
-    return not too_filled(f) and not too_empty(f)
+        return "unreadable"
+    f = brand_fill(img, box)
+    if too_filled(f):
+        return "blob %.2f" % f
+    if too_empty(f):
+        return "empty"
+    if wordmark(np.asarray(img.getchannel("A"))):
+        return "wordmark"
+    return None
+
+
+def brand_ok(img, box=None):
+    return brand_problem(img, box) is None
+
+
+def dot_parts(dots):
+    """Connected clusters of dots (neighbours on the lattice are P apart)."""
+    n = len(dots)
+    if not n:
+        return 0
+    xy = np.array([(x, y) for x, y, _ in dots])
+    near = np.hypot(xy[:, None, 0] - xy[None, :, 0], xy[:, None, 1] - xy[None, :, 1]) <= P * 1.05
+    seen = np.zeros(n, bool)
+    parts = 0
+    for i in range(n):
+        if seen[i]:
+            continue
+        parts += 1
+        seen[i] = True
+        stack = [i]
+        while stack:
+            k = stack.pop()
+            new = np.flatnonzero(near[k] & ~seen)
+            seen[new] = True
+            stack.extend(new.tolist())
+    return parts
+
+
+def edge_share(shape):
+    """Share of a mask's ink (alpha >= 128) within EDGE_BAND px of the tile border."""
+    ink = np.asarray(shape) >= 128
+    total = int(ink.sum())
+    if not total:
+        return 0.0
+    inner = ink[EDGE_BAND:-EDGE_BAND, EDGE_BAND:-EDGE_BAND].sum()
+    return float(total - inner) / total
+
+
+def shape_problem(shape):
+    """--auto-shapes gate for an auto row's own mask: why it is not a clean glyph (fill, edge ink,
+    featureless solid, too many dot clusters, wordmark), or None."""
+    f = fill_ratio(shape)
+    if too_filled(f) or too_empty(f):
+        return "fill %.2f" % f
+    e = edge_share(shape)
+    if e > MAX_EDGE:
+        return "edge %.2f" % e
+    x0, y0, x1, y1 = ink_bbox(shape)
+    solid = fill_ratio(np.asarray(shape)[y0:y1, x0:x1])
+    if solid > MAX_SOLID:
+        return "solid %.2f" % solid
+    parts = dot_parts(stipple_dots(shape))
+    if parts > MAX_PARTS:
+        return "%d parts" % parts
+    if wordmark(shape):
+        return "wordmark"
+    return None
 
 
 def glyph_from_alpha(alpha):
@@ -297,27 +446,35 @@ def glyph_from_alpha(alpha):
     return img
 
 
-def letter_mask(letter):
-    """Inter Bold capital of the label's first letter (or digit; '?' if none): LETTER_H of the tile
-    tall, centred. uint8 alpha, SIZE x SIZE."""
+def letter_mask(letter, box=None):
+    """Inter Bold capital of the label's first letter (or digit; '?' if none), its rendered ink fitted
+    into the box (default letter_box()) and centred. uint8 alpha, SIZE x SIZE."""
     from PIL import Image, ImageDraw, ImageFont
     ch = unicodedata.normalize("NFKD", letter or "?")
     ch = next((c for c in ch if c.isascii() and c.isalnum()), "?").upper()
+    bw, bh = letter_box(box)
 
-    def bold(size):
+    def ink(size):
+        """The font and the ink bbox of ch drawn at size, relative to the drawing origin."""
         font = ImageFont.truetype(FONT, size)
         font.set_variation_by_name("Bold")
-        return font
+        o = SIZE // 2
+        m = Image.new("L", (2 * SIZE, 2 * SIZE), 0)
+        ImageDraw.Draw(m).text((o, o), ch, fill=255, font=font)
+        x0, y0, x1, y1 = ink_bbox(np.asarray(m)) or (o, o, o + 1, o + 1)
+        return font, (x0 - o, y0 - o, x1 - o, y1 - o)
 
-    target = SIZE * LETTER_H
-    size = 300
-    for _ in range(2):
-        l, t, r, b = bold(size).getbbox(ch)
-        size = max(8, round(size * target / max(1, b - t)))
-    font = bold(size)
-    l, t, r, b = font.getbbox(ch)
+    size = 200
+    for _ in range(4):
+        _, (x0, y0, x1, y1) = ink(size)
+        fit = max(8, int(size * min(bw / (x1 - x0), bh / (y1 - y0))))  # round down: stay inside the box
+        if fit == size:
+            break
+        size = fit
+    font, (x0, y0, x1, y1) = ink(size)
     mask = Image.new("L", (SIZE, SIZE), 0)
-    ImageDraw.Draw(mask).text((SIZE / 2 - (l + r) / 2, SIZE / 2 - (t + b) / 2), ch, fill=255, font=font)
+    origin = (int(round(SIZE / 2.0 - (x0 + x1) / 2.0)), int(round(SIZE / 2.0 - (y0 + y1) / 2.0)))
+    ImageDraw.Draw(mask).text(origin, ch, fill=255, font=font)
     return np.array(mask, np.uint8)
 
 
@@ -346,16 +503,20 @@ def load_tone(path):
 # ---------------------------------------------------------------- stipple
 
 def hex_grid(size=SIZE, pitch=P):
-    """Dot centres [(x, y)]: rows pitch*sqrt(3)/2 apart and centred vertically; even rows at P/2 + i P,
-    odd rows shifted by P/2, so all six neighbours are P away. Every centre is >= P/2 from the edge."""
+    """Dot centres [(x, y)]: 33 rows pitch*sqrt(3)/2 apart, the middle one on y = size/2. Rows alternate
+    between a dot on x = size/2 and dots P/2 either side of it, so all six neighbours are P away, the
+    tile centre is a dot, and the lattice is mirror-symmetric top/bottom and left/right (a symmetric
+    glyph stipples the same on both sides). Every centre is >= P/2 from the edge."""
     row = pitch * math.sqrt(3) / 2
-    rows = int((size - pitch) / row + 1e-9) + 1
-    y0 = (size - (rows - 1) * row) / 2.0
+    c = size / 2.0
+    half = int((c - pitch / 2.0) / row + 1e-9)
+    lo, hi = pitch / 2.0, size - pitch / 2.0
     pts = []
-    for j in range(rows):
-        x0 = pitch / 2.0 * (2 if j % 2 else 1)
-        n = int((size - pitch / 2.0 - x0) / pitch + 1e-9) + 1
-        pts.extend((x0 + i * pitch, y0 + j * row) for i in range(n))
+    for j in range(-half, half + 1):
+        x0 = c + (pitch / 2.0 if j % 2 else 0.0)
+        i0 = int(math.ceil((lo - x0) / pitch - 1e-9))
+        i1 = int(math.floor((hi - x0) / pitch + 1e-9))
+        pts.extend((x0 + i * pitch, c + j * row) for i in range(i0, i1 + 1))
     return pts
 
 
@@ -459,12 +620,20 @@ def stipple(shape, lum=None):
 
 # ---------------------------------------------------------------- pipeline
 
-def final_icon(in_dir, name, pkg, kind, label, shown, pkg_dir, titles, log):
-    """Stippled final icon and its source (mono | brand | initial) for one index row."""
+def keep_mono(kind, ratio):
+    return kind == "mono" and not too_filled(ratio) and not too_empty(ratio)
+
+
+def final_icon(in_dir, name, pkg, kind, label, shown, pkg_dir, titles, log, box=None, auto_shapes=False):
+    """Stippled final icon and its source for one index row: mono | brand | auto | initial.
+
+    Mono rows keep their shape. Other rows try a brand glyph (blob/empty/wordmark gate), then with
+    auto_shapes and an auto row its own mask (shape_problem gate), then an initial. Brand glyphs and
+    initials are fitted into box, the run's typical mono glyph size (None: the PAD/LETTER_H fallback)."""
     shape = load_shape(os.path.join(in_dir, name + ".png"))
     tone = load_tone(os.path.join(in_dir, name + ".tone.png"))
     ratio = fill_ratio(shape)
-    if kind == "mono" and not too_filled(ratio) and not too_empty(ratio):
+    if keep_mono(kind, ratio):
         return stipple(shape, tone), "mono"
     why = "auto" if kind != "mono" else "fill %.2f" % ratio
     mean = tone.mean() if tone is not None else None
@@ -475,18 +644,25 @@ def final_icon(in_dir, name, pkg, kind, label, shown, pkg_dir, titles, log):
         svg = os.path.join(pkg_dir, "icons", slug + ".svg")
         if os.path.isfile(svg):
             with open(svg, "rb") as f:
-                cand = brand_icon(f.read())
-            if brand_ok(cand):
+                cand = brand_icon(f.read(), box)
+            problem = brand_problem(cand, box)
+            if problem is None:
                 out, source = stipple(np.asarray(cand.getchannel("A")), level), "brand"
             else:
-                log("  %s: brand %s rejected (blob/empty)" % (pkg, slug))
+                log("  %s: brand %s rejected (%s)" % (pkg, slug, problem))
+    if out is None and auto_shapes and kind == "auto":
+        problem = shape_problem(shape)
+        if problem is None:
+            out, source = stipple(shape, tone), "auto"
+        else:
+            log("  %s: own shape rejected (%s)" % (pkg, problem))
     if out is None:
-        out, source = stipple(letter_mask(shown[:1]), level), "initial"
+        out, source = stipple(letter_mask(shown[:1], box), level), "initial"
     log("%-45s %-10s -> %s" % (pkg, why, source))
     return out, source
 
 
-def fix(in_dir, out_dir, overrides_dir=None, log=print):
+def fix(in_dir, out_dir, overrides_dir=None, log=print, auto_shapes=False):
     pkg_dir = ensure_simple_icons()
     check_table(pkg_dir)
     titles = load_titles(pkg_dir)
@@ -498,17 +674,31 @@ def fix(in_dir, out_dir, overrides_dir=None, log=print):
         if f not in keep and os.path.isfile(fp):
             os.remove(fp)
     shutil.copyfile(os.path.join(in_dir, "index.tsv"), os.path.join(out_dir, "index.tsv"))
+
+    def override(name):
+        ov = os.path.join(overrides_dir, name + ".png") if overrides_dir else None
+        return ov if ov and os.path.isfile(ov) else None
+
+    def kept_mono_shapes():
+        for _, name, kind, _ in rows:
+            if kind == "mono" and not override(name):
+                shape = load_shape(os.path.join(in_dir, name + ".png"))
+                if keep_mono(kind, fill_ratio(shape)):
+                    yield shape
+
+    box = glyph_box(kept_mono_shapes())
+    log("glyph box %s" % ("%.0f x %.0f px (median of mono glyphs)" % box if box else "fallback (few mono rows)"))
     sheet = []
     for comp, name, kind, label in rows:
         pkg = comp.split("/")[0]
         shown = label or label_from_package(pkg)
         dst = os.path.join(out_dir, name + ".png")
-        ov = os.path.join(overrides_dir, name + ".png") if overrides_dir else None
-        if ov and os.path.isfile(ov):
+        ov = override(name)
+        if ov:
             shutil.copyfile(ov, dst)
             source = "override"
         else:
-            out, source = final_icon(in_dir, name, pkg, kind, label, shown, pkg_dir, titles, log)
+            out, source = final_icon(in_dir, name, pkg, kind, label, shown, pkg_dir, titles, log, box, auto_shapes)
             out.save(dst)
         sheet.append((dst, shown, source))
     contact_sheet(sheet, os.path.join(out_dir, "contact.png"))
@@ -519,7 +709,7 @@ def fix(in_dir, out_dir, overrides_dir=None, log=print):
     return counts
 
 
-MARK = {"mono": "M", "brand": "B", "initial": "I", "override": "O"}
+MARK = {"mono": "M", "brand": "B", "auto": "A", "initial": "I", "override": "O"}
 
 
 def contact_sheet(items, path, width=2400, cols=16):
@@ -570,6 +760,17 @@ def _bootstrap(err=None):
     os.execv(py, [py, os.path.abspath(__file__)] + sys.argv[1:])
 
 
+def parse_args(argv):
+    import argparse
+    p = argparse.ArgumentParser(prog="iconfix.py", description="Stipple the phone's icon export into the icon pack.")
+    p.add_argument("in_dir", nargs="?", default=os.path.join(ROOT, "build", "icons"))
+    p.add_argument("out_dir", nargs="?", default=os.path.join(ROOT, "build", "icons-final"))
+    p.add_argument("--auto-shapes", action="store_true",
+                   help="stipple an auto row's own mask when it passes the cleanliness gate "
+                        "(brand -> own shape -> initial); contact sheet marker A")
+    return p.parse_args(argv[1:])
+
+
 def main(argv):
     try:
         import numpy  # noqa: F401
@@ -577,10 +778,9 @@ def main(argv):
         import skia  # noqa: F401
     except ImportError as e:
         _bootstrap(e)
-    in_dir = argv[1] if len(argv) > 1 else os.path.join(ROOT, "build", "icons")
-    out_dir = argv[2] if len(argv) > 2 else os.path.join(ROOT, "build", "icons-final")
+    args = parse_args(argv)
     ov = os.path.join(ROOT, "iconpack", "overrides")
-    fix(in_dir, out_dir, ov if os.path.isdir(ov) else None)
+    fix(args.in_dir, args.out_dir, ov if os.path.isdir(ov) else None, auto_shapes=args.auto_shapes)
 
 
 if __name__ == "__main__":

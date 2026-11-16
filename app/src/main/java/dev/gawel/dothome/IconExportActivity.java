@@ -80,7 +80,8 @@ public class IconExportActivity extends Activity {
                     try {
                         ResolveInfo ri = apps.get(i);
                         Drawable icon = unthemedIcon(pm, ri);
-                        if (icon == null) {
+                        boolean themed = icon == null;
+                        if (themed) {
                             icon = ri.loadIcon(pm);
                             fallback++;
                         }
@@ -103,7 +104,9 @@ public class IconExportActivity extends Activity {
                             shape = MonoIcon.fromFullIcon(MonoIcon.overBlack(colour), SIZE, SIZE);
                         }
                         writePng(new File(dir, name + ".png"), MonoIcon.flatten(shape, DotStyle.FG));
-                        writePng(new File(dir, name + ".tone.png"), MonoIcon.tone(colour));
+                        // A themed icon is our own pack: its tone would feed our dots back in. Without
+                        // a tone layer iconfix uses its default level.
+                        if (!themed) writePng(new File(dir, name + ".tone.png"), MonoIcon.tone(colour));
                         CharSequence lab = ri.loadLabel(pm);
                         String label = (lab == null ? "" : lab.toString()).replaceAll("[\\t\\r\\n]+", " ").trim();
                         index.write(components.get(i) + "\t" + name + "\t" + (monoLayer != null ? "mono" : "auto")
