@@ -11,6 +11,7 @@ import android.provider.AlarmClock;
 import android.util.Log;
 import android.widget.RemoteViews;
 
+import dev.gawel.dothome.core.CardShape;
 import dev.gawel.dothome.core.ClockLayout;
 import dev.gawel.dothome.core.Lattice;
 import dev.gawel.dothome.core.NowPlaying;
@@ -65,10 +66,12 @@ final class WidgetUpdater {
         int clockW = Math.max(1, Math.round(clockDp * eff));
         int weatherW = Math.max(1, Math.round(wPx) - clockW);
         int h = Math.max(1, Math.round(hPx));
+        float radiusDp = shapeRadiusDp(o, wDp, hDp);
 
         RemoteViews rv = new RemoteViews(ctx.getPackageName(), R.layout.widget_clock);
-        Bitmap clock = safe(h, clockW, () -> WidgetArt.clock(ctx, clockW, h, now, step, eff, 0, clockW + weatherW));
-        Bitmap weather = safe(h, weatherW, () -> WidgetArt.weather(ctx, weatherW, h, wx, now, eff, clockW, clockW + weatherW));
+        Bitmap clock = safe(h, clockW, () -> WidgetArt.clock(ctx, clockW, h, now, step, eff, 0, clockW + weatherW, radiusDp));
+        Bitmap weather = safe(h, weatherW, () -> WidgetArt.weather(ctx, weatherW, h, wx, now, eff, clockW, clockW + weatherW,
+            radiusDp));
         if (android.os.Build.VERSION.SDK_INT >= 31) {
             rv.setViewLayoutWidth(R.id.clock_img, clockDp, android.util.TypedValue.COMPLEX_UNIT_DIP);
         } // before 31 the layout's fixed 216 dp stands
@@ -98,7 +101,8 @@ final class WidgetUpdater {
         float shrink = Math.min(1f, MAX_SIDE_PX / Math.max(wPx, hPx));
         int w = Math.max(1, Math.round(wPx * shrink)), h = Math.max(1, Math.round(hPx * shrink));
         float eff = density * shrink;
-        Bitmap art = safe(h, w, () -> WidgetArt.music(ctx, w, h, np, eff));
+        float radiusDp = shapeRadiusDp(o, wDp, hDp);
+        Bitmap art = safe(h, w, () -> WidgetArt.music(ctx, w, h, np, eff, radiusDp));
         rv.setViewVisibility(R.id.music_root, android.view.View.VISIBLE);
         rv.setImageViewBitmap(R.id.music_img, art);
         rv.setImageViewResource(R.id.music_play, np.playing ? R.drawable.ic_pause : R.drawable.ic_play);
@@ -106,6 +110,19 @@ final class WidgetUpdater {
         rv.setOnClickPendingIntent(R.id.music_play, commandIntent(ctx, 11, MediaCommandReceiver.PLAY_PAUSE));
         rv.setOnClickPendingIntent(R.id.music_next, commandIntent(ctx, 12, MediaCommandReceiver.NEXT));
         return rv;
+    }
+
+    /**
+     * The launcher's clip radius for this widget in dp: One UI's "semShapeRadius" option (a float), 24 dp when it
+     * is absent. See {@link CardShape}.
+     */
+    static float shapeRadiusDp(Bundle o, float wDp, float hDp) {
+        float raw = Float.NaN;
+        if (o != null && o.containsKey(CardShape.OPTION_KEY)) {
+            raw = o.getFloat(CardShape.OPTION_KEY, Float.NaN);
+            if (Float.isNaN(raw)) raw = (float) o.getDouble(CardShape.OPTION_KEY, Double.NaN); // stored as a double
+        }
+        return CardShape.radiusDp(raw, wDp, hDp);
     }
 
     private static PendingIntent commandIntent(Context ctx, int code, String action) {

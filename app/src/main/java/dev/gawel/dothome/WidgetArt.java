@@ -19,6 +19,7 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.Locale;
 
+import dev.gawel.dothome.core.CardShape;
 import dev.gawel.dothome.core.DotMatrixFont;
 import dev.gawel.dothome.core.DotStyle;
 import dev.gawel.dothome.core.Halftone;
@@ -46,7 +47,6 @@ final class WidgetArt {
     static final float GLASS_RIM_MAX = 0.40f, GLASS_RIM_MIN = 0.10f;
     static final float GLASS_RIM_X = 0.5f, GLASS_RIM_Y = 0.8f;
     static final float GLASS_RIM_DP = 1.2f;
-    static final float GLASS_RADIUS_DP = 24f;
 
     private WidgetArt() {}
 
@@ -81,10 +81,11 @@ final class WidgetArt {
         return p;
     }
 
-    static Bitmap clock(Context ctx, int wPx, int hPx, long nowMs, Lattice.Step step, float dens, int xOff, int totalW) {
+    static Bitmap clock(Context ctx, int wPx, int hPx, long nowMs, Lattice.Step step, float dens, int xOff, int totalW,
+                        float radiusDp) {
         Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
-        backdrop(ctx, c, bmp.getHeight(), dens, xOff, totalW);
+        backdrop(ctx, c, bmp.getHeight(), dens, xOff, totalW, radiusDp);
 
         Calendar cal = Calendar.getInstance();
         cal.setTimeInMillis(nowMs);
@@ -116,10 +117,11 @@ final class WidgetArt {
         return bmp;
     }
 
-    static Bitmap weather(Context ctx, int wPx, int hPx, Weather w, long nowMs, float dens, int xOff, int totalW) {
+    static Bitmap weather(Context ctx, int wPx, int hPx, Weather w, long nowMs, float dens, int xOff, int totalW,
+                          float radiusDp) {
         Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
-        backdrop(ctx, c, bmp.getHeight(), dens, xOff, totalW);
+        backdrop(ctx, c, bmp.getHeight(), dens, xOff, totalW, radiusDp);
 
         String temp = w == null ? "\u2212\u2212\u00B0" : tempText(Math.round(w.tempF));
         byte[] cells = DotMatrixFont.cells(temp);
@@ -222,12 +224,12 @@ final class WidgetArt {
     /**
      * The music widget body: 64 dp halftone art square (S4, L100 dots, 12 dp corners), title (Inter 15, L100),
      * artist (Inter 13, L65) and an S4 dot-row progress bar. The right 132 dp is left clear for the transport
-     * buttons. dens is the effective density, so every size is true dp.
+     * buttons. dens is the effective density, so every size is true dp; radiusDp is the card's corner radius.
      */
-    static Bitmap music(Context ctx, int wPx, int hPx, NowPlaying np, float dens) {
+    static Bitmap music(Context ctx, int wPx, int hPx, NowPlaying np, float dens, float radiusDp) {
         Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
-        backdrop(ctx, c, bmp.getHeight(), dens, 0, bmp.getWidth());
+        backdrop(ctx, c, bmp.getHeight(), dens, 0, bmp.getWidth(), radiusDp);
         float s4 = Lattice.stepPx(Lattice.Step.S4, dens);
         float artS = 64f * dens;
         float artX = 16f * dens, artY = Lattice.snap((hPx - artS) / 2f, dens);
@@ -274,21 +276,24 @@ final class WidgetArt {
     /**
      * Clear glass card for a bitmap that is the part of a totalW-wide widget starting at xOff: the whole card is
      * drawn in widget coordinates and shifted, so a pair of halves share one tint, sheen and rim gradient, with
-     * no edge at the seam.
+     * no edge at the seam. radiusDp is the launcher's clip radius ({@link CardShape}).
      */
-    private static void backdrop(Context ctx, Canvas c, int hPx, float dens, int xOff, int totalW) {
+    private static void backdrop(Context ctx, Canvas c, int hPx, float dens, int xOff, int totalW, float radiusDp) {
         if (!backdropOn(ctx)) return;
         c.save();
         c.translate(-xOff, 0);
-        float rad = GLASS_RADIUS_DP * dens;
-        c.drawPath(panel(0, 0, totalW, hPx, rad), fill(GLASS_FILL));
-        glassFinish(c, totalW, hPx, dens);
+        c.drawPath(panel(0, 0, totalW, hPx, radiusDp * dens), fill(GLASS_FILL));
+        glassFinish(c, totalW, hPx, dens, radiusDp);
         c.restore();
     }
 
-    /** Diagonal sheen (clipped to the rounded card) and gradient rim over a w x h card at the origin. */
-    private static void glassFinish(Canvas c, float w, float h, float dens) {
-        float rad = GLASS_RADIUS_DP * dens;
+    /**
+     * Diagonal sheen (clipped to the rounded card) and gradient rim over a w x h card at the origin, both with the
+     * launcher's clip radius. The rim's centre line is inset by half the stroke with a concentric radius, so the
+     * whole stroke lies inside the clip and the corners are not cut off.
+     */
+    private static void glassFinish(Canvas c, float w, float h, float dens, float radiusDp) {
+        float rad = radiusDp * dens;
         // sheen: alpha = 0.12 * (1 - s)^2 along s = x*0.6/W + y*0.9/H, sampled at five stops
         float ax = GLASS_SHEEN_X / w, ay = GLASS_SHEEN_Y / h, n = ax * ax + ay * ay;
         int[] sc = new int[5];
@@ -310,7 +315,8 @@ final class WidgetArt {
         rim.setShader(new LinearGradient(0, 0, rx / rn, ry / rn,
             Color.argb(Math.round(GLASS_RIM_MAX * 255f), 255, 255, 255), Color.argb(Math.round(GLASS_RIM_MIN * 255f), 255, 255, 255),
             Shader.TileMode.CLAMP));
-        c.drawPath(panel(sw / 2f, sw / 2f, w - sw / 2f, h - sw / 2f, Math.max(0f, rad - sw / 2f)), rim);
+        float in = CardShape.rimInset(sw);
+        c.drawPath(panel(in, in, w - in, h - in, Math.max(0f, rad - in)), rim);
     }
 
     private static Path panel(float l, float t, float r, float b, float rad) {
@@ -321,18 +327,18 @@ final class WidgetArt {
 
     /**
      * Glass finish for an opaque map bitmap when the switch is on: transparent rounded corners, then the same
-     * diagonal sheen and gradient rim as the cards. No fill over the map.
+     * diagonal sheen and gradient rim as the cards, all with the launcher's clip radius. No fill over the map.
      */
-    static void glassMap(Context ctx, Bitmap bmp, float dens) {
+    static void glassMap(Context ctx, Bitmap bmp, float dens, float radiusDp) {
         if (!backdropOn(ctx)) return;
         Canvas cv = new Canvas(bmp);
         int w = bmp.getWidth(), h = bmp.getHeight();
-        Path outside = panel(0, 0, w, h, GLASS_RADIUS_DP * dens);
+        Path outside = panel(0, 0, w, h, radiusDp * dens);
         outside.setFillType(Path.FillType.INVERSE_WINDING);
         Paint clr = new Paint(Paint.ANTI_ALIAS_FLAG);
         clr.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
         cv.drawPath(outside, clr);
-        glassFinish(cv, w, h, dens);
+        glassFinish(cv, w, h, dens, radiusDp);
     }
 
     /** " 2h ago"-style text once the data is older than 90 minutes; null while fresh. Hours, then days. */
