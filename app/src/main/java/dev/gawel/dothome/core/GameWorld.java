@@ -40,7 +40,8 @@ public final class GameWorld {
     private boolean autopilot = true;
     private float wanderX, wanderY, wanderT;
     private Shockwave wave;
-    private float lastShock = Float.NEGATIVE_INFINITY;
+    private float shockCool;
+    private float bandLo, bandHi;
 
     public GameWorld(Rng rng) {
         this.rng = rng;
@@ -50,16 +51,21 @@ public final class GameWorld {
     public void setTilt(float tx, float ty) { tiltX = clamp(tx, -1f, 1f); tiltY = clamp(ty, -1f, 1f); }
     public void setAutopilot(boolean on) { autopilot = on; }
 
-    /** Starts a shockwave at the ship; false while the cooldown (game time) is running. */
+    /** Starts a shockwave at the ship; false during the intro or while the cooldown is running. */
     public boolean shockwave() {
-        if (cfg == null || time - lastShock < cfg.shockCooldown) return false;
-        lastShock = time;
+        if (cfg == null || time < cfg.introSeconds || shockCool > 0) return false;
+        shockCool = cfg.shockCooldown;
         Shockwave sw = new Shockwave();
         sw.x = ship.x;
         sw.y = ship.y;
         sw.maxRadius = hypot(w, h);
         wave = sw;
         return true;
+    }
+
+    /** Counts real time spent while the wallpaper was hidden toward the shockwave cooldown. */
+    public void elapseHidden(float secs) {
+        if (secs > 0 && shockCool > 0) shockCool = Math.max(0f, shockCool - secs);
     }
 
     /** The active shockwave, or null. */
@@ -85,6 +91,7 @@ public final class GameWorld {
         if (old == null) {
             w = nw;
             h = nh;
+            computeWanderBand();
             ship.x = w / 2;
             ship.y = h * 0.54f;
             ship.angle = (float) (-Math.PI / 2);
@@ -107,11 +114,38 @@ public final class GameWorld {
         for (Particle p : particles) { p.x *= sx; p.y *= sy; }
         for (Ring g : rings) { g.x *= sx; g.y *= sy; }
         for (Star s : stars) { s.x *= sx; s.y *= sy; }
+        computeWanderBand();
         wanderX *= sx;
-        wanderY *= sy;
+        wanderY = clamp(wanderY * sy, bandLo, bandHi);
         if (wave != null) { wave.x *= sx; wave.y *= sy; wave.radius *= kr; wave.maxRadius = hypot(w, h); }
         retargetStars();
     }
+
+    /** Wander band: the largest vertical gap between the widget zones, inset by 15k; falls back to 20-80% of the height. */
+    private void computeWanderBand() {
+        java.util.List<float[]> zs = new ArrayList<float[]>(Zones.defaults(w, h));
+        java.util.Collections.sort(zs, new java.util.Comparator<float[]>() {
+            @Override public int compare(float[] a, float[] b) { return Float.compare(a[1], b[1]); }
+        });
+        float cursor = 0, bestLo = 0, bestHi = 0;
+        for (float[] z : zs) {
+            if (z[1] - cursor > bestHi - bestLo) { bestLo = cursor; bestHi = z[1]; }
+            cursor = Math.max(cursor, z[1] + z[3]);
+        }
+        if (h - cursor > bestHi - bestLo) { bestLo = cursor; bestHi = h; }
+        float inset = 15f * cfg.k;
+        bandLo = bestLo + inset;
+        bandHi = bestHi - inset;
+        if (bandHi - bandLo < 20f * cfg.k) { bandLo = 0.2f * h; bandHi = 0.8f * h; }
+    }
+
+    /** {lo, hi} y range of wander targets (tests). */
+    float[] wanderBand() { return new float[] {bandLo, bandHi}; }
+
+    float wanderTargetY() { return wanderY; }
+
+    /** Pins the wander target (tests). */
+    void setWanderTargetForTest(float x, float y) { wanderX = x; wanderY = y; wanderT = 1e9f; }
 
     /** Adds or trims stars so the field matches the star count for the current size. */
     private void retargetStars() {
@@ -162,6 +196,7 @@ public final class GameWorld {
         if (dt > 0.05f) dt = 0.05f;
         if (dt < 0) dt = 0;
         time += dt;
+        if (shockCool > 0) shockCool -= dt;
         boolean live = time > cfg.introSeconds;
         Ship s = ship;
         if (live && autopilot) steer(dt);
@@ -257,7 +292,7 @@ public final class GameWorld {
                 again = false;
                 for (int i = 0; i < rocks.size(); i++) {
                     Rock r = rocks.get(i);
-                    if (hypot(r.x - wave.x, r.y - wave.y) < wave.radius) { kill(i); again = true; break; }
+                    if (hypot(r.x - wave.x, r.y - wave.y) - r.r < wave.radius) { kill(i); again = true; break; }
                 }
             }
             if (wave.t >= cfg.shockDuration) wave = null;
@@ -291,7 +326,7 @@ public final class GameWorld {
         wanderT -= dt;
         if (wanderT <= 0) {
             wanderX = w * (float) rng.range(0.2, 0.8);
-            wanderY = h * (float) rng.range(0.2, 0.8);
+            wanderY = bandLo + (bandHi - bandLo) * (float) rng.next();
             wanderT = (float) rng.range(cfg.autopilotWanderMin, cfg.autopilotWanderMax);
         }
         float dx = wanderX - s.x, dy = wanderY - s.y;

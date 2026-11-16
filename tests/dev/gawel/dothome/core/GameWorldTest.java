@@ -233,8 +233,11 @@ public final class GameWorldTest {
             stepClear(g, 1.3f);
             GameWorld.Ship s = g.ship();
             GameWorld.Rock keep = g.addRock(3, s.x, s.y - 200, 0, 40);
+            // pin the wander target on the far side of the rock so only avoidance keeps the ship clear
+            g.setWanderTargetForTest(s.x, s.y - 280);
             for (int i = 0; i < 313; i++) {
                 for (int j = g.rocks().size() - 1; j >= 0; j--) if (g.rocks().get(j) != keep) g.rocks().remove(j);
+                g.setWanderTargetForTest(310, 100);
                 g.step(0.016f);
             }
             if (c.hits == 0) clean++;
@@ -281,10 +284,16 @@ public final class GameWorldTest {
         T.check(with > without, "vy with gravity " + with + " vs " + without);
     }
 
-    public static void testShockwaveClearsRocksAndCools() {
-        Count c = new Count();
+    private static GameWorld pastIntro(Count c) {
         GameWorld g = world(c);
         g.setAutopilot(false);
+        for (int i = 0; i < 80; i++) g.step(0.016f);
+        return g;
+    }
+
+    public static void testShockwaveClearsRocksAndCools() {
+        Count c = new Count();
+        GameWorld g = pastIntro(c);
         for (int i = 0; i < 5; i++) g.addRock(3, 100 + i * 100, 150 + i * 90, 0, 0);
         T.eq(true, g.shockwave(), "first shockwave");
         T.check(g.wave() != null, "wave active");
@@ -293,20 +302,80 @@ public final class GameWorldTest {
             boolean onScreen = r.x >= 0 && r.x <= 620 && r.y >= 0 && r.y <= 722;
             T.check(!(r.size == 3 && onScreen), "size-3 rock left at " + r.x + "," + r.y);
         }
-        T.check(c.destroyed >= 5, "destroyed " + c.destroyed);
+        T.check(c.destroyed >= 35, "destroyed " + c.destroyed); // 5 big lineages x (1 + 2 + 4)
         T.check(g.wave() == null, "wave finished");
         T.eq(false, g.shockwave(), "cooldown");
-        float t0 = 0f; // the wave started at game time 0
+        float t0 = g.time() - 1.2f; // the wave started about 1.2 s ago
         while (g.time() < t0 + 59.5f) g.step(0.05f);
         T.eq(false, g.shockwave(), "still cooling");
         while (g.time() < t0 + 62f) g.step(0.05f);
         T.eq(true, g.shockwave(), "ready again");
     }
 
+    public static void testShockCooldownCountsHiddenTime() {
+        GameWorld g = pastIntro(new Count());
+        T.eq(true, g.shockwave(), "first");
+        g.step(0.016f);
+        g.elapseHidden(30f);
+        T.eq(false, g.shockwave(), "30 s hidden is not enough");
+        g.elapseHidden(31f);
+        T.eq(true, g.shockwave(), "ready after 61 s hidden");
+    }
+
+    public static void testNoShockwaveDuringIntro() {
+        GameWorld g = world(new Count());
+        g.setAutopilot(false);
+        T.eq(false, g.shockwave(), "t=0");
+        for (int i = 0; i < 40; i++) g.step(0.016f);
+        T.eq(false, g.shockwave(), "still intro");
+        T.check(g.wave() == null, "no wave");
+        for (int i = 0; i < 40; i++) g.step(0.016f);
+        T.eq(true, g.shockwave(), "after intro");
+    }
+
+    public static void testShockwaveKillsRockWhenRingTouchesItsEdge() {
+        Count c = new Count();
+        GameWorld g = pastIntro(c);
+        float d = g.ship().y - 90;
+        g.addRock(3, g.ship().x, 90, 0, 0);
+        T.eq(true, g.shockwave(), "shockwave");
+        // radius = 1057 * t: the edge (d - 33.5) is reached at about 0.25 s, the centre (d) at about 0.28 s
+        for (int i = 0; i < 16; i++) g.step(0.016f);
+        T.check(g.wave().radius < d, "ring has not reached the centre " + g.wave().radius + " < " + d);
+        T.check(c.destroyed >= 1, "burst when the ring touches the edge, destroyed " + c.destroyed);
+    }
+
+    public static void testWanderTargetsStayInFreeBand() {
+        float[][] cases = {{620, 722, 0.266f, 0.693f}, {330, 810, 0.267f, 0.716f}};
+        for (float[] cs : cases) {
+            GameWorld g = new GameWorld(new Rng(3));
+            g.resize(cs[0], cs[1]);
+            float lo = cs[2] * cs[1], hi = cs[3] * cs[1];
+            float min = 1e9f, max = -1e9f;
+            for (int i = 0; i < 3750; i++) {
+                g.rocks().clear();
+                g.step(0.016f);
+                if (g.time() < 1.3f) continue;
+                float y = g.wanderTargetY();
+                T.check(y >= lo && y <= hi, cs[0] + "x" + cs[1] + " wander y " + y + " outside [" + lo + "," + hi + "]");
+                min = Math.min(min, y);
+                max = Math.max(max, y);
+            }
+            T.check(max - min > 0.3f * (hi - lo), "targets vary: " + min + ".." + max);
+        }
+    }
+
+    public static void testWanderBandFollowsResize() {
+        GameWorld g = new GameWorld(new Rng(3));
+        g.resize(620, 722);
+        g.resize(330, 810);
+        float[] b = g.wanderBand();
+        T.check(b[0] >= 0.267f * 810 && b[1] <= 0.716f * 810 && b[0] < b[1], "cover band " + b[0] + ".." + b[1]);
+    }
+
     public static void testShockwaveReachesCornersAfterResize() {
         Count c = new Count();
-        GameWorld g = world(c);
-        g.setAutopilot(false);
+        GameWorld g = pastIntro(c);
         for (int i = 0; i < 5; i++) g.addRock(3, 100 + i * 100, 150 + i * 90, 0, 0);
         T.eq(true, g.shockwave(), "shockwave");
         g.resize(330, 810);

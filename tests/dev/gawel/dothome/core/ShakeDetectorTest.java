@@ -27,4 +27,13 @@ public final class ShakeDetectorTest {
         T.eq(false, s(d, 1, 450), "gap");
         T.eq(false, s(d, 16, 650), "still blocked");
     }
+
+    public static void testPeaksOutsideWindowDoNotShake() {
+        ShakeDetector d = new ShakeDetector();
+        T.eq(false, s(d, 16, 0), "first");
+        T.eq(false, s(d, 1, 100), "gap");
+        T.eq(false, s(d, 16, 700), "second is past the window");
+        T.eq(false, s(d, 1, 800), "gap");
+        T.eq(true, s(d, 16, 900), "third pairs with the second");
+    }
 }
