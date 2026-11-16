@@ -65,16 +65,7 @@ public final class GameWorld {
             ship.x = w / 2;
             ship.y = h * 0.54f;
             ship.angle = (float) (-Math.PI / 2);
-            int n = Math.round(w * h / 2300f);
-            for (int i = 0; i < n; i++) {
-                Star s = new Star();
-                s.x = (float) rng.next() * w;
-                s.y = (float) rng.next() * h;
-                s.alpha = (float) rng.range(0.05, 0.35);
-                s.phase = (float) rng.range(0, TAU);
-                s.speed = (float) rng.range(0.3, 1.2);
-                stars.add(s);
-            }
+            retargetStars();
             for (int i = 0; i < cfg.rocksTarget; i++) rocks.add(newRock(i % 3 == 2 ? 2 : 3, null, true));
             return;
         }
@@ -93,6 +84,22 @@ public final class GameWorld {
         for (Particle p : particles) { p.x *= sx; p.y *= sy; }
         for (Ring g : rings) { g.x *= sx; g.y *= sy; }
         for (Star s : stars) { s.x *= sx; s.y *= sy; }
+        retargetStars();
+    }
+
+    /** Adds or trims stars so the field matches the star count for the current size. */
+    private void retargetStars() {
+        int n = GameConfig.starCount(w, h);
+        while (stars.size() > n) stars.remove(stars.size() - 1);
+        while (stars.size() < n) {
+            Star s = new Star();
+            s.x = (float) rng.next() * w;
+            s.y = (float) rng.next() * h;
+            s.alpha = (float) rng.range(0.05, 0.35);
+            s.phase = (float) rng.range(0, TAU);
+            s.speed = (float) rng.range(0.3, 1.2);
+            stars.add(s);
+        }
     }
 
     /** Fires a shot toward (x, y); false while the fire cooldown is running. */

@@ -168,4 +168,36 @@ public final class GameWorldTest {
         for (int i = 0; i < 188; i++) g.step(0.016f);
         T.check(c.destroyed >= 1, "destroyed " + c.destroyed);
     }
+
+    private static GameWorld sized(float w, float h) {
+        GameWorld g = new GameWorld(new Rng(1));
+        g.resize(w, h);
+        return g;
+    }
+
+    private static void within10(int expected, int actual, String msg) {
+        T.check(Math.abs(actual - expected) <= expected * 0.10, msg + ": expected ~" + expected + " but was " + actual);
+    }
+
+    public static void testStarCountIsAtMockupDensityOnFold6Surfaces() {
+        within10(Math.round(620f * 722f / 2300f), sized(1856, 2160).stars().size(), "main stars");
+        within10(Math.round(330f * 810f / 2300f), sized(968, 2376).stars().size(), "cover stars");
+    }
+
+    public static void testRockTargetMatchesMockupAspect() {
+        T.eq(GameConfig.forSize(330, 810).rocksTarget, GameConfig.forSize(968, 2376).rocksTarget, "cover rocks");
+        T.check(GameConfig.forSize(968, 2376).rocksTarget <= 5, "cover rocks not 8");
+        T.check(GameConfig.forSize(1856, 2160).rocksTarget >= 6, "main rocks near mockup density");
+        T.eq(GameConfig.forSize(968, 2376).rocksTarget, sized(968, 2376).rocks().size(), "spawned rocks");
+    }
+
+    public static void testResizeRetargetsStars() {
+        GameWorld g = sized(968, 2376);
+        int cover = g.stars().size();
+        g.resize(1856, 2160);
+        T.eq(GameConfig.starCount(1856, 2160), g.stars().size(), "grown to main target");
+        T.check(g.stars().size() > cover, "more stars on main");
+        g.resize(968, 2376);
+        T.eq(cover, g.stars().size(), "trimmed back");
+    }
 }

@@ -15,10 +15,27 @@ public final class GameConfig {
     public final float introSeconds = 1.2f;
     public final float autoFireEvery = 0.45f;
 
+    /**
+     * Device pixels per "mockup unit". The mockup surfaces (620x722 main, 330x810 cover) map to the
+     * Fold6's 1856x2160 / 968x2376 at about 2.95 px per unit, so counts defined per mockup area stay at
+     * mockup density whatever the pixel size.
+     */
+    static final float PX_PER_UNIT = 2.95f;
+
+    /** Surface area in mockup units squared. */
+    static float mockupArea(float w, float h) {
+        return w * h / (PX_PER_UNIT * PX_PER_UNIT);
+    }
+
+    /** Background star count for a surface of the given pixel size (mockup density: about 116-194). */
+    public static int starCount(float w, float h) {
+        return Math.round(mockupArea(w, h) / 2300f);
+    }
+
     private GameConfig(float w, float h) {
         k = (float) Math.sqrt((double) w * h) / 669f;
         rockRadius = 33.5f * k;
-        rocksTarget = Math.max(4, Math.min(8, Math.round(w * h / 64000f)));
+        rocksTarget = Math.max(4, Math.min(8, Math.round(mockupArea(w, h) / 64000f)));
         tiltAccel = 280f * k;
         maxSpeed = 210f * k;
         shotSpeed = 560f * k;
