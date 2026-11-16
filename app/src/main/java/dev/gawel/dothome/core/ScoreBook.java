@@ -2,6 +2,7 @@ package dev.gawel.dothome.core;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Locale;
 import java.util.TimeZone;
 import java.util.function.LongSupplier;
 
@@ -18,7 +19,7 @@ public final class ScoreBook {
     public ScoreBook(KeyValueStore kv, LongSupplier nowMillis, TimeZone tz) {
         this.kv = kv;
         this.nowMillis = nowMillis;
-        this.fmt = new SimpleDateFormat("yyyy-MM-dd");
+        this.fmt = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
         this.fmt.setTimeZone(tz);
         refresh();
     }

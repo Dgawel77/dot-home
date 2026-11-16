@@ -2,6 +2,7 @@ package dev.gawel.dothome.core;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /** Calm zones: rectangles {x, y, w, h} in pixels behind widgets, where the game is dimmed. */
 public final class Zones {
@@ -18,9 +19,27 @@ public final class Zones {
         return scale(isCover(w, h) ? COVER : MAIN, w, h);
     }
 
-    /** Task 7 replaces this with a real MiniJson parse; until then it always yields defaults. */
+    /** Parses {"main":[[x,y,w,h],...],"cover":[...]} (fractions 0..1); falls back to defaults on any problem. */
     public static List<float[]> parse(String json, float w, float h) {
-        return defaults(w, h);
+        try {
+            Map<String, Object> root = MiniJson.obj(MiniJson.parse(json));
+            List<Object> rects = root == null ? null : MiniJson.arr(root.get(isCover(w, h) ? "cover" : "main"));
+            if (rects == null || rects.isEmpty()) return defaults(w, h);
+            List<float[]> out = new ArrayList<>();
+            for (Object r : rects) {
+                List<Object> v = MiniJson.arr(r);
+                if (v == null || v.size() != 4) return defaults(w, h);
+                float[] f = new float[4];
+                for (int k = 0; k < 4; k++) {
+                    if (!(v.get(k) instanceof Double)) return defaults(w, h);
+                    f[k] = ((Double) v.get(k)).floatValue();
+                }
+                out.add(new float[] {f[0] * w, f[1] * h, f[2] * w, f[3] * h});
+            }
+            return out;
+        } catch (IllegalArgumentException e) {
+            return defaults(w, h);
+        }
     }
 
     private static List<float[]> scale(float[][] fr, float w, float h) {

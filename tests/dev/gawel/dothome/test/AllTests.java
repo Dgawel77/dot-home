@@ -10,9 +10,11 @@ public final class AllTests {
     /** Add each new test class here. */
     static final Class<?>[] SUITES = {
         DotMatrixFontTest.class,
+        MiniJsonTest.class,
         RngTest.class,
         ScoreBookTest.class,
         TiltInputTest.class,
+        WeatherTest.class,
         ZonesTest.class,
         dev.gawel.dothome.core.GameWorldTest.class,
     };
