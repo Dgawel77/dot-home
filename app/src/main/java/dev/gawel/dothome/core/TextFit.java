@@ -19,4 +19,11 @@ public final class TextFit {
         }
         return s.substring(0, lo) + ELLIPSIS;
     }
+
+    /** body ellipsized to leave room for suffix, which is always kept whole: fit(body, max - width(suffix)) + suffix. */
+    public static String fitWithSuffix(String body, String suffix, float maxWidth, Measure m) {
+        if (suffix == null || suffix.isEmpty()) return fit(body, maxWidth, m);
+        if (body == null || body.isEmpty()) return suffix;
+        return fit(body, maxWidth - m.width(suffix), m) + suffix;
+    }
 }

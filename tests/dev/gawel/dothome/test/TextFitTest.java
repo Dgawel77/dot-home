@@ -27,4 +27,13 @@ public final class TextFitTest {
     public static void testFitNothingFits() {
         T.eq("…", TextFit.fit("abcdef", 5, TEN_PER_CHAR), "even the ellipsis does not fit");
     }
+
+    public static void testLongPlaceKeepsAge() {
+        String r = TextFit.fitWithSuffix("A very long place name indeed", " · 2h ago", 150, TEN_PER_CHAR);
+        T.check(r.endsWith(" · 2h ago"), "age kept: " + r);
+        T.check(r.length() <= 15, "fits: " + r);
+        T.check(r.contains("…"), "place ellipsized: " + r);
+        T.eq("Chicago · 2h ago", TextFit.fitWithSuffix("Chicago", " · 2h ago", 200, TEN_PER_CHAR), "short unchanged");
+        T.eq("2h ago", TextFit.fitWithSuffix("", "2h ago", 100, TEN_PER_CHAR), "no place");
+    }
 }

@@ -43,7 +43,7 @@ final class WidgetArt {
 
         float padL = 4f * k;
         float pitch = Math.min(11f * k, (wPx - padL - 2f * k) / g.cols);
-        float radius = pitch * 0.3f;
+        float radius = pitch * 3f / 11f; // the mockup's 6 px dot on an 11 px pitch
         float gridH = g.rows * pitch;
 
         Paint date = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -68,7 +68,7 @@ final class WidgetArt {
         }
 
         String text = new SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(new Date(nowMs));
-        text = TextFit.fit(text, wPx - padL - 4f * k, date::measureText);
+        text = TextFit.fit(text, wPx - padL - 8f * k, date::measureText);
         c.drawText(text, padL + 4f * k, top + gridH + gap + dateH * 0.8f, date);
         return bmp;
     }
@@ -89,7 +89,7 @@ final class WidgetArt {
         line.setTextAlign(Paint.Align.RIGHT);
 
         String temp = w == null ? "—°" : Math.round(w.tempF) + "°";
-        String cond, place;
+        String cond, place, age = null;
         String alert = w == null ? null : w.alert;
         if (w == null) {
             cond = "No weather yet";
@@ -97,14 +97,13 @@ final class WidgetArt {
         } else {
             cond = w.condition + " · H " + Math.round(w.highF) + "° L " + Math.round(w.lowF) + "°";
             place = w.place == null ? "" : w.place;
-            String age = ageText(nowMs - w.fetchedAtMs);
-            if (age != null) place = place.isEmpty() ? age : place + " · " + age;
+            age = ageText(nowMs - w.fetchedAtMs);
         }
         boolean hasAlert = alert != null && !alert.isEmpty();
 
         // block: temperature row (50k), gap 7k, condition 14k, gap 7k, place 13k, [gap 7k, alert 13k]
         float tempH = 50f * k, gap = 7f * k;
-        float blockH = tempH + gap + 14f * k + (place.isEmpty() ? 0 : gap + 13f * k) + (hasAlert ? gap + 13f * k : 0);
+        float blockH = tempH + gap + 14f * k + (place.isEmpty() && age == null ? 0 : gap + 13f * k) + (hasAlert ? gap + 13f * k : 0);
         float y = Math.max(0f, (hPx - blockH) / 2f);
 
         float tempW = doto.measureText(temp);
@@ -119,11 +118,12 @@ final class WidgetArt {
         line.setColor(LINE);
         c.drawText(TextFit.fit(cond, maxW, line::measureText), right, y + 14f * k * 0.8f, line);
         y += 14f * k;
-        if (!place.isEmpty()) {
+        if (!place.isEmpty() || age != null) {
             y += gap;
             line.setTextSize(13f * k);
             line.setColor(PLACE);
-            c.drawText(TextFit.fit(place, maxW, line::measureText), right, y + 13f * k * 0.8f, line);
+            String suffix = age == null ? "" : (place.isEmpty() ? age : " · " + age);
+            c.drawText(TextFit.fitWithSuffix(place, suffix, maxW, line::measureText), right, y + 13f * k * 0.8f, line);
             y += 13f * k;
         }
         if (hasAlert) {
