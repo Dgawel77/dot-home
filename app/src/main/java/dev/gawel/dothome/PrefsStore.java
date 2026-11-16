@@ -36,6 +36,10 @@ final class PrefsStore implements KeyValueStore {
         prefs.edit().putString(key, value).apply();
     }
 
+    void remove(String key) {
+        prefs.edit().remove(key).apply();
+    }
+
     /** True when the user picked outline rocks; anything else (including unset) means lattice. */
     boolean outlineRocks() {
         return ROCK_OUTLINE.equals(get(KEY_ROCK_STYLE, ROCK_LATTICE));

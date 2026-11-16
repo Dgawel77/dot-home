@@ -8,6 +8,7 @@
     <string name="widget_music_desc">Now playing</string>
     <string name="widget_radar_label">Dot Radar</string>
     <string name="widget_radar_desc">Weather radar in dots, centred on you</string>
+    <string name="radar_toggle_desc">Switch the radar between local and region</string>
     <string name="music_prev">Previous</string>
     <string name="music_play_pause">Play or pause</string>
     <string name="music_next">Next</string>

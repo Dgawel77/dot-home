@@ -29,6 +29,7 @@ public final class AllTests {
         dev.gawel.dothome.core.DesignValuesTest.class,
         dev.gawel.dothome.core.ClockFitTest.class,
         dev.gawel.dothome.core.WidgetResourcesTest.class,
+        dev.gawel.dothome.core.RadarModeTest.class,
         dev.gawel.dothome.core.CardShapeTest.class,
         dev.gawel.dothome.core.LatticeRasterTest.class,
         dev.gawel.dothome.core.IntroGateTest.class,

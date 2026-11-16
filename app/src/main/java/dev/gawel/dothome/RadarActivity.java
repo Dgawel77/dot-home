@@ -1,6 +1,7 @@
 package dev.gawel.dothome;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.Insets;
@@ -22,14 +23,18 @@ import android.widget.TextView;
 import dev.gawel.dothome.core.DotStyle;
 import dev.gawel.dothome.core.Place;
 
-/** Full-screen radar: the dotted map with the header (title, place, Area/Region pills) and credits laid over it. */
+/**
+ * Full-screen radar: the dotted map with the header (title, place, Local/Region pills) and credits laid over it.
+ * EXTRA_REGION (from the radar widget) opens it in that view; without it the view is local, or stays as it was.
+ */
 public class RadarActivity extends Activity {
     private static final String TAG = "DotHome";
+    static final String EXTRA_REGION = "dev.gawel.dothome.extra.RADAR_REGION";
     static final String CREDITS =
         "Radar: NWS NEXRAD via Iowa Environmental Mesonet · Weather data by Open-Meteo.com · Map: Natural Earth";
 
     private RadarView radar;
-    private TextView subtitle, pillArea, pillRegion, credits;
+    private TextView subtitle, pillLocal, pillRegion, credits;
     private LinearLayout titles, controls;
     private float dp;
     private static final String KEY_REGION = "region", KEY_LAT = "lat", KEY_LON = "lon", KEY_NAME = "name";
@@ -62,7 +67,7 @@ public class RadarActivity extends Activity {
         });
 
         radar = new RadarView(this);
-        radar.setContentDescription("Weather radar map drawn in dots. Tap to switch between Area and Region.");
+        radar.setContentDescription("Weather radar map drawn in dots. Tap to switch between Local and Region.");
         radar.setOnClickListener(v -> setRegion(!radar.isRegion()));
         root.addView(radar, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT));
@@ -80,9 +85,9 @@ public class RadarActivity extends Activity {
             ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.START | Gravity.CENTER_VERTICAL));
 
         controls = new LinearLayout(this);
-        pillArea = pill("Area");
+        pillLocal = pill("Local");
         pillRegion = pill("Region");
-        controls.addView(pillArea);
+        controls.addView(pillLocal);
         controls.addView(pillRegion);
         header.addView(controls, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.END | Gravity.CENTER_VERTICAL));
@@ -103,8 +108,11 @@ public class RadarActivity extends Activity {
         controls.addOnLayoutChangeListener(push);
         credits.addOnLayoutChangeListener(push);
 
-        pillArea.setOnClickListener(v -> setRegion(false));
+        pillLocal.setOnClickListener(v -> setRegion(false));
         pillRegion.setOnClickListener(v -> setRegion(true));
+        if (getIntent() != null && getIntent().hasExtra(EXTRA_REGION)) {
+            radar.setRegion(getIntent().getBooleanExtra(EXTRA_REGION, false)); // the widget's view
+        }
         styleToggle();
 
         if (savedInstanceState != null) {
@@ -164,6 +172,14 @@ public class RadarActivity extends Activity {
         }
     }
 
+    /** singleTask: a widget tap while the radar is open switches it to that widget's view. */
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (intent != null && intent.hasExtra(EXTRA_REGION)) setRegion(intent.getBooleanExtra(EXTRA_REGION, false));
+    }
+
     @Override
     protected void onDestroy() {
         radar.release(); // cancels any tile download still running
@@ -190,7 +206,7 @@ public class RadarActivity extends Activity {
 
     private void styleToggle() {
         boolean r = radar.isRegion();
-        stylePill(pillArea, !r);
+        stylePill(pillLocal, !r);
         stylePill(pillRegion, r);
     }
 

@@ -111,6 +111,12 @@ public final class WidgetResourcesTest {
         }
     }
 
+    public static void testRadarToggleTouchTarget() {
+        String toggle = byId(elements(read("layout/widget_radar.xml"), "ImageView"), "radar_toggle");
+        T.eq("48dp", attr(toggle, "layout_height"), "48 dp touch target");
+        T.eq("top|end", attr(toggle, "layout_gravity"), "top right");
+    }
+
     public static void testFontResourcesExist() {
         for (String f : new String[] {"dot_matrix.ttf", "dot_matrix_grid.ttf", "inter.ttf"}) {
             T.check(Files.isRegularFile(Paths.get(RES + "font/" + f)), "res/font/" + f);

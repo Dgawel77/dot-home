@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Radar widget: the map bitmap (a tap opens the full-screen radar in the same view) and, top right, the
+     LOCAL / REGION pill as its own small bitmap in a 48 dp tall touch target that toggles the widget's view. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
@@ -9,4 +11,14 @@
         android:scaleType="fitCenter"
         android:src="@drawable/radar_placeholder"
         android:contentDescription="@string/widget_radar_desc" />
+    <ImageView
+        android:id="@+id/radar_toggle"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="4dp"
+        android:layout_marginEnd="4dp"
+        android:adjustViewBounds="true"
+        android:scaleType="fitCenter"
+        android:contentDescription="@string/radar_toggle_desc" />
 </FrameLayout>

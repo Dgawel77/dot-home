@@ -177,7 +177,7 @@ final class WidgetUpdater {
         return i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
     }
 
-    /** What a tap on the radar widget opens: RadarActivity (singleTask, so taps never stack copies). */
+    /** What a tap on the clock's weather opens: RadarActivity (singleTask, so taps never stack copies) as it was. */
     static PendingIntent radarTap(Context ctx) {
         return PendingIntent.getActivity(ctx, 2, new Intent(ctx, RadarActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), flags());
     }

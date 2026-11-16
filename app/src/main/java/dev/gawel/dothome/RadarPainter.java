@@ -115,7 +115,14 @@ final class RadarPainter {
     /** The widget's whole render. The location dot is static; readout may be null. */
     void paint(Canvas c, int w, int h, GeoProjection p, Basemap b, RadarTiles.Frame frame, String readout,
                double lat, double lon) {
+        paint(c, w, h, p, b, frame, readout, lat, lon, null);
+    }
+
+    /** As above; keepClear (x, y, w, h in px, may be null) is kept free of map dots and labels, like the readout. */
+    void paint(Canvas c, int w, int h, GeoProjection p, Basemap b, RadarTiles.Frame frame, String readout,
+               double lat, double lon, float[] keepClear) {
         List<float[]> rects = new ArrayList<>();
+        if (keepClear != null) rects.add(keepClear);
         if (readout != null) {
             readout = readout.toUpperCase(Locale.ROOT);
             float rw = labelWidth(readout) + 2 * step;
@@ -145,6 +152,30 @@ final class RadarPainter {
             double a = i / (double) n * Math.PI * 2;
             dotAt(c, cell(x + (float) Math.cos(a) * rad), cell(y + (float) Math.sin(a) * rad), rReg, color);
         }
+    }
+
+    // ---- the widget's LOCAL · REGION toggle -----------------------------------------------------------------
+
+    static final String TOGGLE_LOCAL = "LOCAL", TOGGLE_SEP = " \u00B7 ", TOGGLE_REGION = "REGION";
+
+    /** Width in px of the toggle pill at this painter's density: the labels plus padX on each side. */
+    float toggleWidth(float padX) {
+        return labelWidth(TOGGLE_LOCAL) + labelWidth(TOGGLE_SEP) + labelWidth(TOGGLE_REGION) + 2 * padX;
+    }
+
+    /**
+     * The radar widget's view toggle: an L10 capsule hPx tall at (x, y) with mono caps "LOCAL \u00B7 REGION", the
+     * active view in L100 and the other (and the dot) in L46.
+     */
+    void drawToggle(Canvas c, float x, float y, float padX, float hPx, boolean region) {
+        dot.setColor(DotStyle.L10);
+        c.drawRoundRect(x, y, x + toggleWidth(padX), y + hPx, hPx / 2f, hPx / 2f, dot);
+        float base = capBase(y + hPx / 2f), tx = x + padX;
+        label(c, TOGGLE_LOCAL, tx, base, Paint.Align.LEFT, region ? DotStyle.L46 : DotStyle.L100);
+        tx += labelWidth(TOGGLE_LOCAL);
+        label(c, TOGGLE_SEP, tx, base, Paint.Align.LEFT, DotStyle.L46);
+        tx += labelWidth(TOGGLE_SEP);
+        label(c, TOGGLE_REGION, tx, base, Paint.Align.LEFT, region ? DotStyle.L100 : DotStyle.L46);
     }
 
     /** Mono label, bottom left. */

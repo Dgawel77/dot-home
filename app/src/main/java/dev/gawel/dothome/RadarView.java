@@ -17,6 +17,7 @@ import dev.gawel.dothome.core.DotMatrixFont;
 import dev.gawel.dothome.core.DotStyle;
 import dev.gawel.dothome.core.GeoProjection;
 import dev.gawel.dothome.core.Lattice;
+import dev.gawel.dothome.core.RadarMode;
 
 /**
  * The flat dotted map with the last hour of NEXRAD echoes rolling in as halftone. Static layers are drawn once per
@@ -242,7 +243,7 @@ final class RadarView extends View {
                 }
             });
 
-            List<RadarTiles.Frame> frames = RadarTiles.load(p, reg ? 6 : 9, () -> g != gen);
+            List<RadarTiles.Frame> frames = RadarTiles.load(p, RadarMode.zoom(reg), () -> g != gen);
             if (g != gen) return;
             float gp = rp.step(); // the S4 lattice
             final ClearZones usedZones = zonesNow;
