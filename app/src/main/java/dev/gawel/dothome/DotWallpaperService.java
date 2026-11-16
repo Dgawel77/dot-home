@@ -1,6 +1,12 @@
 package dev.gawel.dothome;
 
 import android.app.WallpaperManager;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.os.PowerManager;
+import android.view.Surface;
 import android.graphics.Canvas;
 import android.os.Build;
 import android.os.Bundle;
@@ -23,6 +29,98 @@ public class DotWallpaperService extends WallpaperService {
     static final String TAG = "DotHome";
 
     private DotRenderer renderer;
+    private boolean tickOn;
+
+    /** TIME_TICK only reaches dynamic receivers, so the clock widget ticks while the screen is on. */
+    private final BroadcastReceiver widgetTick = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            WidgetUpdater.updateAll(getApplicationContext());
+        }
+    };
+
+    private final BroadcastReceiver screenState = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (Intent.ACTION_SCREEN_ON.equals(intent.getAction())) {
+                setTick(true);
+                WidgetUpdater.updateAll(getApplicationContext());
+            } else if (Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) {
+                setTick(false);
+            }
+        }
+    };
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        try {
+            IntentFilter f = new IntentFilter();
+            f.addAction(Intent.ACTION_SCREEN_ON);
+            f.addAction(Intent.ACTION_SCREEN_OFF);
+            register(screenState, f);
+            PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+            if (pm == null || pm.isInteractive()) setTick(true);
+        } catch (RuntimeException e) {
+            Log.w(TAG, "screen receivers not registered: " + e);
+        }
+    }
+
+    @Override
+    public void onDestroy() {
+        setTick(false);
+        try {
+            unregisterReceiver(screenState);
+        } catch (RuntimeException e) {
+            Log.w(TAG, "screen receiver unregister failed: " + e);
+        }
+        super.onDestroy();
+    }
+
+    private void setTick(boolean on) {
+        if (on == tickOn) return;
+        try {
+            if (on) {
+                register(widgetTick, new IntentFilter(Intent.ACTION_TIME_TICK));
+            } else {
+                unregisterReceiver(widgetTick);
+            }
+            tickOn = on;
+        } catch (RuntimeException e) {
+            Log.w(TAG, "time tick toggle failed: " + e);
+        }
+    }
+
+    private void register(BroadcastReceiver r, IntentFilter f) {
+        if (Build.VERSION.SDK_INT >= 33) {
+            Api33.register(this, r, f);
+        } else {
+            registerReceiver(r, f);
+        }
+    }
+
+    /** Guarded so the RECEIVER_NOT_EXPORTED overload is only touched on API 33+. */
+    private static final class Api33 {
+        static void register(Context c, BroadcastReceiver r, IntentFilter f) {
+            c.registerReceiver(r, f, Context.RECEIVER_NOT_EXPORTED);
+        }
+    }
+
+    /** Guarded so Surface.setFrameRate is only touched on API 30+. */
+    private static final class Api30 {
+        static void hint60(Surface s) {
+            if (s != null && s.isValid()) s.setFrameRate(60f, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT);
+        }
+    }
+
+    private static void frameRateHint(SurfaceHolder holder) {
+        if (Build.VERSION.SDK_INT < 30) return;
+        try {
+            Api30.hint60(holder.getSurface());
+        } catch (RuntimeException e) {
+            Log.w(TAG, "frame rate hint failed: " + e);
+        }
+    }
 
     @Override
     public Engine onCreateEngine() {
@@ -44,6 +142,7 @@ public class DotWallpaperService extends WallpaperService {
         @Override
         public void onSurfaceCreated(SurfaceHolder holder) {
             surfaceValid = true;
+            frameRateHint(holder);
             maybeStart();
         }
 
@@ -56,7 +155,9 @@ public class DotWallpaperService extends WallpaperService {
             surfaceValid = true;
             maybeStart();
             if (wasRendering) Log.i(TAG, "render on " + w + "x" + h);
+            frameRateHint(holder);
             fitWorld();
+            if (visible) hub.onSurfaceChanged(this); // rotation changed: recalibrate tilt axes
         }
 
         @Override
