@@ -78,8 +78,13 @@ final class RadarTiles {
 
     private RadarTiles() {}
 
+    /** Drops every cached tile (bitmaps are left to the GC; a download in flight may still hold some). */
+    static void clearCache() {
+        synchronized (CACHE) { CACHE.clear(); }
+    }
+
     static String layer(int minutesAgo) {
-        return minutesAgo == 0 ? "nexrad-n0q-900913" : String.format("nexrad-n0q-900913-m%02dm", minutesAgo);
+        return minutesAgo == 0 ? "nexrad-n0q-900913" : String.format(java.util.Locale.US, "nexrad-n0q-900913-m%02dm", minutesAgo);
     }
 
     static String url(String layer, int z, int x, int y) {

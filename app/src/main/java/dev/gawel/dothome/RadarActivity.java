@@ -161,6 +161,7 @@ public class RadarActivity extends Activity {
     @Override
     protected void onDestroy() {
         radar.release(); // cancels any tile download still running
+        if (isFinishing()) RadarTiles.clearCache(); // the cache is static (~36 MB) and would stay in the wallpaper process
         super.onDestroy();
     }
 

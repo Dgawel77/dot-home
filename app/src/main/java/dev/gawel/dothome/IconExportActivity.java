@@ -39,6 +39,7 @@ public class IconExportActivity extends Activity {
         status.setPadding(48, 96, 48, 48);
         status.setText("Exporting icons...");
         setContentView(status);
+        if (b != null) return; // recreated (e.g. rotation): the first run already did the export
         new Thread(new Runnable() {
             @Override public void run() {
                 final String msg = export();

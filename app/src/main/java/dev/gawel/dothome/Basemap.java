@@ -12,7 +12,7 @@ import java.util.Map;
 
 import dev.gawel.dothome.core.MiniJson;
 
-/** The bundled Natural Earth/OSM basemap (assets/basemap.json), parsed once per process. All points are lon, lat. */
+/** The bundled Natural Earth basemap (assets/basemap.json), parsed once per process. All points are lon, lat. */
 final class Basemap {
     static final class Road {
         final String ref;

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-feature android:name="android.software.live_wallpaper" android:required="true" />
@@ -17,6 +18,7 @@
         android:allowBackup="false">
         <activity
             android:name=".SetupActivity"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -26,9 +28,13 @@
         <activity
             android:name=".RadarActivity"
             android:exported="false"
+            android:taskAffinity=""
+            android:launchMode="singleTask"
+            android:excludeFromRecents="true"
             android:theme="@style/RadarTheme" />
         <activity
             android:name=".IconExportActivity"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
             android:exported="true" />
         <service
             android:name=".DotWallpaperService"

@@ -2,6 +2,7 @@ package dev.gawel.dothome;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.NotificationManager;
 import android.app.WallpaperManager;
 import android.content.ComponentName;
 import android.content.Intent;
@@ -71,6 +72,7 @@ public class SetupActivity extends Activity {
             RadioButton rb = new RadioButton(this);
             rb.setId(i + 1);
             rb.setText(names[i]);
+            rb.setTextColor(0xFFFFFFFF);
             group.addView(rb);
             if (modes[i] == current) group.check(rb.getId());
         }
@@ -111,6 +113,14 @@ public class SetupActivity extends Activity {
     }
 
     private boolean notificationAccessEnabled() {
+        if (Build.VERSION.SDK_INT >= 27) {
+            try {
+                NotificationManager nm = getSystemService(NotificationManager.class);
+                return nm != null && nm.isNotificationListenerAccessGranted(new ComponentName(this, MediaWatcher.class));
+            } catch (RuntimeException e) {
+                return false;
+            }
+        }
         try {
             String s = Settings.Secure.getString(getContentResolver(), "enabled_notification_listeners");
             if (s == null) return false;
