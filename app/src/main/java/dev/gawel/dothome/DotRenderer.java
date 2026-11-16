@@ -3,7 +3,8 @@ package dev.gawel.dothome;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
-import android.graphics.Color;
+import android.graphics.RadialGradient;
+import android.graphics.Shader;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
@@ -11,6 +12,8 @@ import android.graphics.RectF;
 import java.util.List;
 import java.util.WeakHashMap;
 
+import dev.gawel.dothome.core.DotScale;
+import dev.gawel.dothome.core.DotStyle;
 import dev.gawel.dothome.core.GameWorld;
 import dev.gawel.dothome.core.Rng;
 import dev.gawel.dothome.core.ScoreBook;
@@ -20,6 +23,7 @@ final class DotRenderer {
     private static final float TAU = (float) (Math.PI * 2);
     private static final float[] SHIP = {15, 0, -10, -9.5f, -5, 0, -10, 9.5f};
     private static final int TRAIL_MAX = 48;
+    private static final int SPRITE_PX = 64;
 
     /** Cached dots of one rock: x, y, alpha triples (alpha 1 marks an outline dot), valid for one spacing. */
     private static final class RockDots {
@@ -32,7 +36,8 @@ final class DotRenderer {
     private final Paint dotPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
     private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Bitmap sprite;
-    private final Rect spriteSrc = new Rect(0, 0, 32, 32);
+    private final Rect spriteSrc = new Rect(0, 0, SPRITE_PX, SPRITE_PX);
+    private final float density;
     private final RectF dst = new RectF();
     private final WeakHashMap<GameWorld.Rock, RockDots> rockCache = new WeakHashMap<>();
     private long rockSeed = 1;
@@ -54,12 +59,16 @@ final class DotRenderer {
     private float clearTopY = -1;
 
     DotRenderer(Context context) {
-        sprite = Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888);
+        density = context.getResources().getDisplayMetrics().density;
+        sprite = Bitmap.createBitmap(SPRITE_PX, SPRITE_PX, Bitmap.Config.ARGB_8888);
+        // soft dot: opaque core out to 70% of the radius, fading to nothing at the radius
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        p.setColor(Color.WHITE);
-        new Canvas(sprite).drawCircle(16, 16, 15, p);
+        float h = SPRITE_PX / 2f;
+        p.setShader(new RadialGradient(h, h, h, new int[] {DotStyle.FG, DotStyle.FG, DotStyle.FG & 0x00FFFFFF},
+            new float[] {0f, 0.7f, 1f}, Shader.TileMode.CLAMP));
+        new Canvas(sprite).drawCircle(h, h, h, p);
         textPaint.setTypeface(Fonts.doto(context));
-        textPaint.setColor(0xFFA6A6A6);
+        textPaint.setColor(DotStyle.FG2);
         textPaint.setTextAlign(Paint.Align.RIGHT);
     }
 
@@ -95,7 +104,7 @@ final class DotRenderer {
     }
 
     void draw(Canvas c, GameWorld w, ScoreBook sb, float topInset) {
-        c.drawColor(Color.BLACK);
+        c.drawColor(DotStyle.BG);
         if (w.width() <= 0) return;
         drawScene(c, w, true);
         float k = scaleK(w);
@@ -119,7 +128,7 @@ final class DotRenderer {
     Bitmap renderStill(GameWorld w, int width, int height, float dim, float clearTopFraction) {
         Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
-        c.drawColor(Color.BLACK);
+        c.drawColor(DotStyle.BG);
         if (w.width() > 0 && w.height() > 0) {
             // uniform "cover" scale, centred: dots stay round when the target aspect differs from the world's
             float s = Math.max(width / w.width(), height / w.height());
@@ -136,13 +145,13 @@ final class DotRenderer {
             }
             c.restore();
         }
-        if (dim > 0) c.drawColor(Color.argb(Math.round(Math.min(1f, dim) * 255), 0, 0, 0));
+        if (dim > 0) c.drawColor((Math.round(Math.min(1f, dim) * 255) << 24) | (DotStyle.BG & 0x00FFFFFF));
         return bmp;
     }
 
     private void drawScene(Canvas c, GameWorld w, boolean withTrail) {
         float k = scaleK(w);
-        float ds = 1.2f * k, spacing = 4f * k;
+        float ds = DotScale.radiusPx(density), spacing = DotScale.pitchPx(density);
         float t = w.time();
         float f = clamp((t - 0.5f) / 1.1f, 0, 1);
         float fade = f * f * (3 - 2 * f);
@@ -155,7 +164,7 @@ final class DotRenderer {
                 sx = wrap(sx + parX * st.depth * 28f * k, w.width());
                 sy = wrap(sy + parY * st.depth * 28f * k, w.height());
             }
-            dot(c, sx, sy, ds * 0.55f, st.alpha * (0.65f + 0.35f * (float) Math.sin(t * st.speed * 2 + st.phase)) * fade);
+            dot(c, sx, sy, ds * 0.55f, st.alpha * (0.65f + 0.35f * (float) Math.sin(t * st.speed * 2 + st.phase)) * fade * 0.8f);
         }
 
         List<GameWorld.Rock> rocks = w.rocks();

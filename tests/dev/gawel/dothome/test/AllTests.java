@@ -26,6 +26,7 @@ public final class AllTests {
         dev.gawel.dothome.core.MonoIconTest.class,
         dev.gawel.dothome.core.AppFilterTest.class,
         dev.gawel.dothome.core.ShakeDetectorTest.class,
+        dev.gawel.dothome.core.DotScaleTest.class,
     };
 
     public static void main(String[] args) throws Exception {
