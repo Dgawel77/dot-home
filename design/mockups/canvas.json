@@ -18,7 +18,7 @@
       "y": 1060
     },
     "Main.dc.html": {
-      "h": 860,
+      "h": 900,
       "is_interactive": true,
       "title": "Main home screen · playable + Phase 2 demo",
       "w": 700,
@@ -54,6 +54,21 @@
       "w": 700,
       "x": 1660,
       "y": 2100
+    },
+    "RadarWidget.dc.html": {
+      "h": 860,
+      "is_interactive": true,
+      "title": "Radar widget · 4×3",
+      "w": 700,
+      "x": 1690,
+      "y": 0
+    },
+    "Icons.dc.html": {
+      "h": 420,
+      "title": "Stipple icons · close-up",
+      "w": 940,
+      "x": 2470,
+      "y": 0
     }
   },
   "createdOnFiles": {
@@ -72,14 +87,14 @@
     "howto": {
       "fill": "gray",
       "size": 24,
-      "text": "How to try it\n\n• Press Play on Main or Cover. Move the pointer to tilt the phone, click empty space to shoot.\n• Main also demos Phase 2: Tweaks for weather (snow / rain / fog), night or day (the moon is the real phase), and charging. Press play on its music widget for the beat pulse. Flag stars appear every 25 rocks.\n• Bottom row: Bears and Blue Line widgets, the Always On Display, and the unfold burst.\n• Weather, music, scores, trains and radar are sample data, not live.",
+      "text": "How to try it\n\n• Press Play on Main or Cover. The ship flies itself. Move the pointer to tilt the phone: stars shift, debris falls. Click to shoot. Press Shake under the phone for a shockwave (8 s cooldown).\n• Main also demos Phase 2 in Tweaks: weather, night or day (real moon phase), charging. Play the music widget for the beat pulse.\n• To the right: the radar widget, and the dock icons up close.\n• Weather, music, scores, trains and radar are sample data, not live.",
       "w": 340,
       "x": 1270,
       "y": 0
     },
     "title": {
       "kind": "title1",
-      "maxW": 2360,
+      "maxW": 3410,
       "text": "Dot home — vibe mockups for the Fold6",
       "w": 240,
       "x": 0,
@@ -89,6 +104,8 @@
   "order": [
     "Main.dc.html",
     "Cover.dc.html",
+    "RadarWidget.dc.html",
+    "Icons.dc.html",
     "Locks.dc.html",
     "Radar.dc.html",
     "Widgets.dc.html",

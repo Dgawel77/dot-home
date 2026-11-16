@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Stipple icons</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#bdbdbd}a:hover{color:#DDDDDD}
+.it{display:flex;flex-direction:column;align-items:center;gap:12px}
+.lb{font-size:12px;color:#8E8E8E;letter-spacing:0.4px}
+</style>
+</helmet>
+<div style="width: 940px; height: 420px; box-sizing: border-box; padding: 0 56px; background: #0B0B0B; display: flex; flex-direction: column; justify-content: center; gap: 40px; font-family: Inter, system-ui, sans-serif; color: #DDDDDD">
+<div style="display: flex; justify-content: space-between">
+<div class="it"><canvas id="dh-icons-messages" ref="{{ setIcon }}" width="150" height="150" role="img" aria-label="Messages icon in grey dots" style="width: 150px; height: 150px; display: block"></canvas><div class="lb">Messages</div></div>
+<div class="it"><canvas id="dh-icons-phone" ref="{{ setIcon }}" width="150" height="150" role="img" aria-label="Phone icon in grey dots" style="width: 150px; height: 150px; display: block"></canvas><div class="lb">Phone</div></div>
+<div class="it"><canvas id="dh-icons-mail" ref="{{ setIcon }}" width="150" height="150" role="img" aria-label="Mail icon in grey dots" style="width: 150px; height: 150px; display: block"></canvas><div class="lb">Mail</div></div>
+<div class="it"><canvas id="dh-icons-browser" ref="{{ setIcon }}" width="150" height="150" role="img" aria-label="Browser icon in grey dots" style="width: 150px; height: 150px; display: block"></canvas><div class="lb">Browser</div></div>
+<div class="it"><canvas id="dh-icons-music" ref="{{ setIcon }}" width="150" height="150" role="img" aria-label="Music icon in grey dots" style="width: 150px; height: 150px; display: block"></canvas><div class="lb">Music</div></div>
+</div>
+<div style="font-size: 13px; color: #8E8E8E; line-height: 1.5; text-align: center">Each icon is the app's real icon turned into grey dots — dot size follows the original colours. Real tones come from the app icons on the phone.</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":940,"height":420}}'>
+class Component extends DCLogic {
+  _dims() { return { IP: 'dh-icons-', IC: 150, ICONS: ['messages', 'phone', 'mail', 'browser', 'music'] }; }
+  componentDidMount() {
+    this.D = this._dims();
+    this._alive = true;
+    this._findIcons(0);
+  }
+  componentWillUnmount() { this._alive = false; }
+  _cl(v, a, b) { return v < a ? a : v > b ? b : v; }
+  _findIcons(n) {
+    if (!this._alive) return;
+    const D = this.D || this._dims();
+    let left = 0;
+    for (const name of D.ICONS) {
+      const el = document.getElementById(D.IP + name);
+      if (el) this._paintIcon(el); else left++;
+    }
+    if (left && n < 40) setTimeout(() => this._findIcons(n + 1), 100);
+  }
+  _icShape(x, name) {
+    const grey = (L) => { const v = Math.round(L * 255); return 'rgb(' + v + ',' + v + ',' + v + ')'; };
+    const rr = (x0, y0, w, h, r) => { x.beginPath(); x.moveTo(x0 + r, y0); x.arcTo(x0 + w, y0, x0 + w, y0 + h, r); x.arcTo(x0 + w, y0 + h, x0, y0 + h, r); x.arcTo(x0, y0 + h, x0, y0, r); x.arcTo(x0, y0, x0 + w, y0, r); x.closePath(); };
+    if (name === 'messages') {
+      x.fillStyle = grey(0.45);
+      rr(98, 104, 236, 184, 60); x.fill();
+      x.beginPath(); x.moveTo(134, 262); x.lineTo(112, 336); x.lineTo(198, 280); x.closePath(); x.fill();
+    } else if (name === 'phone') {
+      x.save(); x.translate(64, 56); x.scale(14.2, 14.2); x.fillStyle = grey(0.6);
+      x.fill(new Path2D('M5 3.5h3l1.5 4-2 1.2a11 11 0 0 0 5.8 5.8l1.2-2 4 1.5v3a2 2 0 0 1-2 2A16 16 0 0 1 3 5.5a2 2 0 0 1 2-2z'));
+      x.restore();
+    } else if (name === 'mail') {
+      rr(96, 128, 240, 176, 22); x.fillStyle = grey(0.8); x.fill();
+      x.save(); rr(96, 128, 240, 176, 22); x.clip();
+      x.beginPath(); x.moveTo(96, 128); x.lineTo(336, 128); x.lineTo(216, 230); x.closePath(); x.fillStyle = grey(0.4); x.fill();
+      x.restore();
+    } else if (name === 'browser') {
+      const L = [0.35, 0.6, 0.85], step = (2 * Math.PI) / 3;
+      for (let i = 0; i < 3; i++) { const a0 = -Math.PI / 2 + i * step; x.beginPath(); x.moveTo(216, 216); x.arc(216, 216, 122, a0, a0 + step); x.closePath(); x.fillStyle = grey(L[i]); x.fill(); }
+      x.beginPath(); x.arc(216, 216, 62, 0, 2 * Math.PI); x.fillStyle = grey(0.95); x.fill();
+      x.beginPath(); x.arc(216, 216, 46, 0, 2 * Math.PI); x.fillStyle = grey(0.5); x.fill();
+    } else if (name === 'music') {
+      x.beginPath(); x.arc(216, 216, 122, 0, 2 * Math.PI); x.fillStyle = grey(0.3); x.fill();
+      x.beginPath(); x.moveTo(184, 150); x.lineTo(184, 282); x.lineTo(292, 216); x.closePath(); x.fillStyle = grey(0.95); x.fill();
+    }
+  }
+  _icDots(name) {
+    this._icCache = this._icCache || {};
+    if (this._icCache[name]) return this._icCache[name];
+    const S = 432, c = document.createElement('canvas');
+    c.width = S; c.height = S;
+    const x = c.getContext('2d', { willReadFrequently: true });
+    if (!x) return [];
+    this._icShape(x, name);
+    const px = x.getImageData(0, 0, S, S).data, W1 = S + 1;
+    const ia = new Float64Array(W1 * W1), il = new Float64Array(W1 * W1);
+    for (let yy = 0; yy < S; yy++) {
+      let ra = 0, rl = 0;
+      for (let xx = 0; xx < S; xx++) {
+        const o = (yy * S + xx) * 4, a = px[o + 3] / 255;
+        const L = (0.2126 * px[o] + 0.7152 * px[o + 1] + 0.0722 * px[o + 2]) / 255;
+        ra += a; rl += L * a;
+        const k = (yy + 1) * W1 + xx + 1;
+        ia[k] = ia[k - W1] + ra; il[k] = il[k - W1] + rl;
+      }
+    }
+    const P = S / 30, B = P / 4, row = (P * Math.sqrt(3)) / 2, c0 = S / 2;
+    const tot = ia[S * W1 + S], meanL = tot > 1e-9 ? il[S * W1 + S] / tot : 0.7;
+    const box = (ii, cx, cy) => {
+      const x0 = this._cl(Math.ceil(cx - B - 0.5), 0, S), x1 = this._cl(Math.floor(cx + B - 0.5) + 1, 0, S);
+      const y0 = this._cl(Math.ceil(cy - B - 0.5), 0, S), y1 = this._cl(Math.floor(cy + B - 0.5) + 1, 0, S);
+      return [ii[y1 * W1 + x1] - ii[y0 * W1 + x1] - ii[y1 * W1 + x0] + ii[y0 * W1 + x0], Math.max(1, (x1 - x0) * (y1 - y0))];
+    };
+    const half = Math.floor((c0 - P / 2) / row + 1e-9), lo = P / 2, hi = S - P / 2, dots = [];
+    for (let j = -half; j <= half; j++) {
+      const x0 = c0 + (j % 2 ? P / 2 : 0);
+      const i0 = Math.ceil((lo - x0) / P - 1e-9), i1 = Math.floor((hi - x0) / P + 1e-9);
+      for (let i = i0; i <= i1; i++) {
+        const cx = x0 + i * P, cy = c0 + j * row;
+        const cov = box(ia, cx, cy);
+        if (cov[0] / cov[1] < 0.5) continue;
+        const L = cov[0] > 0.01 * cov[1] ? box(il, cx, cy)[0] / cov[0] : meanL;
+        const t = (0.38 + 0.57 * L) * (1 - (0.12 * (cx + cy)) / (2 * S));
+        dots.push([cx, cy, Math.max(0.28 * P, 0.47 * P * Math.sqrt(Math.max(t, 0)))]);
+      }
+    }
+    this._icCache[name] = dots;
+    return dots;
+  }
+  _paintIcon(el) {
+    if (!el || !el.id) return;
+    const D = this.D || this._dims();
+    const name = el.id.slice(D.IP.length);
+    if (D.ICONS.indexOf(name) < 0) return;
+    const dpr = this._cl(window.devicePixelRatio || 1, 1, 4), px = Math.round(D.IC * dpr);
+    if (el._dhPx === px) return;
+    const dots = this._icDots(name);
+    el.width = px; el.height = px;
+    const c = el.getContext('2d'); if (!c) return;
+    el._dhPx = px;
+    const sc = px / 432;
+    c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, px, px);
+    c.fillStyle = '#DDDDDD'; c.beginPath();
+    for (const d of dots) { c.moveTo((d[0] + d[2]) * sc, d[1] * sc); c.arc(d[0] * sc, d[1] * sc, d[2] * sc, 0, 2 * Math.PI); }
+    c.fill();
+  }
+  renderVals() {
+    if (!this._h) this._h = { setIcon: (el) => { if (el) this._paintIcon(el); } };
+    return { setIcon: this._h.setIcon };
+  }
+}
+</script>
+</body>
+</html>

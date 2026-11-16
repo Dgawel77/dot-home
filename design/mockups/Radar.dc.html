@@ -12,28 +12,28 @@
 <style>
 body{margin:0}
 a{color:#bdbdbd}a:hover{color:#ffffff}
-.seg{display:flex;padding:3px;border-radius:22px;background:#101010;box-shadow:0 0 0 1px #2b2b2b;pointer-events:auto}
-.sb{height:38px;min-width:78px;padding:0 16px;border-radius:19px;border:0;background:transparent;color:#bdbdbd;font:500 13px Inter,system-ui,sans-serif;cursor:pointer}
-.area .b1,.region .b2{background:#ffffff;color:#000000}
+.seg{display:flex;padding:3px;border-radius:22px;background:rgba(11,11,11,0.8);box-shadow:0 0 0 1px #222222;pointer-events:auto}
+.sb{height:38px;min-width:78px;padding:0 16px;border-radius:19px;border:0;background:transparent;color:#8E8E8E;font:500 13px Inter,system-ui,sans-serif;cursor:pointer}
+.area .b1,.region .b2{background:#DDDDDD;color:#0B0B0B}
 </style>
 </helmet>
 <div style="width: 700px; height: 860px; box-sizing: border-box; padding: 40px 40px 0; background: #111111; display: flex; flex-direction: column; align-items: center; gap: 18px; font-family: Inter, system-ui, sans-serif; color: #ffffff">
-<div style="position: relative; width: 620px; height: 722px; flex-shrink: 0; border-radius: 36px; overflow: hidden; background: #000000; box-shadow: 0 0 0 1px #2c2c2c">
+<div style="position: relative; width: 620px; height: 722px; flex-shrink: 0; border-radius: 36px; overflow: hidden; background: #0B0B0B; color: #DDDDDD; box-shadow: 0 0 0 1px #2c2c2c">
 <canvas id="dh-radar-cv" ref="{{ setCanvas }}" onPointerDown="{{ toggle }}" role="img" aria-label="Sample radar map drawn in dots around Chicago" style="position: absolute; left: 0; top: 0; width: 620px; height: 722px; display: block; cursor: pointer"></canvas>
-<div style="position: absolute; left: 0; top: 0; width: 620px; height: 120px; background: linear-gradient(180deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0) 100%); pointer-events: none"></div>
+<div style="position: absolute; left: 0; top: 0; width: 620px; height: 120px; background: linear-gradient(180deg, rgba(11,11,11,0.92) 0%, rgba(11,11,11,0.6) 60%, rgba(11,11,11,0) 100%); pointer-events: none"></div>
 <div style="position: absolute; left: 28px; top: 30px; display: flex; flex-direction: column; gap: 4px; pointer-events: none">
 <div style="font-size: 20px; font-weight: 600">Radar</div>
-<div style="font-size: 13px; color: #a6a6a6">Chicago · sample echo, not live</div>
+<div style="font-size: 13px; color: #8E8E8E">Chicago · sample echo, not live</div>
 </div>
 <div class="seg {{ viewClass }}" style="position: absolute; right: 24px; top: 30px">
 <button class="sb b1" onClick="{{ showArea }}">Area</button>
 <button class="sb b2" onClick="{{ showRegion }}">Region</button>
 </div>
-<div style="position: absolute; right: 26px; top: 668px; display: flex; align-items: center; gap: 8px; font-size: 11px; color: #a6a6a6; letter-spacing: 1px; pointer-events: none">
+<div style="position: absolute; right: 26px; top: 668px; display: flex; align-items: center; gap: 8px; font-size: 11px; color: #8E8E8E; letter-spacing: 1px; pointer-events: none">
 <div>LIGHT</div>
-<div style="width: 3px; height: 3px; border-radius: 50%; background: #9a9a9a"></div>
-<div style="width: 5px; height: 5px; border-radius: 50%; background: #cfcfcf"></div>
-<div style="width: 7px; height: 7px; border-radius: 50%; background: #ffffff"></div>
+<div style="width: 3px; height: 3px; border-radius: 50%; background: #DDDDDD; opacity: 0.6"></div>
+<div style="width: 5px; height: 5px; border-radius: 50%; background: #DDDDDD; opacity: 0.8"></div>
+<div style="width: 7px; height: 7px; border-radius: 50%; background: #DDDDDD"></div>
 <div>HEAVY</div>
 </div>
 </div>
@@ -170,8 +170,8 @@ class Component extends DCLogic {
     const p = this._proj(v, W, H);
     const base = this._base(name, v, p, W, H);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.globalAlpha = 1; ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = '#ffffff';
+    ctx.globalAlpha = 1; ctx.fillStyle = '#0B0B0B'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#DDDDDD';
     const dot = (x, y, r, a) => { if (a <= 0.01 || r <= 0.05) return; ctx.globalAlpha = a > 1 ? 1 : a; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill(); };
     for (const q of base.land) dot(q[0], q[1], 0.65, q[2]);
     for (const q of base.lake) dot(q[0], q[1], 0.75, 0.2);
@@ -209,17 +209,17 @@ class Component extends DCLogic {
       const x = p.x(q[1]), y = p.y(q[0]);
       if (x < 16 || x > W - 16 || y < 130 || y > H - 100) continue;
       const tw = ctx.measureText(r[0]).width + 8;
-      ctx.globalAlpha = 0.95; ctx.fillStyle = '#000000';
+      ctx.globalAlpha = 0.95; ctx.fillStyle = '#0B0B0B';
       ctx.beginPath(); ctx.rect(x - tw / 2, y - 7, tw, 13); ctx.fill();
-      ctx.globalAlpha = 0.6; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 0.8;
+      ctx.globalAlpha = 0.6; ctx.strokeStyle = '#DDDDDD'; ctx.lineWidth = 0.8;
       ctx.beginPath(); ctx.rect(x - tw / 2 + 0.5, y - 6.5, tw - 1, 12); ctx.stroke();
-      ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.8; ctx.fillText(r[0], x, y + 3);
+      ctx.fillStyle = '#DDDDDD'; ctx.globalAlpha = 0.8; ctx.fillText(r[0], x, y + 3);
     }
     ctx.textAlign = 'left';
     const cyc = 7.5, ph = t % cyc, k = Math.min(1, ph / 6), m = -60 + k * 60;
     const G = v.G, vlon = 0.5, vlat = 0.12;
     const cur = d.cells.map((c) => [c[0] + vlat * (m / 60), c[1] + vlon * (m / 60), 2 * c[2] * c[2], c[3]]);
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = '#DDDDDD';
     for (let y = G / 2; y < H; y += G) {
       const lat = p.lat(y), cl = Math.cos((lat * Math.PI) / 180);
       for (let x = G / 2; x < W; x += G) {
@@ -239,7 +239,7 @@ class Component extends DCLogic {
       const x = p.x(c[2]), y = p.y(c[1]);
       if (x < 8 || x > W - 8 || y < 130 || y > H - 100) continue;
       const me = c[0] === 'Chicago';
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = '#DDDDDD';
       if (!me) dot(x, y, 1.8, 0.75);
       ctx.globalAlpha = me ? 0.95 : 0.62;
       ctx.fillText(c[0], x + 8, y + 4);
@@ -248,13 +248,13 @@ class Component extends DCLogic {
     dot(yx, yy, 3.4, 1);
     const pr = (t % 2) / 2, rad = 8 + pr * 22;
     for (let i = 0; i < 20; i++) { const a = (i / 20) * 6.2832; dot(yx + Math.cos(a) * rad, yy + Math.sin(a) * rad, 1.3, (1 - pr) * 0.9); }
-    ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(0, H - 92, 300, 92);
-    ctx.fillStyle = '#ffffff';
+    ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(11,11,11,0.8)'; ctx.fillRect(0, H - 92, 300, 92);
+    ctx.fillStyle = '#DDDDDD';
     const lineY = H - 66;
     for (let x = 28; x <= 268; x += 6) dot(x, lineY, 1, 0.35);
     dot(28 + k * 240, lineY, 3.2, 1);
     ctx.globalAlpha = 1;
-    ctx.font = '400 24px Doto, ui-monospace, monospace';
+    ctx.font = '500 24px Inter, system-ui, sans-serif';
     ctx.fillText(m > -1 ? 'NOW' : '−' + Math.round(-m) + ' MIN', 28, H - 28);
   }
   renderVals() {

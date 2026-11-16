@@ -13,59 +13,61 @@
 body{margin:0}
 a{color:#bdbdbd}a:hover{color:#ffffff}
 .doto{font-family:'Doto',ui-monospace,monospace}
-.ico{fill:none;stroke:#ffffff;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
-.icof{fill:#ffffff;stroke:none}
-.w{pointer-events:auto;border-radius:26px;border:1px solid transparent;transition:background 200ms ease,border-color 200ms ease}
-.tiles .w{background:rgba(13,13,13,0.9);border-color:#262626}
-.ic{width:56px;height:56px;border-radius:17px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;background:transparent;padding:0;cursor:pointer;pointer-events:auto}
-.square .ic{background:#101010;border-color:#2b2b2b}
-.ic:hover{border-color:#5a5a5a}
+.ico{fill:none;stroke:#DDDDDD;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.icof{fill:#DDDDDD;stroke:none}
+.w{pointer-events:auto;border-radius:26px;border:1px solid transparent;background:transparent;transition:background 200ms ease}
+.tiles .w{background:rgba(11,11,11,0.8)}
+.ic{width:56px;height:56px;border-radius:17px;display:flex;align-items:center;justify-content:center;border:0;background:transparent;padding:0;cursor:pointer;pointer-events:auto}
+.square .ic{background:#151515;box-shadow:0 0 0 1px #222222}
+.ic:hover{box-shadow:0 0 0 1px #3a3a3a}
 .mb{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:transparent;border:0;padding:0;cursor:pointer}
-.mb:hover{background:#1c1c1c}
+.mb:hover{background:#1a1a1a}
+.shk{width:84px;height:32px;flex-shrink:0;border-radius:16px;border:0;background:#1c1c1c;box-shadow:0 0 0 1px #2e2e2e;color:#DDDDDD;font:500 12.5px Inter,system-ui,sans-serif;cursor:pointer}
+.shk:hover{background:#262626}
 sc-for,sc-if{display:contents}
 .mx{display:flex;gap:calc(var(--g) * 2.2)}
 .mx .dg{display:grid;grid-template-columns:repeat(5,var(--d));grid-auto-rows:var(--d);gap:var(--g)}
 .mx .cn{display:grid;grid-template-columns:var(--d);grid-auto-rows:var(--d);gap:var(--g)}
 .mx .on,.mx .off{border-radius:50%}
-.mx .on{background:#ffffff;box-shadow:0 0 5px rgba(255,255,255,0.4);animation:mxp 3.6s ease-in-out infinite}
+.mx .on{background:#DDDDDD;box-shadow:0 0 5px rgba(221,221,221,0.35);animation:mxp 3.6s ease-in-out infinite}
 .mx .on:nth-child(2n){animation-delay:-1.2s}
 .mx .on:nth-child(3n){animation-delay:-2.4s}
-.mx .off{background:#1a1a1a}
+.mx .off{background:#222222}
 .mx .cn .on{animation:mxb 2s ease-in-out infinite}
 .mxc{--d:5px;--g:4px}
 @keyframes mxp{0%,100%{opacity:1}50%{opacity:0.72}}
 @keyframes mxb{0%,100%{opacity:1}50%{opacity:0.25}}
 </style>
 </helmet>
-<div style="width: 410px; height: 940px; box-sizing: border-box; padding: 40px 40px 0; background: #111111; display: flex; flex-direction: column; align-items: center; gap: 20px; font-family: Inter, system-ui, sans-serif; color: #ffffff">
-<div style="position: relative; width: 330px; height: 810px; flex-shrink: 0; border-radius: 34px; overflow: hidden; background: #000000; box-shadow: 0 0 0 1px #2c2c2c" onPointerMove="{{ onMove }}" onPointerLeave="{{ onLeave }}">
+<div style="width: 410px; height: 940px; box-sizing: border-box; padding: 34px 40px 0; background: #111111; display: flex; flex-direction: column; align-items: center; gap: 12px; font-family: Inter, system-ui, sans-serif; color: #ffffff">
+<div style="position: relative; width: 330px; height: 810px; flex-shrink: 0; border-radius: 34px; overflow: hidden; background: #0B0B0B; color: #DDDDDD; box-shadow: 0 0 0 1px #2c2c2c" onPointerMove="{{ onMove }}" onPointerLeave="{{ onLeave }}">
 <canvas id="dh-cover-cv" ref="{{ setCanvas }}" onPointerDown="{{ onTap }}" role="img" aria-label="Dot space shooter wallpaper" style="position: absolute; left: 0; top: 0; width: 330px; height: 810px; display: block; touch-action: none; cursor: crosshair"></canvas>
 <div class="{{ layerClass }}" style="position: absolute; left: 0; top: 0; width: 330px; height: 810px; pointer-events: none">
+<div style="position: absolute; right: 18px; top: 10px; font-size: 15px; font-weight: 400; color: #8E8E8E; letter-spacing: 0.3px">TODAY {{ score }} · BEST {{ best }}</div>
 <div class="w" style="position: absolute; left: 12px; top: 20px; width: 306px; height: 196px; box-sizing: border-box; padding: 18px 18px; display: flex; flex-direction: column; gap: 14px">
 <div style="display: flex; flex-direction: column; gap: 8px">
 <div class="mx mxc" role="img" aria-label="{{ time }}" style="padding: 6px 0 6px 2px"><sc-for list="{{ clock }}" as="b" hint-placeholder-count="5"><div class="{{ b.cls }}"><sc-for list="{{ b.cells }}" as="c" hint-placeholder-count="35"><div class="{{ c.c }}"></div></sc-for></div></sc-for></div>
-<div style="font-size: 13px; color: #a6a6a6; padding-left: 3px">{{ date }}</div>
+<div style="font-size: 13px; color: #8E8E8E; padding-left: 3px">{{ date }}</div>
 </div>
 <div style="display: flex; align-items: center; gap: 12px">
 <svg class="ico" width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.2 11 3.5 3.5 0 0 0 7 18z"></path></svg>
-<div class="doto" style="font-size: 36px; line-height: 1; font-weight: 400">41°</div>
+<div class="doto" style="font-size: 36px; line-height: 1; font-weight: 400; color: #DDDDDD">41°</div>
 <div style="display: flex; flex-direction: column; gap: 3px">
-<div style="font-size: 12px; color: #d6d6d6">Cloudy · H 45° L 33°</div>
-<div style="font-size: 12px; color: #949494">Chicago · sample data</div>
+<div style="font-size: 12px; color: #DDDDDD">Cloudy · H 45° L 33°</div>
+<div style="font-size: 12px; color: #8E8E8E">Chicago · sample data</div>
 </div>
 </div>
 </div>
-<div class="doto" style="position: absolute; left: 26px; top: 230px; font-size: 14px; font-weight: 400; color: #a6a6a6; letter-spacing: 1px">TODAY {{ score }} · BEST {{ best }}</div>
 <div class="w" style="position: absolute; left: 12px; top: 580px; width: 306px; height: 120px; box-sizing: border-box; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px">
 <div style="display: flex; align-items: center; gap: 12px">
-<div style="width: 44px; height: 44px; border-radius: 11px; flex-shrink: 0; background-color: #0a0a0a; background-image: radial-gradient(circle, #8c8c8c 1.1px, transparent 1.6px); background-size: 6px 6px; box-shadow: 0 0 0 1px #262626"></div>
+<div style="width: 44px; height: 44px; border-radius: 11px; flex-shrink: 0; background-color: #0B0B0B; background-image: radial-gradient(circle, #DDDDDD 1.1px, transparent 1.6px); background-size: 6px 6px; box-shadow: 0 0 0 1px #222222"></div>
 <div style="display: flex; flex-direction: column; gap: 3px; min-width: 0">
-<div style="font-size: 14px; font-weight: 500">Track name</div>
-<div style="font-size: 12px; color: #9c9c9c">Artist</div>
+<div style="font-size: 14px; font-weight: 500; color: #DDDDDD">Track name</div>
+<div style="font-size: 12px; color: #8E8E8E">Artist</div>
 </div>
 </div>
 <div style="display: flex; align-items: center; gap: 8px">
-<div style="height: 2px; background: #2a2a2a; border-radius: 1px; position: relative; flex-grow: 1"><div style="position: absolute; left: 0; top: 0; height: 2px; width: 38%; background: #ffffff; border-radius: 1px"></div></div>
+<div style="height: 2px; background: #222222; border-radius: 1px; position: relative; flex-grow: 1"><div style="position: absolute; left: 0; top: 0; height: 2px; width: 38%; background: #DDDDDD; border-radius: 1px"></div></div>
 <button class="mb" aria-label="Previous track"><svg class="ico" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 6v12M18 6l-8 6 8 6z"></path></svg></button>
 <button class="mb" aria-label="{{ playLabel }}" onClick="{{ togglePlay }}">
 <sc-if value="{{ playing }}" hint-placeholder-val="{{ false }}"><svg class="icof" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="5.5" width="3.2" height="13" rx="1"></rect><rect x="13.8" y="5.5" width="3.2" height="13" rx="1"></rect></svg></sc-if>
@@ -75,20 +77,24 @@ sc-for,sc-if{display:contents}
 </div>
 </div>
 <div class="{{ dockClass }}" style="position: absolute; left: 24px; top: 718px; width: 282px; height: 72px; display: flex; align-items: center; justify-content: space-between">
-<button class="ic" aria-label="Phone"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5h3l1.5 4-2 1.2a11 11 0 0 0 5.8 5.8l1.2-2 4 1.5v3a2 2 0 0 1-2 2A16 16 0 0 1 3 5.5a2 2 0 0 1 2-2z"></path></svg></button>
-<button class="ic" aria-label="Messages"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v10H9l-5 4z"></path></svg></button>
-<button class="ic" aria-label="Camera"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="12" rx="3"></rect><circle cx="12" cy="13" r="3.5"></circle><path d="M8.5 7l1.5-2.5h4L15.5 7"></path></svg></button>
-<button class="ic" aria-label="Browser"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M3.5 12h17M12 3.5c2.6 2.4 3.8 5.2 3.8 8.5s-1.2 6.1-3.8 8.5c-2.6-2.4-3.8-5.2-3.8-8.5S9.4 5.9 12 3.5z"></path></svg></button>
+<button class="ic" aria-label="Messages"><canvas id="dh-cover-ic-messages" ref="{{ setIcon }}" width="56" height="56" aria-hidden="true" style="width: 56px; height: 56px; display: block"></canvas></button>
+<button class="ic" aria-label="Mail"><canvas id="dh-cover-ic-mail" ref="{{ setIcon }}" width="56" height="56" aria-hidden="true" style="width: 56px; height: 56px; display: block"></canvas></button>
+<button class="ic" aria-label="Browser"><canvas id="dh-cover-ic-browser" ref="{{ setIcon }}" width="56" height="56" aria-hidden="true" style="width: 56px; height: 56px; display: block"></canvas></button>
+<button class="ic" aria-label="Music"><canvas id="dh-cover-ic-music" ref="{{ setIcon }}" width="56" height="56" aria-hidden="true" style="width: 56px; height: 56px; display: block"></canvas></button>
 </div>
 </div>
 </div>
-<div style="font-size: 13px; color: #a0a0a0; text-align: center; line-height: 1.5">Cover screen · tilt with the pointer · click to shoot</div>
+<div style="width: 330px; display: flex; align-items: flex-start; gap: 10px">
+<button class="shk" aria-label="Shake" onClick="{{ shake }}">{{ shakeText }}</button>
+<div style="font-size: 11.5px; color: #a0a0a0; line-height: 1.4">The ship flies itself · move the pointer to tilt (stars shift, debris falls) · click to shoot · Shake for a shockwave (8 s cooldown here, 60 s on the phone)</div>
+</div>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"dotSize":{"editor":"range","default":1.2,"min":0.8,"max":3.6,"step":0.1,"unit":"px","section":"Dots"},"dotSpacing":{"editor":"range","default":4,"min":3,"max":10,"step":0.5,"unit":"px","section":"Dots"},"widgetStyle":{"editor":"enum","default":"bare","options":["bare","tiles"],"section":"Style"},"iconStyle":{"editor":"enum","default":"glyph","options":["glyph","square"],"section":"Style"},"$preview":{"width":410,"height":940}}'>
 class Component extends DCLogic {
   _dims() {
-    return { W: 330, H: 810, ROCKS: 5, R: 26, CID: 'dh-cover-cv',
+    return { W: 330, H: 810, ROCKS: 5, R: 26, CID: 'dh-cover-cv', IP: 'dh-cover-ic-', IC: 56,
+      ICONS: ['messages', 'mail', 'browser', 'music'],
       zones: [[12, 20, 306, 196], [12, 580, 306, 120], [16, 712, 298, 84]] };
   }
   componentDidMount() {
@@ -105,6 +111,7 @@ class Component extends DCLogic {
     };
     try { window.addEventListener('deviceorientation', this._onOri); } catch (err) {}
     this._findCanvas(0);
+    this._findIcons(0);
   }
   componentWillUnmount() {
     this._alive = false;
@@ -120,6 +127,102 @@ class Component extends DCLogic {
     if (!this._cv) { const el = document.getElementById(this.D.CID); if (el) this._cv = el; }
     if (this._cv) { this._start(); return; }
     if (n < 40) setTimeout(() => this._findCanvas(n + 1), 100);
+  }
+  _findIcons(n) {
+    if (!this._alive) return;
+    const D = this.D || this._dims();
+    let left = 0;
+    for (const name of D.ICONS) {
+      const el = document.getElementById(D.IP + name);
+      if (el) this._paintIcon(el); else left++;
+    }
+    if (left && n < 40) setTimeout(() => this._findIcons(n + 1), 100);
+  }
+  _icShape(x, name) {
+    const grey = (L) => { const v = Math.round(L * 255); return 'rgb(' + v + ',' + v + ',' + v + ')'; };
+    const rr = (x0, y0, w, h, r) => { x.beginPath(); x.moveTo(x0 + r, y0); x.arcTo(x0 + w, y0, x0 + w, y0 + h, r); x.arcTo(x0 + w, y0 + h, x0, y0 + h, r); x.arcTo(x0, y0 + h, x0, y0, r); x.arcTo(x0, y0, x0 + w, y0, r); x.closePath(); };
+    if (name === 'messages') {
+      x.fillStyle = grey(0.45);
+      rr(98, 104, 236, 184, 60); x.fill();
+      x.beginPath(); x.moveTo(134, 262); x.lineTo(112, 336); x.lineTo(198, 280); x.closePath(); x.fill();
+    } else if (name === 'phone') {
+      x.save(); x.translate(64, 56); x.scale(14.2, 14.2); x.fillStyle = grey(0.6);
+      x.fill(new Path2D('M5 3.5h3l1.5 4-2 1.2a11 11 0 0 0 5.8 5.8l1.2-2 4 1.5v3a2 2 0 0 1-2 2A16 16 0 0 1 3 5.5a2 2 0 0 1 2-2z'));
+      x.restore();
+    } else if (name === 'mail') {
+      rr(96, 128, 240, 176, 22); x.fillStyle = grey(0.8); x.fill();
+      x.save(); rr(96, 128, 240, 176, 22); x.clip();
+      x.beginPath(); x.moveTo(96, 128); x.lineTo(336, 128); x.lineTo(216, 230); x.closePath(); x.fillStyle = grey(0.4); x.fill();
+      x.restore();
+    } else if (name === 'browser') {
+      const L = [0.35, 0.6, 0.85], step = (2 * Math.PI) / 3;
+      for (let i = 0; i < 3; i++) { const a0 = -Math.PI / 2 + i * step; x.beginPath(); x.moveTo(216, 216); x.arc(216, 216, 122, a0, a0 + step); x.closePath(); x.fillStyle = grey(L[i]); x.fill(); }
+      x.beginPath(); x.arc(216, 216, 62, 0, 2 * Math.PI); x.fillStyle = grey(0.95); x.fill();
+      x.beginPath(); x.arc(216, 216, 46, 0, 2 * Math.PI); x.fillStyle = grey(0.5); x.fill();
+    } else if (name === 'music') {
+      x.beginPath(); x.arc(216, 216, 122, 0, 2 * Math.PI); x.fillStyle = grey(0.3); x.fill();
+      x.beginPath(); x.moveTo(184, 150); x.lineTo(184, 282); x.lineTo(292, 216); x.closePath(); x.fillStyle = grey(0.95); x.fill();
+    }
+  }
+  _icDots(name) {
+    this._icCache = this._icCache || {};
+    if (this._icCache[name]) return this._icCache[name];
+    const S = 432, c = document.createElement('canvas');
+    c.width = S; c.height = S;
+    const x = c.getContext('2d', { willReadFrequently: true });
+    if (!x) return [];
+    this._icShape(x, name);
+    const px = x.getImageData(0, 0, S, S).data, W1 = S + 1;
+    const ia = new Float64Array(W1 * W1), il = new Float64Array(W1 * W1);
+    for (let yy = 0; yy < S; yy++) {
+      let ra = 0, rl = 0;
+      for (let xx = 0; xx < S; xx++) {
+        const o = (yy * S + xx) * 4, a = px[o + 3] / 255;
+        const L = (0.2126 * px[o] + 0.7152 * px[o + 1] + 0.0722 * px[o + 2]) / 255;
+        ra += a; rl += L * a;
+        const k = (yy + 1) * W1 + xx + 1;
+        ia[k] = ia[k - W1] + ra; il[k] = il[k - W1] + rl;
+      }
+    }
+    const P = S / 30, B = P / 4, row = (P * Math.sqrt(3)) / 2, c0 = S / 2;
+    const tot = ia[S * W1 + S], meanL = tot > 1e-9 ? il[S * W1 + S] / tot : 0.7;
+    const box = (ii, cx, cy) => {
+      const x0 = this._cl(Math.ceil(cx - B - 0.5), 0, S), x1 = this._cl(Math.floor(cx + B - 0.5) + 1, 0, S);
+      const y0 = this._cl(Math.ceil(cy - B - 0.5), 0, S), y1 = this._cl(Math.floor(cy + B - 0.5) + 1, 0, S);
+      return [ii[y1 * W1 + x1] - ii[y0 * W1 + x1] - ii[y1 * W1 + x0] + ii[y0 * W1 + x0], Math.max(1, (x1 - x0) * (y1 - y0))];
+    };
+    const half = Math.floor((c0 - P / 2) / row + 1e-9), lo = P / 2, hi = S - P / 2, dots = [];
+    for (let j = -half; j <= half; j++) {
+      const x0 = c0 + (j % 2 ? P / 2 : 0);
+      const i0 = Math.ceil((lo - x0) / P - 1e-9), i1 = Math.floor((hi - x0) / P + 1e-9);
+      for (let i = i0; i <= i1; i++) {
+        const cx = x0 + i * P, cy = c0 + j * row;
+        const cov = box(ia, cx, cy);
+        if (cov[0] / cov[1] < 0.5) continue;
+        const L = cov[0] > 0.01 * cov[1] ? box(il, cx, cy)[0] / cov[0] : meanL;
+        const t = (0.38 + 0.57 * L) * (1 - (0.12 * (cx + cy)) / (2 * S));
+        dots.push([cx, cy, Math.max(0.28 * P, 0.47 * P * Math.sqrt(Math.max(t, 0)))]);
+      }
+    }
+    this._icCache[name] = dots;
+    return dots;
+  }
+  _paintIcon(el) {
+    if (!el || !el.id) return;
+    const D = this.D || this._dims();
+    const name = el.id.slice(D.IP.length);
+    if (D.ICONS.indexOf(name) < 0) return;
+    const dpr = this._cl(window.devicePixelRatio || 1, 1, 4), px = Math.round(D.IC * dpr);
+    if (el._dhPx === px) return;
+    const dots = this._icDots(name);
+    el.width = px; el.height = px;
+    const c = el.getContext('2d'); if (!c) return;
+    el._dhPx = px;
+    const sc = px / 432;
+    c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, px, px);
+    c.fillStyle = '#DDDDDD'; c.beginPath();
+    for (const d of dots) { c.moveTo((d[0] + d[2]) * sc, d[1] * sc); c.arc(d[0] * sc, d[1] * sc, d[2] * sc, 0, 2 * Math.PI); }
+    c.fill();
   }
   _start() {
     if (this._running || !this._cv || !this._alive) return;
@@ -145,28 +248,40 @@ class Component extends DCLogic {
     };
     this._raf = requestAnimationFrame(step);
   }
+  _band() {
+    const D = this.D, k = Math.sqrt(D.W * D.H) / 669;
+    const zs = D.zones.slice().sort((a, b) => a[1] - b[1]);
+    let cur = 0, lo = 0, hi = 0;
+    for (const z of zs) { if (z[1] - cur > hi - lo) { lo = cur; hi = z[1]; } cur = Math.max(cur, z[1] + z[3]); }
+    if (D.H - cur > hi - lo) { lo = cur; hi = D.H; }
+    lo += 15 * k; hi -= 15 * k;
+    if (hi - lo < 20 * k) { lo = 0.2 * D.H; hi = 0.8 * D.H; }
+    return [lo, hi];
+  }
   _initGame() {
     const D = this.D;
-    const g = { t: 0, tilt: { x: 0, y: 0 }, oriOn: false, ori: null,
+    const g = { t: 0, k: Math.sqrt(D.W * D.H) / 669, tilt: { x: 0, y: 0 }, oriOn: false, ori: null,
       ship: { x: D.W / 2, y: D.H * 0.54, vx: 0, vy: 0, a: -Math.PI / 2, cool: 0, fire: 0, aim: 0 },
+      band: this._band(), wander: { x: D.W / 2, y: D.H / 2, t: 0 }, wave: null, shockCool: 0,
+      rc: { bx: 0, by: 0, on: false }, parX: 0, parY: 0,
       rocks: [], shots: [], parts: [], rings: [], trail: [], trailT: 0, spawnT: 2, stars: [] };
     this._g = g;
     const n = Math.round((D.W * D.H) / 2300);
-    for (let i = 0; i < n; i++) g.stars.push({ x: Math.random() * D.W, y: Math.random() * D.H, a: 0.05 + Math.random() * 0.3, p: Math.random() * 6.283, s: 0.3 + Math.random() * 0.9 });
+    for (let i = 0; i < n; i++) g.stars.push({ x: Math.random() * D.W, y: Math.random() * D.H, a: 0.05 + Math.random() * 0.3, p: Math.random() * 6.283, s: 0.3 + Math.random() * 0.9, d: 0.2 + Math.random() * 0.8 });
     for (let i = 0; i < D.ROCKS; i++) g.rocks.push(this._newRock(i % 3 === 2 ? 2 : 3, null, true));
   }
   _newRock(size, parent, anywhere) {
-    const D = this.D, g = this._g;
+    const D = this.D, g = this._g, k = g.k;
     const r = D.R * (size === 3 ? 1 : size === 2 ? 0.62 : 0.38);
     let x, y, vx, vy;
     if (parent) {
       x = parent.x; y = parent.y;
-      const ang = Math.random() * 6.283, sp = 18 + Math.random() * 26;
+      const ang = Math.random() * 6.283, sp = (18 + Math.random() * 26) * k;
       vx = parent.vx * 0.6 + Math.cos(ang) * sp; vy = parent.vy * 0.6 + Math.sin(ang) * sp;
     } else if (anywhere) {
       let tries = 0;
-      do { x = Math.random() * D.W; y = Math.random() * D.H; tries++; } while (tries < 30 && Math.hypot(x - g.ship.x, y - g.ship.y) < 120);
-      const ang = Math.random() * 6.283, sp = 10 + Math.random() * 18;
+      do { x = Math.random() * D.W; y = Math.random() * D.H; tries++; } while (tries < 30 && Math.hypot(x - g.ship.x, y - g.ship.y) < 150 * k);
+      const ang = Math.random() * 6.283, sp = (10 + Math.random() * 18) * k;
       vx = Math.cos(ang) * sp; vy = Math.sin(ang) * sp;
     } else {
       const side = Math.floor(Math.random() * 4);
@@ -175,7 +290,7 @@ class Component extends DCLogic {
       else if (side === 2) { x = Math.random() * D.W; y = -r; }
       else { x = Math.random() * D.W; y = D.H + r; }
       const tx = D.W * (0.25 + Math.random() * 0.5), ty = D.H * (0.25 + Math.random() * 0.5);
-      const ang = Math.atan2(ty - y, tx - x), sp = 10 + Math.random() * 18;
+      const ang = Math.atan2(ty - y, tx - x), sp = (10 + Math.random() * 18) * k;
       vx = Math.cos(ang) * sp; vy = Math.sin(ang) * sp;
     }
     const nv = 9 + Math.floor(Math.random() * 4);
@@ -217,13 +332,19 @@ class Component extends DCLogic {
   }
   _fire(x, y) {
     const g = this._g; if (!g) return;
-    const s = g.ship;
+    const s = g.ship, k = g.k;
     if (s.fire > 0) return;
     s.fire = 0.1;
     const a = Math.atan2(y - s.y, x - s.x);
     s.a = a; s.aim = 0.45;
-    const v = 520;
-    g.shots.push({ x: s.x + Math.cos(a) * 15, y: s.y + Math.sin(a) * 15, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1.4 });
+    const v = 560 * k;
+    g.shots.push({ x: s.x + Math.cos(a) * 15 * k, y: s.y + Math.sin(a) * 15 * k, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1.3 });
+  }
+  _shock() {
+    const g = this._g, D = this.D;
+    if (!g || g.t < 1.2 || g.shockCool > 0) return;
+    g.shockCool = 8;
+    g.wave = { x: g.ship.x, y: g.ship.y, r: 0, max: Math.hypot(D.W, D.H), t: 0 };
   }
   _kill(i) {
     const g = this._g, r = g.rocks[i];
@@ -242,22 +363,52 @@ class Component extends DCLogic {
     this._best = Math.max(this._best || 0, this._sc);
     this.setState({ score: this._sc, best: this._best });
   }
+  _steer(dt) {
+    const g = this._g, D = this.D, s = g.ship, k = g.k, ta = 280 * k, w = g.wander;
+    w.t -= dt;
+    if (w.t <= 0) { w.x = D.W * (0.2 + Math.random() * 0.6); w.y = g.band[0] + (g.band[1] - g.band[0]) * Math.random(); w.t = 2 + Math.random() * 2; }
+    const dx = w.x - s.x, dy = w.y - s.y, d = Math.hypot(dx, dy);
+    let ax = 0, ay = 0;
+    if (d > 1e-3) { const f = (0.5 * ta * Math.min(1, d / (40 * k))) / d; ax = dx * f; ay = dy * f; }
+    const max = 1.2 * ta;
+    for (const r of g.rocks) {
+      const range = r.r + 90 * k, nowD = Math.hypot(s.x - r.x, s.y - r.y);
+      if (nowD >= range) continue;
+      const fx = r.x + r.vx * 0.6, fy = r.y + r.vy * 0.6;
+      let awx = s.x - fx, awy = s.y - fy, fd = Math.hypot(awx, awy);
+      const prox = 1 - Math.min(nowD, fd) / range;
+      if (prox <= 0) continue;
+      if (fd < 1e-3) { awx = s.x - r.x; awy = s.y - r.y; fd = Math.hypot(awx, awy); if (fd < 1e-3) { awx = 1; awy = 0; fd = 1; } }
+      awx /= fd; awy /= fd;
+      const rv = Math.hypot(r.vx, r.vy);
+      let px = -awy, py = awx;
+      if (rv > 1e-3) { px = -r.vy / rv; py = r.vx / rv; }
+      const side = (s.x - r.x) * px + (s.y - r.y) * py >= 0 ? 1 : -1;
+      const wgt = prox * max;
+      ax += (awx * 0.6 + px * side) * wgt; ay += (awy * 0.6 + py * side) * wgt;
+    }
+    const am = Math.hypot(ax, ay);
+    if (am > max) { ax *= max / am; ay *= max / am; }
+    s.vx += ax * dt; s.vy += ay * dt;
+  }
   _update(dt) {
-    const g = this._g, D = this.D, s = g.ship;
+    const g = this._g, D = this.D, s = g.ship, k = g.k;
     g.t += dt;
+    if (g.shockCool > 0) g.shockCool -= dt;
     const live = g.t > 1.2;
-    if (live) { s.vx += g.tilt.x * 260 * dt; s.vy += g.tilt.y * 260 * dt; }
+    if (live) this._steer(dt);
     const damp = Math.exp(-1.5 * dt); s.vx *= damp; s.vy *= damp;
-    const sp = Math.hypot(s.vx, s.vy);
-    if (sp > 190) { s.vx *= 190 / sp; s.vy *= 190 / sp; }
+    let sp = Math.hypot(s.vx, s.vy);
+    const cap = 0.7 * 210 * k;
+    if (sp > cap) { s.vx *= cap / sp; s.vy *= cap / sp; sp = cap; }
     s.x += s.vx * dt; s.y += s.vy * dt;
-    const m = 18;
+    const m = 18 * k;
     if (s.x < m) { s.x = m; s.vx = Math.abs(s.vx) * 0.45; }
     if (s.x > D.W - m) { s.x = D.W - m; s.vx = -Math.abs(s.vx) * 0.45; }
     if (s.y < m) { s.y = m; s.vy = Math.abs(s.vy) * 0.45; }
     if (s.y > D.H - m) { s.y = D.H - m; s.vy = -Math.abs(s.vy) * 0.45; }
     if (s.aim > 0) s.aim -= dt;
-    else if (sp > 14) {
+    else if (sp > 14 * k) {
       const ta = Math.atan2(s.vy, s.vx);
       let da = ta - s.a;
       while (da > Math.PI) da -= 2 * Math.PI;
@@ -267,7 +418,7 @@ class Component extends DCLogic {
     if (s.fire > 0) s.fire -= dt;
     if (s.cool > 0) s.cool -= dt;
     g.trailT += dt;
-    if (g.trailT > 0.04 && sp > 10) { g.trailT = 0; g.trail.push({ x: s.x - Math.cos(s.a) * 9, y: s.y - Math.sin(s.a) * 9, life: 0.7 }); }
+    if (g.trailT > 0.04 && sp > 10 * k) { g.trailT = 0; g.trail.push({ x: s.x - Math.cos(s.a) * 9, y: s.y - Math.sin(s.a) * 9, life: 0.7 }); }
     for (const tr of g.trail) tr.life -= dt;
     g.trail = g.trail.filter((tr) => tr.life > 0);
     for (const r of g.rocks) {
@@ -290,62 +441,83 @@ class Component extends DCLogic {
     g.shots = g.shots.filter((sh) => sh.life > 0);
     if (live) {
       for (const r of g.rocks) {
-        const dx = s.x - r.x, dy = s.y - r.y, d = Math.hypot(dx, dy) || 1, lim = r.r * 0.82 + 10;
+        const dx = s.x - r.x, dy = s.y - r.y, d = Math.hypot(dx, dy) || 1, lim = r.r * 0.82 + 10 * k;
         if (d < lim) {
           const nx = dx / d, ny = dy / d;
           s.x = r.x + nx * (lim + 1); s.y = r.y + ny * (lim + 1);
           if (s.cool <= 0) {
-            s.vx += nx * 140; s.vy += ny * 140;
-            r.vx -= nx * 20; r.vy -= ny * 20;
+            s.vx += nx * 150 * k; s.vy += ny * 150 * k;
+            r.vx -= nx * 20 * k; r.vy -= ny * 20 * k;
             s.cool = 0.4;
-            g.rings.push({ x: s.x - nx * 6, y: s.y - ny * 6, t: 0 });
+            g.rings.push({ x: s.x - nx * 6 * k, y: s.y - ny * 6 * k, t: 0 });
           }
         }
       }
     }
+    if (g.wave) {
+      const wv = g.wave;
+      wv.t += dt; wv.r = wv.max * Math.min(1, wv.t / 0.9);
+      let again = true;
+      while (again) {
+        again = false;
+        for (let i = 0; i < g.rocks.length; i++) {
+          const r = g.rocks[i];
+          if (Math.hypot(r.x - wv.x, r.y - wv.y) - r.r < wv.r) { this._kill(i); again = true; break; }
+        }
+      }
+      if (wv.t >= 0.9) g.wave = null;
+    }
     for (const rg of g.rings) rg.t += dt;
     g.rings = g.rings.filter((rg) => rg.t < 0.8);
-    const fr = Math.exp(-0.8 * dt);
-    for (const p of g.parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= fr; p.vy *= fr; p.life -= dt; }
+    const fr = Math.exp(-0.8 * dt), gx = g.tilt.x * 160 * k * dt, gy = g.tilt.y * 160 * k * dt;
+    for (const p of g.parts) { p.vx += gx; p.vy += gy; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= fr; p.vy *= fr; p.life -= dt; }
     g.parts = g.parts.filter((p) => p.life > 0);
     let mass = 0;
     for (const r of g.rocks) mass += r.size === 3 ? 1 : r.size === 2 ? 0.45 : 0.2;
     g.spawnT -= dt;
     if (g.spawnT <= 0 && mass < D.ROCKS * 0.85) { g.rocks.push(this._newRock(3, null, false)); g.spawnT = 1.6 + Math.random() * 1.4; }
+    const rc = g.rc;
+    let tx = 0, ty = 0;
+    if (!rc.on) { rc.bx = g.tilt.x; rc.by = g.tilt.y; rc.on = true; }
+    else {
+      tx = this._cl(g.tilt.x - rc.bx, -1, 1); ty = this._cl(g.tilt.y - rc.by, -1, 1);
+      const b = 1 - Math.exp(-dt / 4);
+      rc.bx += (g.tilt.x - rc.bx) * b; rc.by += (g.tilt.y - rc.by) * b;
+    }
+    const pa = 1 - Math.exp(-dt / 0.15);
+    g.parX += (tx - g.parX) * pa; g.parY += (ty - g.parY) * pa;
+    const left = g.shockCool > 0 ? Math.ceil(g.shockCool) : 0;
+    if (left !== this._shLeft) { this._shLeft = left; this.setState({ shakeLeft: left }); }
   }
   _sprite() {
     if (this._spr) return this._spr;
     const c = document.createElement('canvas');
-    c.width = 32; c.height = 32;
+    c.width = 64; c.height = 64;
     const x = c.getContext('2d');
-    x.fillStyle = '#ffffff'; x.beginPath(); x.arc(16, 16, 15, 0, 6.2832); x.fill();
+    const gr = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(221,221,221,1)'); gr.addColorStop(0.7, 'rgba(221,221,221,1)'); gr.addColorStop(1, 'rgba(221,221,221,0)');
+    x.fillStyle = gr; x.beginPath(); x.arc(32, 32, 32, 0, 6.2832); x.fill();
     this._spr = c;
     return c;
   }
-  _rr(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-    ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
-  }
+  _wrap(v, size) { const m = v % size; return m < 0 ? m + size : m; }
   _draw() {
-    const ctx = this._ctx, g = this._g, D = this.D, dpr = this._dpr;
+    const ctx = this._ctx, g = this._g, D = this.D, dpr = this._dpr, k = g.k;
     const ds = this._DS(), S = this._S();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.globalAlpha = 1; ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, D.W, D.H);
+    ctx.globalAlpha = 1; ctx.fillStyle = '#0B0B0B'; ctx.fillRect(0, 0, D.W, D.H);
     const spr = this._sprite();
     const dot = (x, y, r, a) => { if (a <= 0.01 || r <= 0.05) return; ctx.globalAlpha = a > 1 ? 1 : a; ctx.drawImage(spr, x - r, y - r, r * 2, r * 2); };
     const f = this._cl((g.t - 0.5) / 1.1, 0, 1), fade = f * f * (3 - 2 * f);
-    for (const st of g.stars) dot(st.x, st.y, ds * 0.55, st.a * (0.65 + 0.35 * Math.sin(g.t * st.s * 2 + st.p)) * fade);
+    const ox = g.parX * 28 * k, oy = g.parY * 28 * k;
+    for (const st of g.stars) dot(this._wrap(st.x + ox * st.d, D.W), this._wrap(st.y + oy * st.d, D.H), ds * 0.55, st.a * (0.65 + 0.35 * Math.sin(g.t * st.s * 2 + st.p)) * fade);
     for (const r of g.rocks) {
       if (!r.dots || r.sp !== S) this._rockDots(r, S);
       const c = Math.cos(r.rot), sn = Math.sin(r.rot);
       for (const p of r.dots) dot(r.x + p[0] * c - p[1] * sn, r.y + p[0] * sn + p[1] * c, p[2] === 1 ? ds : ds * 0.75, (p[2] === 1 ? 0.9 : p[2]) * fade);
     }
-    for (const p of g.parts) { const k = p.life / p.l0; dot(p.x, p.y, ds * (0.45 + 0.55 * k), p.a * k); }
-    for (const tr of g.trail) { const k = tr.life / 0.7; dot(tr.x, tr.y, ds * (0.3 + 0.6 * k), 0.55 * k * fade); }
+    for (const p of g.parts) { const q = p.life / p.l0; dot(p.x, p.y, ds * (0.45 + 0.55 * q), p.a * q); }
+    for (const tr of g.trail) { const q = tr.life / 0.7; dot(tr.x, tr.y, ds * (0.3 + 0.6 * q), 0.55 * q * fade); }
     for (const sh of g.shots) {
       dot(sh.x, sh.y, ds * 1.4, 1);
       dot(sh.x - sh.vx * 0.012, sh.y - sh.vy * 0.012, ds, 0.45);
@@ -359,12 +531,22 @@ class Component extends DCLogic {
       const blink = s.cool > 0 ? 0.55 + 0.45 * Math.cos(s.cool * 40) : 1;
       for (const p of pts) dot(s.x + p[0] * c - p[1] * sn, s.y + p[0] * sn + p[1] * c, ds * 1.05, sa * blink);
     }
-    for (const rg of g.rings) {
-      const k = rg.t / 0.8, rad = 8 + k * 56, n = 28;
-      for (let i = 0; i < n; i++) { const a = (i / n) * 6.2832; dot(rg.x + Math.cos(a) * rad, rg.y + Math.sin(a) * rad, ds * (1.25 - 0.6 * k), (1 - k) * 0.95); }
+    if (g.wave) {
+      const wv = g.wave, al = 1 - wv.t / 0.9, rad = wv.r;
+      if (al > 0 && rad > 1) {
+        const n = Math.max(12, Math.round((6.2832 * rad) / (6 * k)));
+        for (let j = 0; j < n; j++) {
+          const a = (j / n) * 6.2832, x = wv.x + Math.cos(a) * rad, y = wv.y + Math.sin(a) * rad;
+          if (x < -ds * 2 || y < -ds * 2 || x > D.W + ds * 2 || y > D.H + ds * 2) continue;
+          dot(x, y, ds * 1.2, al);
+        }
+      }
     }
-    ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    for (const z of D.zones) { this._rr(ctx, z[0], z[1], z[2], z[3], 24); ctx.fill(); }
+    for (const rg of g.rings) {
+      const q = rg.t / 0.8, rad = 8 + q * 56, n = 28;
+      for (let i = 0; i < n; i++) { const a = (i / n) * 6.2832; dot(rg.x + Math.cos(a) * rad, rg.y + Math.sin(a) * rad, ds * (1.25 - 0.6 * q), (1 - q) * 0.95); }
+    }
+    ctx.globalAlpha = 1;
   }
   _mx(str) {
     const F = { '0': ['01110', '10001', '10011', '10101', '11001', '10001', '01110'], '1': ['00100', '01100', '00100', '00100', '00100', '00100', '01110'], '2': ['01110', '10001', '00001', '00010', '00100', '01000', '11111'], '3': ['11111', '00010', '00100', '00010', '00001', '10001', '01110'], '4': ['00010', '00110', '01010', '10010', '11111', '00010', '00010'], '5': ['11111', '10000', '11110', '00001', '00001', '10001', '01110'], '6': ['00110', '01000', '10000', '11110', '10001', '10001', '01110'], '7': ['11111', '00001', '00010', '00100', '01000', '01000', '01000'], '8': ['01110', '10001', '10001', '01110', '10001', '10001', '01110'], '9': ['01110', '10001', '10001', '01111', '00001', '00010', '01100'] };
@@ -395,7 +577,9 @@ class Component extends DCLogic {
           const D = this.D || this._dims();
           this._fire(((e.clientX - r.left) / r.width) * D.W, ((e.clientY - r.top) / r.height) * D.H);
         },
-        togglePlay: () => { const st = this.state || {}; this.setState({ playing: !st.playing }); }
+        shake: () => this._shock(),
+        togglePlay: () => { const st = this.state || {}; this.setState({ playing: !st.playing }); },
+        setIcon: (el) => { if (el) this._paintIcon(el); }
       };
     }
     const st = this.state || {};
@@ -405,8 +589,10 @@ class Component extends DCLogic {
     const date = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
     const ws = this.props.widgetStyle === 'tiles' ? 'tiles' : 'bare';
     const is = this.props.iconStyle === 'square' ? 'square' : 'glyph';
+    const left = st.shakeLeft || 0;
     return {
       setCanvas: this._h.setCanvas, onMove: this._h.onMove, onLeave: this._h.onLeave, onTap: this._h.onTap, togglePlay: this._h.togglePlay,
+      setIcon: this._h.setIcon, shake: this._h.shake, shakeText: left > 0 ? 'Shake · ' + left + ' s' : 'Shake',
       time: time, date: date, score: st.score || 0, best: st.best || 0,
       playing: !!st.playing, paused: !st.playing, playLabel: st.playing ? 'Pause' : 'Play',
       layerClass: 'layer ' + ws, dockClass: 'dock ' + is, clock: this._mx(time)
