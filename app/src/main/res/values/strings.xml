@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Dot Home</string>
+    <string name="wallpaper_description">An endless dot-drawn space shooter behind your icons.</string>
 </resources>
