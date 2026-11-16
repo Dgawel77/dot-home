@@ -14,6 +14,9 @@ public final class GameConfig {
     public final int particleCap = 2000;
     public final float introSeconds = 1.2f;
     public final float autoFireEvery = 0.45f;
+    public final float autopilotWanderMin = 2f, autopilotWanderMax = 4f;
+    public final float shockCooldown = 60f, shockDuration = 0.9f;
+    public final float gravityAccel;
 
     /**
      * Device pixels per "mockup unit". The mockup surfaces (620x722 main, 330x810 cover) map to the
@@ -37,6 +40,7 @@ public final class GameConfig {
         rockRadius = 33.5f * k;
         rocksTarget = Math.max(4, Math.min(8, Math.round(mockupArea(w, h) / 64000f)));
         tiltAccel = 280f * k;
+        gravityAccel = 160f * k;
         maxSpeed = 210f * k;
         shotSpeed = 560f * k;
         hitKnock = 150f * k;

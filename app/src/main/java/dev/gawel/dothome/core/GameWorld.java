@@ -3,7 +3,7 @@ package dev.gawel.dothome.core;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Pure-Java space-shooter simulation: a tilt-steered ship, drifting rocks, shots and particles. */
+/** Pure-Java space-shooter simulation: a self-flying ship, drifting rocks, shots and particles. */
 public final class GameWorld {
     public interface Listener {
         void onRockDestroyed();
@@ -20,7 +20,8 @@ public final class GameWorld {
     public static final class Shot { public float x, y, vx, vy, life; }
     public static final class Particle { public float x, y, vx, vy, life, life0, alpha; }
     public static final class Ring { public float x, y, t; }
-    public static final class Star { public float x, y, alpha, phase, speed; }
+    public static final class Star { public float x, y, alpha, phase, speed, depth; }
+    public static final class Shockwave { public float x, y, radius, maxRadius, t; }
 
     private static final float TAU = (float) (Math.PI * 2);
 
@@ -36,6 +37,10 @@ public final class GameWorld {
     private Listener listener;
     private float tiltX, tiltY, fireT, aimT, spawnT = 2f, autoT;
     private boolean autoFire;
+    private boolean autopilot = true;
+    private float wanderX, wanderY, wanderT;
+    private Shockwave wave;
+    private float lastShock = Float.NEGATIVE_INFINITY;
 
     public GameWorld(Rng rng) {
         this.rng = rng;
@@ -43,6 +48,23 @@ public final class GameWorld {
 
     public void setListener(Listener l) { listener = l; }
     public void setTilt(float tx, float ty) { tiltX = tx; tiltY = ty; }
+    public void setAutopilot(boolean on) { autopilot = on; }
+
+    /** Starts a shockwave at the ship; false while the cooldown (game time) is running. */
+    public boolean shockwave() {
+        if (cfg == null || time - lastShock < cfg.shockCooldown) return false;
+        lastShock = time;
+        Shockwave sw = new Shockwave();
+        sw.x = ship.x;
+        sw.y = ship.y;
+        sw.maxRadius = hypot(w, h);
+        wave = sw;
+        return true;
+    }
+
+    /** The active shockwave, or null. */
+    public Shockwave wave() { return wave; }
+
     public void setAutoFire(boolean on) { autoFire = on; }
 
     public Ship ship() { return ship; }
@@ -84,6 +106,9 @@ public final class GameWorld {
         for (Particle p : particles) { p.x *= sx; p.y *= sy; }
         for (Ring g : rings) { g.x *= sx; g.y *= sy; }
         for (Star s : stars) { s.x *= sx; s.y *= sy; }
+        wanderX *= sx;
+        wanderY *= sy;
+        if (wave != null) { wave.x *= sx; wave.y *= sy; wave.radius *= kr; wave.maxRadius *= kr; }
         retargetStars();
     }
 
@@ -98,6 +123,7 @@ public final class GameWorld {
             s.alpha = (float) rng.range(0.05, 0.35);
             s.phase = (float) rng.range(0, TAU);
             s.speed = (float) rng.range(0.3, 1.2);
+            s.depth = (float) rng.range(0.2, 1.0);
             stars.add(s);
         }
     }
@@ -137,17 +163,16 @@ public final class GameWorld {
         time += dt;
         boolean live = time > cfg.introSeconds;
         Ship s = ship;
-        if (live) {
-            s.vx += tiltX * cfg.tiltAccel * dt;
-            s.vy += tiltY * cfg.tiltAccel * dt;
-        }
+        if (live && autopilot) steer(dt);
         float damp = (float) Math.exp(-cfg.damping * dt);
         s.vx *= damp;
         s.vy *= damp;
         float sp = hypot(s.vx, s.vy);
-        if (sp > cfg.maxSpeed) {
-            s.vx *= cfg.maxSpeed / sp;
-            s.vy *= cfg.maxSpeed / sp;
+        float cap = autopilot ? 0.7f * cfg.maxSpeed : cfg.maxSpeed;
+        if (sp > cap) {
+            s.vx *= cap / sp;
+            s.vy *= cap / sp;
+            sp = cap;
         }
         s.x += s.vx * dt;
         s.y += s.vy * dt;
@@ -223,10 +248,26 @@ public final class GameWorld {
                 }
             }
         }
+        if (wave != null) {
+            wave.t += dt;
+            wave.radius = wave.maxRadius * Math.min(1f, wave.t / cfg.shockDuration);
+            boolean again = true;
+            while (again) {
+                again = false;
+                for (int i = 0; i < rocks.size(); i++) {
+                    Rock r = rocks.get(i);
+                    if (hypot(r.x - wave.x, r.y - wave.y) < wave.radius) { kill(i); again = true; break; }
+                }
+            }
+            if (wave.t >= cfg.shockDuration) wave = null;
+        }
         for (Ring g : rings) g.t += dt;
         for (int i = rings.size() - 1; i >= 0; i--) if (rings.get(i).t >= cfg.ringLife) rings.remove(i);
         float fr = (float) Math.exp(-0.8 * dt);
+        float gx = tiltX * cfg.gravityAccel * dt, gy = tiltY * cfg.gravityAccel * dt;
         for (Particle p : particles) {
+            p.vx += gx;
+            p.vy += gy;
             p.x += p.vx * dt;
             p.y += p.vy * dt;
             p.vx *= fr;
@@ -240,6 +281,55 @@ public final class GameWorld {
             rocks.add(newRock(3, null, false));
             spawnT = (float) rng.range(1.6, 3.0);
         }
+    }
+
+    /** Autopilot: drift toward a slowly moving wander target while sidestepping rocks. */
+    private void steer(float dt) {
+        float k = cfg.k, ta = cfg.tiltAccel;
+        Ship s = ship;
+        wanderT -= dt;
+        if (wanderT <= 0) {
+            wanderX = w * (float) rng.range(0.2, 0.8);
+            wanderY = h * (float) rng.range(0.2, 0.8);
+            wanderT = (float) rng.range(cfg.autopilotWanderMin, cfg.autopilotWanderMax);
+        }
+        float dx = wanderX - s.x, dy = wanderY - s.y;
+        float d = hypot(dx, dy);
+        float ax = 0, ay = 0;
+        if (d > 1e-3f) {
+            float f = 0.5f * ta * Math.min(1f, d / (40f * k)) / d;
+            ax = dx * f;
+            ay = dy * f;
+        }
+        float max = 1.2f * ta;
+        for (Rock r : rocks) {
+            float range = r.r + 90f * k;
+            float nowD = hypot(s.x - r.x, s.y - r.y);
+            if (nowD >= range) continue;
+            float fx = r.x + r.vx * 0.6f, fy = r.y + r.vy * 0.6f;
+            float awx = s.x - fx, awy = s.y - fy;
+            float fd = hypot(awx, awy);
+            float prox = 1f - Math.min(nowD, fd) / range;
+            if (prox <= 0) continue;
+            if (fd < 1e-3f) { awx = s.x - r.x; awy = s.y - r.y; fd = hypot(awx, awy); if (fd < 1e-3f) { awx = 1; awy = 0; fd = 1; } }
+            awx /= fd;
+            awy /= fd;
+            // sidestep across the rock's path, toward the side the ship is already on
+            float rv = hypot(r.vx, r.vy);
+            float px = -awy, py = awx;
+            if (rv > 1e-3f) {
+                px = -r.vy / rv;
+                py = r.vx / rv;
+            }
+            float side = (s.x - r.x) * px + (s.y - r.y) * py >= 0 ? 1f : -1f;
+            float wgt = prox * max;
+            ax += (awx * 0.6f + px * side) * wgt;
+            ay += (awy * 0.6f + py * side) * wgt;
+        }
+        float am = hypot(ax, ay);
+        if (am > max) { ax *= max / am; ay *= max / am; }
+        s.vx += ax * dt;
+        s.vy += ay * dt;
     }
 
     private void autoFireAtNearest() {

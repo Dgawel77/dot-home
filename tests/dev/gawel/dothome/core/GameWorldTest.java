@@ -79,8 +79,8 @@ public final class GameWorldTest {
     public static void testShipStaysInBounds() {
         GameWorld g = world(new Count());
         GameConfig cfg = GameConfig.forSize(620, 722);
-        g.setTilt(1, 1);
-        for (int i = 0; i < 625; i++) g.step(0.016f);
+        for (int i = 0; i < 625; i++) { g.rocks().clear(); g.step(0.016f); }
+        T.check(g.ship().x >= cfg.edgeMargin - 0.01 && g.ship().y >= cfg.edgeMargin - 0.01, "low bound");
         T.check(g.ship().x <= 620 - cfg.edgeMargin + 0.01, "x bound " + g.ship().x);
         T.check(g.ship().y <= 722 - cfg.edgeMargin + 0.01, "y bound " + g.ship().y);
     }
@@ -129,11 +129,11 @@ public final class GameWorldTest {
         T.check(mass >= 0.85 * GameConfig.forSize(620, 722).rocksTarget - 1, "mass " + mass);
     }
 
-    public static void testIntroIgnoresTilt() {
+    public static void testIntroKeepsShipStill() {
         GameWorld g = world(new Count());
-        g.setTilt(1, 0);
         for (int i = 0; i < 62; i++) g.step(0.016f);
         T.near(310, g.ship().x, 0.01, "ship x");
+        T.near(722 * 0.54, g.ship().y, 0.01, "ship y");
     }
 
     public static void testDtClamped() {
@@ -199,5 +199,113 @@ public final class GameWorldTest {
         T.check(g.stars().size() > cover, "more stars on main");
         g.resize(968, 2376);
         T.eq(cover, g.stars().size(), "trimmed back");
+    }
+
+    private static void stepClear(GameWorld g, float secs) {
+        for (int i = 0, n = Math.round(secs / 0.016f); i < n; i++) { g.rocks().clear(); g.step(0.016f); }
+    }
+
+    public static void testAutopilotKeepsMoving() {
+        GameWorld g = world(new Count());
+        GameConfig cfg = GameConfig.forSize(620, 722);
+        stepClear(g, 1.3f);
+        float sum = 0;
+        int n = 1250;
+        for (int i = 0; i < n; i++) {
+            g.rocks().clear();
+            g.step(0.016f);
+            GameWorld.Ship s = g.ship();
+            sum += (float) Math.sqrt(s.vx * s.vx + s.vy * s.vy);
+            T.check(s.x >= cfg.edgeMargin - 0.01 && s.x <= 620 - cfg.edgeMargin + 0.01, "x in margin " + s.x);
+            T.check(s.y >= cfg.edgeMargin - 0.01 && s.y <= 722 - cfg.edgeMargin + 0.01, "y in margin " + s.y);
+        }
+        T.check(sum / n > 0.1f * cfg.maxSpeed, "mean speed " + sum / n);
+    }
+
+    public static void testAutopilotDodgesIncomingRock() {
+        int clean = 0;
+        for (int seed = 1; seed <= 5; seed++) {
+            Count c = new Count();
+            GameWorld g = new GameWorld(new Rng(seed));
+            g.resize(620, 722);
+            g.setListener(c);
+            g.rocks().clear();
+            stepClear(g, 1.3f);
+            GameWorld.Ship s = g.ship();
+            GameWorld.Rock keep = g.addRock(3, s.x, s.y - 200, 0, 40);
+            for (int i = 0; i < 313; i++) {
+                for (int j = g.rocks().size() - 1; j >= 0; j--) if (g.rocks().get(j) != keep) g.rocks().remove(j);
+                g.step(0.016f);
+            }
+            if (c.hits == 0) clean++;
+        }
+        T.check(clean >= 4, "clean dodges " + clean + " of 5");
+    }
+
+    public static void testAutopilotNotStuckInCorner() {
+        GameWorld g = world(new Count());
+        g.ship().x = 30;
+        g.ship().y = 30;
+        stepClear(g, 10f);
+        float dx = g.ship().x - 30, dy = g.ship().y - 30;
+        T.check(Math.sqrt(dx * dx + dy * dy) > 150, "distance from corner " + Math.sqrt(dx * dx + dy * dy));
+    }
+
+    public static void testTiltDoesNotMoveShip() {
+        GameWorld g = world(new Count());
+        g.setAutopilot(false);
+        g.setTilt(1, 1);
+        float x0 = g.ship().x, y0 = g.ship().y;
+        stepClear(g, 3f);
+        T.near(x0, g.ship().x, 0.01, "x");
+        T.near(y0, g.ship().y, 0.01, "y");
+    }
+
+    private static float meanVyAfterKill(float ty) {
+        Count c = new Count();
+        GameWorld g = world(c);
+        g.setAutopilot(false);
+        g.setTilt(0, ty);
+        g.addRock(1, 310, 200, 0, 0);
+        fireUntilKill(g, c, 310, 200);
+        T.eq(1, c.destroyed, "destroyed");
+        for (int i = 0; i < 31; i++) g.step(0.016f);
+        float sum = 0;
+        for (GameWorld.Particle p : g.particles()) sum += p.vy;
+        T.check(g.particles().size() > 0, "particles exist");
+        return sum / g.particles().size();
+    }
+
+    public static void testGravityPullsDebris() {
+        float with = meanVyAfterKill(1f), without = meanVyAfterKill(0f);
+        T.check(with > without, "vy with gravity " + with + " vs " + without);
+    }
+
+    public static void testShockwaveClearsRocksAndCools() {
+        Count c = new Count();
+        GameWorld g = world(c);
+        g.setAutopilot(false);
+        for (int i = 0; i < 5; i++) g.addRock(3, 100 + i * 100, 150 + i * 90, 0, 0);
+        T.eq(true, g.shockwave(), "first shockwave");
+        T.check(g.wave() != null, "wave active");
+        for (int i = 0; i < 75; i++) g.step(0.016f);
+        for (GameWorld.Rock r : g.rocks()) {
+            boolean onScreen = r.x >= 0 && r.x <= 620 && r.y >= 0 && r.y <= 722;
+            T.check(!(r.size == 3 && onScreen), "size-3 rock left at " + r.x + "," + r.y);
+        }
+        T.check(c.destroyed >= 5, "destroyed " + c.destroyed);
+        T.check(g.wave() == null, "wave finished");
+        T.eq(false, g.shockwave(), "cooldown");
+        float t0 = 0f; // the wave started at game time 0
+        while (g.time() < t0 + 59.5f) g.step(0.05f);
+        T.eq(false, g.shockwave(), "still cooling");
+        while (g.time() < t0 + 62f) g.step(0.05f);
+        T.eq(true, g.shockwave(), "ready again");
+    }
+
+    public static void testStarDepthRange() {
+        GameWorld g = sized(1856, 2160);
+        T.check(g.stars().size() > 0, "stars");
+        for (GameWorld.Star s : g.stars()) T.check(s.depth >= 0.2f && s.depth <= 1.0f, "depth " + s.depth);
     }
 }
