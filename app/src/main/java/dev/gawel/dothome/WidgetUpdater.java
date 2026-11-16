@@ -28,6 +28,7 @@ final class WidgetUpdater {
     private WidgetUpdater() {}
 
     static void updateAll(Context ctx) {
+        MusicWidget.update(ctx, MusicWidget.last()); // re-extrapolates the progress bar on every tick
         try {
             AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
             int[] ids = mgr.getAppWidgetIds(new ComponentName(ctx, ClockWidget.class));

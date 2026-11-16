@@ -109,7 +109,7 @@ public class MediaWatcher extends NotificationListenerService {
                 MediaController.Callback cb = new MediaController.Callback() {
                     @Override public void onPlaybackStateChanged(PlaybackState s) { refresh(); }
                     @Override public void onMetadataChanged(MediaMetadata m) { refresh(); }
-                    @Override public void onSessionDestroyed() { refresh(); }
+                    @Override public void onSessionDestroyed() { drop(c); refresh(); }
                 };
                 c.registerCallback(cb, main);
                 callbacks.put(c, cb);
@@ -120,17 +120,30 @@ public class MediaWatcher extends NotificationListenerService {
         }
     }
 
+    private void drop(MediaController c) {
+        MediaController.Callback cb = callbacks.remove(c);
+        if (cb != null) {
+            try { c.unregisterCallback(cb); } catch (RuntimeException ignored) { }
+        }
+    }
+
     private void refresh() {
         try {
             List<NowPlaying> items = new ArrayList<>();
             Map<String, MediaController> byKey = new java.util.HashMap<>();
             for (MediaController c : callbacks.keySet()) {
-                NowPlaying n = build(c);
+                NowPlaying n;
+                try {
+                    n = build(c);
+                } catch (RuntimeException e) {
+                    Log.w(TAG, "skipping misbehaving controller: " + e);
+                    continue;
+                }
                 if (n == null) continue;
                 items.add(n);
                 byKey.put(n.sessionKey, c);
             }
-            NowPlaying pick = NowPlaying.choose(items);
+            NowPlaying pick = NowPlaying.choose(NowPlaying.eligible(items));
             chosen = pick == null ? null : byKey.get(pick.sessionKey);
             MusicWidget.update(getApplicationContext(), pick);
         } catch (RuntimeException e) {
@@ -153,11 +166,11 @@ public class MediaWatcher extends NotificationListenerService {
         }
         if (ps != null) {
             n.playing = ps.getState() == PlaybackState.STATE_PLAYING;
-            long pos = ps.getPosition();
-            if (n.playing && ps.getLastPositionUpdateTime() > 0) {
-                pos += (long) ((SystemClock.elapsedRealtime() - ps.getLastPositionUpdateTime()) * ps.getPlaybackSpeed());
-            }
-            n.positionMs = Math.max(0, pos);
+            int st = ps.getState();
+            n.stopped = st == PlaybackState.STATE_STOPPED || st == PlaybackState.STATE_NONE;
+            n.positionMs = Math.max(0, ps.getPosition());
+            n.speed = ps.getPlaybackSpeed();
+            n.positionAtElapsedMs = ps.getLastPositionUpdateTime();
             long updated = ps.getLastPositionUpdateTime();
             n.changedAtMs = updated > 0
                 ? System.currentTimeMillis() - (SystemClock.elapsedRealtime() - updated)

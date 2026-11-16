@@ -13,6 +13,8 @@ import dev.gawel.dothome.core.NowPlaying;
 public class MusicWidget extends AppWidgetProvider {
     private static volatile NowPlaying last;
 
+    static NowPlaying last() { return last; }
+
     /** Called by MediaWatcher whenever the chosen session changes. */
     static void update(Context ctx, NowPlaying np) {
         last = np;

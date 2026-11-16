@@ -44,4 +44,49 @@ public final class NowPlayingTest {
         T.check(r != null && r.sessionKey.equals("a"), "item with null title returned");
         T.eq("", TextFit.fit(r.title, 100, s -> s.length() * 10f), "null title fits to empty");
     }
+
+    public static void testPositionExtrapolatesWhilePlaying() {
+        NowPlaying n = np("a", "A", true, 0);
+        n.positionMs = 10_000;
+        n.durationMs = 300_000;
+        n.positionAtElapsedMs = 1_000;
+        n.speed = 1f;
+        T.eq(10_000L, n.positionAt(1_000), "no time elapsed");
+        T.eq(10_000L + 180_000L, n.positionAt(1_000 + 180_000), "3 minutes of ticks");
+        n.speed = 2f;
+        T.eq(10_000L + 20_000L, n.positionAt(1_000 + 10_000), "speed applied");
+    }
+
+    public static void testPositionClamped() {
+        NowPlaying n = np("a", "A", true, 0);
+        n.positionMs = 290_000;
+        n.durationMs = 300_000;
+        n.positionAtElapsedMs = 1_000;
+        T.eq(300_000L, n.positionAt(1_000 + 600_000), "clamped to duration");
+        T.eq(290_000L, n.positionAt(0), "clock going backwards does not rewind");
+        n.positionMs = -5;
+        T.eq(0L, n.positionAt(1_000), "never negative");
+    }
+
+    public static void testPausedPositionFrozen() {
+        NowPlaying n = np("a", "A", false, 0);
+        n.positionMs = 42_000;
+        n.durationMs = 300_000;
+        n.positionAtElapsedMs = 1_000;
+        T.eq(42_000L, n.positionAt(1_000 + 90_000), "paused does not advance");
+    }
+
+    public static void testEligibleDropsStoppedKeepsPaused() {
+        List<NowPlaying> l = new ArrayList<>();
+        NowPlaying stopped = np("s", "S", false, 900);
+        stopped.stopped = true;
+        l.add(stopped);
+        l.add(np("p", "P", false, 100));
+        List<NowPlaying> e = NowPlaying.eligible(l);
+        T.eq(1, e.size(), "stopped dropped");
+        T.eq("p", NowPlaying.choose(e).sessionKey, "paused still shown");
+        l.remove(1);
+        T.check(NowPlaying.choose(NowPlaying.eligible(l)) == null, "only stopped -> hidden");
+        T.eq(0, NowPlaying.eligible(null).size(), "null safe");
+    }
 }

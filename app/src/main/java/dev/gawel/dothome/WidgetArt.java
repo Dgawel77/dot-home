@@ -193,7 +193,8 @@ final class WidgetArt {
         bar.setColor(0xFF2A2A2A);
         c.drawRect(textX, y, textX + maxW, y + 2f * k, bar);
         if (np.durationMs > 0) {
-            float frac = Math.max(0f, Math.min(1f, np.positionMs / (float) np.durationMs));
+            long pos = np.positionAt(android.os.SystemClock.elapsedRealtime());
+            float frac = Math.max(0f, Math.min(1f, pos / (float) np.durationMs));
             bar.setColor(Color.WHITE);
             c.drawRect(textX, y, textX + maxW * frac, y + 2f * k, bar);
         }
