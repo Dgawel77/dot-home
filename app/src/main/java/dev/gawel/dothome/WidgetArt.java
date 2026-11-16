@@ -5,7 +5,6 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
-import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.text.format.DateFormat;
 
@@ -33,6 +32,7 @@ final class WidgetArt {
     private static final long STALE_MS = 90L * 60 * 1000;
     /** Radar widget rounding, removed with the radar's panel in Task 3. */
     static final float PANEL_CORNER_DP = 24f;
+    private static final int WORST_TEMP_COLS = 23;
     private static final float ART_RADIUS_DP = 12f;
     private static final float ICON_STROKE_DP = 1.6f;
 
@@ -69,11 +69,7 @@ final class WidgetArt {
         return p;
     }
 
-    private static int cols(String s) {
-        return DotMatrixFont.render(s).cols;
-    }
-
-    static Bitmap clock(Context ctx, int wPx, int hPx, long nowMs, float dens) {
+    static Bitmap clock(Context ctx, int wPx, int hPx, long nowMs, Lattice.Step step, float dens) {
         Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
 
@@ -81,16 +77,11 @@ final class WidgetArt {
         cal.setTimeInMillis(nowMs);
         String t = DotMatrixFont.clockText(cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE),
             DateFormat.is24HourFormat(ctx));
-        int cols = cols(t);
-
-        // S12 when "00:00" fits the half, else S8 (S4 only if even that would clip)
-        float wDp = wPx / dens;
-        Lattice.Step step = Lattice.Step.S12;
-        if (cols * 12f + 2 * 16f > wDp) step = Lattice.Step.S8;
-        if (cols * 8f + 2 * 8f > wDp) step = Lattice.Step.S4;
+        byte[] cells = DotMatrixFont.cells(t);
+        int cols = cells.length / DotMatrixFont.ROWS;
         float s = Lattice.stepPx(step, dens);
         float r = Lattice.radiusPx(step, Lattice.Weight.REGULAR, dens);
-        float padPx = Lattice.snap(Math.min(16f * dens, Math.max(0f, (wPx - cols * s) / 2f)), dens);
+        float padPx = Lattice.snap(16f * dens, dens);
 
         Paint date = text(Fonts.inter(ctx), 15f, dens, DotStyle.L65);
         float dateH = 20f * dens, gap = 8f * dens;
@@ -98,7 +89,6 @@ final class WidgetArt {
         float top = Lattice.snap(Math.max(0f, (hPx - (gridH + gap + dateH)) / 2f), dens);
 
         Paint lit = fill(DotStyle.L100), unlit = fill(DotStyle.L10);
-        byte[] cells = DotMatrixFont.cells(t);
         for (int row = 0; row < DotMatrixFont.ROWS; row++) {
             for (int col = 0; col < cols; col++) {
                 byte v = cells[row * cols + col];
@@ -118,10 +108,12 @@ final class WidgetArt {
         Canvas c = new Canvas(bmp);
 
         String temp = w == null ? "\u2212\u2212\u00B0" : tempText(Math.round(w.tempF));
-        int cols = cols(temp);
+        byte[] cells = DotMatrixFont.cells(temp);
+        int cols = cells.length / DotMatrixFont.ROWS;
         float wDp = wPx / dens;
-        // S8 when the numerals fit the half with a 16 dp margin each side, else the cover's S4
-        Lattice.Step step = cols * 8f + 2 * 16f <= wDp ? Lattice.Step.S8 : Lattice.Step.S4;
+        // S8 when the widest reading ("\u221200\u00B0", 23 columns) fits with a 16 dp margin each side, else S4;
+        // fixed so the size does not flip as the temperature crosses -10
+        Lattice.Step step = WORST_TEMP_COLS * 8f + 2 * 16f <= wDp ? Lattice.Step.S8 : Lattice.Step.S4;
         float s = Lattice.stepPx(step, dens);
         float r = Lattice.radiusPx(step, Lattice.Weight.REGULAR, dens);
         float pad = Lattice.snap((step == Lattice.Step.S8 ? 16f : 8f) * dens, dens);
@@ -148,7 +140,6 @@ final class WidgetArt {
 
         float gx = Lattice.snap(right - cols * s, dens);
         Paint dots = fill(DotStyle.L65);
-        byte[] cells = DotMatrixFont.cells(temp);
         for (int row = 0; row < DotMatrixFont.ROWS; row++) {
             for (int col = 0; col < cols; col++) {
                 if (cells[row * cols + col] == 1) dot(c, gx, y, s, col, row, r, dots); // lit cells only
@@ -187,19 +178,11 @@ final class WidgetArt {
         return (t < 0 ? "\u2212" + (-t) : String.valueOf(t)) + "\u00B0";
     }
 
-    /**
-     * The music widget body: 64 dp halftone art square (S4, L100 dots, 12 dp corners), title (Inter 15, L100),
-     * artist (Inter 13, L65) and an S4 dot-row progress bar. The right 132 dp is left clear for the transport
-     * buttons. k is the effective density, so every size is true dp.
-     */
-    static Bitmap music(Context ctx, int wPx, int hPx, NowPlaying np, float dens) {
-        Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
-        Canvas c = new Canvas(bmp);
-        float s4 = Lattice.stepPx(Lattice.Step.S4, dens);
-        float artS = 64f * dens;
-        float artX = 16f * dens, artY = Lattice.snap((hPx - artS) / 2f, dens);
+    private static float[] artDotsCache;
 
-        // placeholder art (no cover bitmap is available): a sun and a lower band, 1 px per dp, through the halftone
+    /** Halftone of the placeholder art (a sun and a lower band; no cover bitmap is available), 1 px per dp, step 4. */
+    private static synchronized float[] artDots() {
+        if (artDotsCache != null) return artDotsCache;
         int n = 64;
         int[] img = new int[n * n];
         for (int y = 0; y < n; y++) {
@@ -210,25 +193,40 @@ final class WidgetArt {
                 img[y * n + x] = 0xFF000000 | (g << 16) | (g << 8) | g;
             }
         }
-        float[] dots = Halftone.dots(img, n, n, 4);
-        float sc = s4 / 4f;
+        artDotsCache = Halftone.dots(img, n, n, 4);
+        return artDotsCache;
+    }
+
+    /** Whether a disc at (cx, cy) with radius rd lies wholly inside a size x size square with corner radius rad. */
+    private static boolean discInsideRounded(float cx, float cy, float rd, float size, float rad) {
+        if (cx - rd < 0 || cy - rd < 0 || cx + rd > size || cy + rd > size) return false;
+        float qx = cx < rad ? rad : (cx > size - rad ? size - rad : cx);
+        float qy = cy < rad ? rad : (cy > size - rad ? size - rad : cy);
+        return Math.hypot(cx - qx, cy - qy) + rd <= rad;
+    }
+
+    /**
+     * The music widget body: 64 dp halftone art square (S4, L100 dots, 12 dp corners), title (Inter 15, L100),
+     * artist (Inter 13, L65) and an S4 dot-row progress bar. The right 132 dp is left clear for the transport
+     * buttons. dens is the effective density, so every size is true dp.
+     */
+    static Bitmap music(Context ctx, int wPx, int hPx, NowPlaying np, float dens) {
+        Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(bmp);
+        float s4 = Lattice.stepPx(Lattice.Step.S4, dens);
+        float artS = 64f * dens;
+        float artX = 16f * dens, artY = Lattice.snap((hPx - artS) / 2f, dens);
+
+        float[] dots = artDots();
+        float sc = s4 / 4f, rad = ART_RADIUS_DP * dens;
         Paint p = fill(DotStyle.L100);
-        c.save();
-        Path clip = new Path();
-        clip.addRoundRect(new RectF(artX, artY, artX + artS, artY + artS), ART_RADIUS_DP * dens, ART_RADIUS_DP * dens,
-            Path.Direction.CW);
-        c.clipPath(clip);
         for (int i = 0; i < dots.length; i += 3) {
-            c.drawCircle(artX + dots[i] * sc, artY + dots[i + 1] * sc, dots[i + 2] * sc / 2f, p);
+            float cx = dots[i] * sc, cy = dots[i + 1] * sc, rd = dots[i + 2] * sc / 2f;
+            if (!discInsideRounded(cx, cy, rd, artS, rad)) continue; // dots stay round: skip, never clip
+            c.drawCircle(artX + cx, artY + cy, rd, p);
         }
-        c.restore();
 
         float textX = artX + artS + 16f * dens;
-        if (np == null) {
-            Paint lab = label(ctx, dens, DotStyle.L46);
-            c.drawText("NOT PLAYING", textX, baseline(lab, (hPx - 16f * dens) / 2f, 16f * dens), lab);
-            return bmp;
-        }
         float maxW = Math.max(1f, wPx - 132f * dens - textX - 4f * dens);
         Paint title = text(Fonts.interMedium(ctx), 15f, dens, DotStyle.L100);
         Paint artist = text(Fonts.inter(ctx), 13f, dens, DotStyle.L65);

@@ -112,7 +112,7 @@ public class RadarWidget extends AppWidgetProvider {
     static Bitmap render(Context ctx, int w, int h, float eff, Place place, BooleanSupplier cancelled) {
         Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
-        float r = WidgetArt.PANEL_CORNER_DP * eff; // the one panel radius, shared with the clock/weather/music panels
+        float r = WidgetArt.PANEL_CORNER_DP * eff; // the radar widget's own rounding; Task 3 removes it
         Path clip = new Path();
         clip.addRoundRect(new RectF(0, 0, w, h), r, r, Path.Direction.CW);
         c.clipPath(clip);

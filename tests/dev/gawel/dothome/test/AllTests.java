@@ -29,6 +29,7 @@ public final class AllTests {
         DotMatrixFontTest.class,
         dev.gawel.dothome.core.BoxSetTest.class,
         dev.gawel.dothome.core.DesignValuesTest.class,
+        dev.gawel.dothome.core.ClockLayoutTest.class,
     };
 
     public static void main(String[] args) throws Exception {

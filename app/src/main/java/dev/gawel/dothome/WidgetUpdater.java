@@ -11,6 +11,8 @@ import android.provider.AlarmClock;
 import android.util.Log;
 import android.widget.RemoteViews;
 
+import dev.gawel.dothome.core.ClockLayout;
+import dev.gawel.dothome.core.Lattice;
 import dev.gawel.dothome.core.NowPlaying;
 import dev.gawel.dothome.core.Weather;
 
@@ -20,7 +22,6 @@ final class WidgetUpdater {
     private static final String CLOCK_PKG = "com.sec.android.app.clockpackage";
     private static final int DEFAULT_W_DP = 250, DEFAULT_H_DP = 110;
     static final int MAX_SIDE_PX = 1200; // keeps each RemoteViews bitmap far below the binder/memory limit
-    private static final float CLOCK_WEIGHT = 1.4f, WEATHER_WEIGHT = 1f;
 
     private WidgetUpdater() {}
 
@@ -59,14 +60,18 @@ final class WidgetUpdater {
         wPx *= shrink;
         hPx *= shrink;
         float eff = density * shrink; // bitmap px per dp: dot scale must come out right after the launcher stretches it back
-        float total = CLOCK_WEIGHT + WEATHER_WEIGHT;
-        int clockW = Math.max(1, Math.round(wPx * CLOCK_WEIGHT / total));
-        int weatherW = Math.max(1, Math.round(wPx * WEATHER_WEIGHT / total));
+        Lattice.Step step = ClockLayout.clockStep(wDp, hDp);
+        int clockDp = ClockLayout.clockWidthDp(step);
+        int clockW = Math.max(1, Math.round(clockDp * eff));
+        int weatherW = Math.max(1, Math.round(wPx) - clockW);
         int h = Math.max(1, Math.round(hPx));
 
         RemoteViews rv = new RemoteViews(ctx.getPackageName(), R.layout.widget_clock);
-        Bitmap clock = safe(h, clockW, () -> WidgetArt.clock(ctx, clockW, h, now, eff));
+        Bitmap clock = safe(h, clockW, () -> WidgetArt.clock(ctx, clockW, h, now, step, eff));
         Bitmap weather = safe(h, weatherW, () -> WidgetArt.weather(ctx, weatherW, h, wx, now, eff));
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            rv.setViewLayoutWidth(R.id.clock_img, clockDp, android.util.TypedValue.COMPLEX_UNIT_DIP);
+        } // before 31 the layout's fixed 216 dp stands
         rv.setImageViewBitmap(R.id.clock_img, clock);
         rv.setImageViewBitmap(R.id.weather_img, weather);
         rv.setOnClickPendingIntent(R.id.clock_img, PendingIntent.getActivity(ctx, 1, clockIntent(ctx), flags()));
