@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lock screens</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#bdbdbd}a:hover{color:#ffffff}
+.doto{font-family:'Doto',ui-monospace,monospace}
+.ico{fill:none;stroke:#ffffff;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.icof{fill:#ffffff;stroke:none}
+.sc{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(16,16,16,0.85);border:1px solid #2b2b2b;padding:0}
+sc-for,sc-if{display:contents}
+.mx{display:flex;gap:calc(var(--g) * 2.2)}
+.mxrow{display:flex;gap:calc(var(--g) * 2.2)}
+.mx .dg{display:grid;grid-template-columns:repeat(5,var(--d));grid-auto-rows:var(--d);gap:var(--g)}
+.mx .cn{display:grid;grid-template-columns:var(--d);grid-auto-rows:var(--d);gap:var(--g)}
+.mx .on,.mx .off{border-radius:50%}
+.mx .on{background:#ffffff;box-shadow:0 0 6px rgba(255,255,255,0.4);animation:mxp 3.6s ease-in-out infinite}
+.mx .on:nth-child(2n){animation-delay:-1.2s}
+.mx .on:nth-child(3n){animation-delay:-2.4s}
+.mx .off{background:#181818}
+.mx .cn .on{animation:mxb 2s ease-in-out infinite}
+.mxlc{--d:9px;--g:6px}
+.mxlm{--d:9px;--g:8px}
+@keyframes mxp{0%,100%{opacity:1}50%{opacity:0.72}}
+@keyframes mxb{0%,100%{opacity:1}50%{opacity:0.25}}
+</style>
+</helmet>
+<div style="width: 1090px; height: 920px; box-sizing: border-box; padding: 40px; background: #111111; display: flex; gap: 60px; align-items: flex-start; font-family: Inter, system-ui, sans-serif; color: #ffffff">
+<div style="display: flex; flex-direction: column; gap: 14px; align-items: center">
+<div style="position: relative; width: 330px; height: 810px; border-radius: 34px; overflow: hidden; background: #000000; box-shadow: 0 0 0 1px #2c2c2c">
+<canvas id="dh-lock-c" ref="{{ setCoverCanvas }}" role="img" aria-label="Still frame of the dot game" style="position: absolute; left: 0; top: 0; width: 330px; height: 810px; display: block"></canvas>
+<div style="position: absolute; left: 0; top: 0; width: 330px; height: 810px; display: flex; flex-direction: column; align-items: center">
+<div style="margin-top: 64px; font-size: 14px; color: #bdbdbd">{{ date }}</div>
+<div class="mx mxlc" role="img" aria-label="{{ time }}" style="margin-top: 24px; flex-direction: column; align-items: center; gap: 22px">
+<div class="mxrow"><sc-for list="{{ clockH }}" as="b" hint-placeholder-count="2"><div class="{{ b.cls }}"><sc-for list="{{ b.cells }}" as="c" hint-placeholder-count="35"><div class="{{ c.c }}"></div></sc-for></div></sc-for></div>
+<div class="mxrow"><sc-for list="{{ clockM }}" as="b" hint-placeholder-count="2"><div class="{{ b.cls }}"><sc-for list="{{ b.cells }}" as="c" hint-placeholder-count="35"><div class="{{ c.c }}"></div></sc-for></div></sc-for></div>
+</div>
+<div style="margin-top: 18px; display: flex; align-items: center; gap: 8px; font-size: 14px; color: #d6d6d6">
+<svg class="ico" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.2 11 3.5 3.5 0 0 0 7 18z"></path></svg>
+<div>41° Cloudy</div>
+</div>
+</div>
+<div style="position: absolute; left: 20px; top: 646px; width: 290px; height: 56px; box-sizing: border-box; padding: 0 8px 0 10px; border-radius: 28px; background: rgba(13,13,13,0.92); box-shadow: 0 0 0 1px #262626; display: flex; align-items: center; gap: 10px">
+<div style="width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; background-color: #0a0a0a; background-image: radial-gradient(circle, #8c8c8c 1px, transparent 1.5px); background-size: 5px 5px"></div>
+<div style="flex-grow: 1; min-width: 0; font-size: 13px"><span style="font-weight: 500">Track name</span><span style="color: #9c9c9c"> · Artist</span></div>
+<div style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center"><svg class="icof" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z"></path></svg></div>
+</div>
+<div style="position: absolute; left: 24px; top: 732px; width: 282px; display: flex; justify-content: space-between">
+<div class="sc"><svg class="ico" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5h3l1.5 4-2 1.2a11 11 0 0 0 5.8 5.8l1.2-2 4 1.5v3a2 2 0 0 1-2 2A16 16 0 0 1 3 5.5a2 2 0 0 1 2-2z"></path></svg></div>
+<div class="sc"><svg class="ico" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="12" rx="3"></rect><circle cx="12" cy="13" r="3.5"></circle><path d="M8.5 7l1.5-2.5h4L15.5 7"></path></svg></div>
+</div>
+</div>
+<div style="font-size: 13px; color: #a0a0a0">Cover lock screen</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 14px; align-items: center">
+<div style="position: relative; width: 620px; height: 722px; border-radius: 36px; overflow: hidden; background: #000000; box-shadow: 0 0 0 1px #2c2c2c">
+<canvas id="dh-lock-m" ref="{{ setMainCanvas }}" role="img" aria-label="Still frame of the dot game" style="position: absolute; left: 0; top: 0; width: 620px; height: 722px; display: block"></canvas>
+<div style="position: absolute; left: 56px; top: 70px; display: flex; flex-direction: column; gap: 12px">
+<div style="font-size: 16px; color: #bdbdbd; padding-left: 4px">{{ date }}</div>
+<div class="mx mxlm" role="img" aria-label="{{ time }}" style="padding: 8px 0 10px 4px"><sc-for list="{{ clock }}" as="b" hint-placeholder-count="5"><div class="{{ b.cls }}"><sc-for list="{{ b.cells }}" as="c" hint-placeholder-count="35"><div class="{{ c.c }}"></div></sc-for></div></sc-for></div>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 15px; color: #d6d6d6; padding-left: 4px">
+<svg class="ico" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.2 11 3.5 3.5 0 0 0 7 18z"></path></svg>
+<div>41° Cloudy · H 45° L 33°</div>
+</div>
+</div>
+<div style="position: absolute; left: 130px; top: 572px; width: 360px; height: 56px; box-sizing: border-box; padding: 0 8px 0 10px; border-radius: 28px; background: rgba(13,13,13,0.92); box-shadow: 0 0 0 1px #262626; display: flex; align-items: center; gap: 10px">
+<div style="width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; background-color: #0a0a0a; background-image: radial-gradient(circle, #8c8c8c 1px, transparent 1.5px); background-size: 5px 5px"></div>
+<div style="flex-grow: 1; min-width: 0; font-size: 13px"><span style="font-weight: 500">Track name</span><span style="color: #9c9c9c"> · Artist</span></div>
+<div style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center"><svg class="icof" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z"></path></svg></div>
+</div>
+<div style="position: absolute; left: 32px; top: 646px; width: 556px; display: flex; justify-content: space-between">
+<div class="sc"><svg class="ico" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5h3l1.5 4-2 1.2a11 11 0 0 0 5.8 5.8l1.2-2 4 1.5v3a2 2 0 0 1-2 2A16 16 0 0 1 3 5.5a2 2 0 0 1 2-2z"></path></svg></div>
+<div class="sc"><svg class="ico" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="12" rx="3"></rect><circle cx="12" cy="13" r="3.5"></circle><path d="M8.5 7l1.5-2.5h4L15.5 7"></path></svg></div>
+</div>
+</div>
+<div style="font-size: 13px; color: #a0a0a0; text-align: center; line-height: 1.5">Main lock screen · the still is your real game, frozen where you left off when you locked<br>(on the real phone Samsung draws the clock, so its font may differ)</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1090,"height":920}}'>
+class Component extends DCLogic {
+  componentDidMount() {
+    this._alive = true;
+    this._clock = setInterval(() => { this.setState({ now: Date.now() }); }, 10000);
+    this._find(0);
+  }
+  componentWillUnmount() { this._alive = false; clearInterval(this._clock); }
+  _find(n) {
+    if (!this._alive) return;
+    if (!this._cc) this._cc = document.getElementById('dh-lock-c');
+    if (!this._cm) this._cm = document.getElementById('dh-lock-m');
+    if (this._cc) this._paint(this._cc, 330, 810, 21, 'c');
+    if (this._cm) this._paint(this._cm, 620, 722, 34, 'm');
+    if ((!this._cc || !this._cm) && n < 40) setTimeout(() => this._find(n + 1), 100);
+  }
+  _rng(seed) {
+    let a = seed >>> 0;
+    return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  _paint(cv, W, H, seed, key) {
+    this._done = this._done || {};
+    if (this._done[key] || !cv) return;
+    const ctx = cv.getContext('2d'); if (!ctx) return;
+    this._done[key] = true;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, W, H);
+    const rnd = this._rng(seed);
+    const ds = 1.2, S = 4, dim = 0.62;
+    const dot = (x, y, r, a) => { ctx.globalAlpha = a * dim; ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill(); };
+    const n = Math.round((W * H) / 2300);
+    for (let i = 0; i < n; i++) dot(rnd() * W, rnd() * H, ds * 0.55, 0.06 + rnd() * 0.3);
+    const rocks = key === 'c'
+      ? [[70, 470, 30], [262, 540, 22], [150, 600, 14], [270, 400, 12]]
+      : [[470, 330, 40], [560, 470, 24], [110, 470, 30], [330, 520, 15], [520, 200, 13]];
+    for (const rk of rocks) {
+      const cx = rk[0], cy = rk[1], R = rk[2], nv = 9 + Math.floor(rnd() * 4), v = [];
+      for (let i = 0; i < nv; i++) { const a = (i / nv) * 6.2832 + rnd() * 0.2; const rr = R * (0.72 + rnd() * 0.4); v.push([Math.cos(a) * rr, Math.sin(a) * rr]); }
+      for (let i = 0; i < nv; i++) {
+        const a = v[i], b = v[(i + 1) % nv];
+        const L = Math.hypot(b[0] - a[0], b[1] - a[1]), m = Math.max(1, Math.round(L / S));
+        for (let k = 0; k < m; k++) { const t = k / m; dot(cx + a[0] + (b[0] - a[0]) * t, cy + a[1] + (b[1] - a[1]) * t, ds, 0.9); }
+      }
+      const fill = Math.round((R * R * 2.2) / (S * S * 3.2));
+      for (let k = 0; k < fill; k++) {
+        const ang = rnd() * 6.2832, idx = Math.floor((ang / 6.2832) * nv) % nv;
+        const vr = Math.hypot(v[idx][0], v[idx][1]), rr = Math.sqrt(rnd()) * vr * 0.8;
+        dot(cx + Math.cos(ang) * rr, cy + Math.sin(ang) * rr, ds * 0.75, 0.18 + rnd() * 0.2);
+      }
+    }
+    const bx = key === 'c' ? 200 : 250, by = key === 'c' ? 480 : 420;
+    for (let k = 0; k < 70; k++) { const ang = rnd() * 6.2832, rr = 6 + rnd() * 34; dot(bx + Math.cos(ang) * rr, by + Math.sin(ang) * rr, ds * (0.5 + rnd() * 0.5), 0.2 + rnd() * 0.6); }
+    const sx = key === 'c' ? 150 : 330, sy = key === 'c' ? 540 : 450, sa = -2.3;
+    const sv = [[15, 0], [-10, -9.5], [-5, 0], [-10, 9.5]], sp = S * 0.55;
+    for (let i = 0; i < 4; i++) {
+      const a = sv[i], b = sv[(i + 1) % 4];
+      const L = Math.hypot(b[0] - a[0], b[1] - a[1]), m = Math.max(1, Math.round(L / sp));
+      for (let k = 0; k < m; k++) {
+        const t = k / m, px = a[0] + (b[0] - a[0]) * t, py = a[1] + (b[1] - a[1]) * t;
+        dot(sx + px * Math.cos(sa) - py * Math.sin(sa), sy + px * Math.sin(sa) + py * Math.cos(sa), ds * 1.05, 1);
+      }
+    }
+    for (let k = 1; k <= 8; k++) dot(sx - Math.cos(sa) * (8 + k * 6), sy - Math.sin(sa) * (8 + k * 6), ds * (1 - k * 0.08), 0.55 - k * 0.06);
+    ctx.globalAlpha = 1;
+  }
+  _mx(str) {
+    const F = { '0': ['01110', '10001', '10011', '10101', '11001', '10001', '01110'], '1': ['00100', '01100', '00100', '00100', '00100', '00100', '01110'], '2': ['01110', '10001', '00001', '00010', '00100', '01000', '11111'], '3': ['11111', '00010', '00100', '00010', '00001', '10001', '01110'], '4': ['00010', '00110', '01010', '10010', '11111', '00010', '00010'], '5': ['11111', '10000', '11110', '00001', '00001', '10001', '01110'], '6': ['00110', '01000', '10000', '11110', '10001', '10001', '01110'], '7': ['11111', '00001', '00010', '00100', '01000', '01000', '01000'], '8': ['01110', '10001', '10001', '01110', '10001', '10001', '01110'], '9': ['01110', '10001', '10001', '01111', '00001', '00010', '01100'] };
+    const out = [];
+    for (const ch of String(str)) {
+      if (ch === ':') { out.push({ cls: 'cn', cells: [0, 0, 1, 0, 1, 0, 0].map((v) => ({ c: v ? 'on' : 'off' })) }); continue; }
+      const rows = F[ch]; if (!rows) continue;
+      const cells = [];
+      for (const r of rows) for (const b of r) cells.push({ c: b === '1' ? 'on' : 'off' });
+      out.push({ cls: 'dg', cells: cells });
+    }
+    return out;
+  }
+  renderVals() {
+    if (!this._h) {
+      this._h = {
+        setCoverCanvas: (el) => { if (el) { this._cc = el; if (this._alive) this._paint(el, 330, 810, 21, 'c'); } },
+        setMainCanvas: (el) => { if (el) { this._cm = el; if (this._alive) this._paint(el, 620, 722, 34, 'm'); } }
+      };
+    }
+    const st = this.state || {};
+    const d = new Date(st.now || Date.now());
+    let h = d.getHours() % 12; if (h === 0) h = 12;
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return {
+      setCoverCanvas: this._h.setCoverCanvas, setMainCanvas: this._h.setMainCanvas,
+      hh: String(h).padStart(2, '0'), mm: mm, time: h + ':' + mm,
+      clock: this._mx(h + ':' + mm), clockH: this._mx(String(h).padStart(2, '0')), clockM: this._mx(mm),
+      date: d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+    };
+  }
+}
+</script>
+</body>
+</html>

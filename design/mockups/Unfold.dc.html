@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Unfold burst</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#bdbdbd}a:hover{color:#ffffff}
+.rb{height:44px;padding:0 20px;border-radius:22px;border:0;background:#ffffff;color:#000000;font:500 14px Inter,system-ui,sans-serif;cursor:pointer}
+.rb:hover{background:#d9d9d9}
+</style>
+</helmet>
+<div style="width: 700px; height: 860px; box-sizing: border-box; padding: 40px 40px 0; background: #111111; display: flex; flex-direction: column; align-items: center; gap: 18px; font-family: Inter, system-ui, sans-serif; color: #ffffff">
+<div style="position: relative; width: 620px; height: 722px; flex-shrink: 0; border-radius: 36px; overflow: hidden; background: #000000; box-shadow: 0 0 0 1px #2c2c2c">
+<canvas id="dh-unfold-cv" ref="{{ setCanvas }}" role="img" aria-label="Dots bursting outward from a narrow column to fill the screen" style="position: absolute; left: 0; top: 0; width: 620px; height: 722px; display: block"></canvas>
+<div style="position: absolute; left: 0; top: 650px; width: 620px; display: flex; justify-content: center">
+<button class="rb" onClick="{{ replay }}">Unfold again</button>
+</div>
+</div>
+<div style="font-size: 13px; color: #a0a0a0; text-align: center; line-height: 1.5">Unfolding: the cover screen's scene bursts out to fill the big screen<br>Slowed down here, about 0.6 s on the phone · folding plays it in reverse</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":700,"height":860}}'>
+class Component extends DCLogic {
+  componentDidMount() { this._alive = true; this._find(0); }
+  componentWillUnmount() { this._alive = false; if (this._raf) cancelAnimationFrame(this._raf); }
+  _find(n) {
+    if (!this._alive) return;
+    if (!this._cv) this._cv = document.getElementById('dh-unfold-cv');
+    if (this._cv) { this._start(); return; }
+    if (n < 40) setTimeout(() => this._find(n + 1), 100);
+  }
+  _rng(seed) {
+    let a = seed >>> 0;
+    return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  _scene() {
+    if (this._pts) return this._pts;
+    const W = 620, H = 722, CX = W / 2, rnd = this._rng(3), pts = [];
+    for (let i = 0; i < 200; i++) pts.push({ x1: rnd() * W, y1: rnd() * H, a: 0.08 + rnd() * 0.3, r: 0.7, star: true });
+    const rocks = [[150, 250, 34], [470, 330, 30], [380, 560, 22], [120, 520, 26], [540, 160, 16], [260, 150, 14]];
+    for (const rk of rocks) {
+      const nv = 10, v = [];
+      for (let i = 0; i < nv; i++) { const a = (i / nv) * 6.2832; const rr = rk[2] * (0.72 + rnd() * 0.4); v.push([Math.cos(a) * rr, Math.sin(a) * rr]); }
+      for (let i = 0; i < nv; i++) {
+        const a = v[i], b = v[(i + 1) % nv], L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.round(L / 4));
+        for (let k = 0; k < n; k++) { const t = k / n; pts.push({ x1: rk[0] + a[0] + (b[0] - a[0]) * t, y1: rk[1] + a[1] + (b[1] - a[1]) * t, a: 0.9, r: 1.2 }); }
+      }
+      const m = Math.round((rk[2] * rk[2] * 2.2) / (16 * 3.2));
+      for (let k = 0; k < m; k++) { const ang = rnd() * 6.2832, rr = Math.sqrt(rnd()) * rk[2] * 0.6; pts.push({ x1: rk[0] + Math.cos(ang) * rr, y1: rk[1] + Math.sin(ang) * rr, a: 0.25, r: 0.9 }); }
+    }
+    const sv = [[15, 0], [-10, -9.5], [-5, 0], [-10, 9.5]], sx = 310, sy = 400, sa = -Math.PI / 2;
+    for (let i = 0; i < 4; i++) {
+      const a = sv[i], b = sv[(i + 1) % 4], L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.round(L / 2.2));
+      for (let k = 0; k < n; k++) { const t = k / n, px = a[0] + (b[0] - a[0]) * t, py = a[1] + (b[1] - a[1]) * t; pts.push({ x1: sx + px * Math.cos(sa) - py * Math.sin(sa), y1: sy + px * Math.sin(sa) + py * Math.cos(sa), a: 1, r: 1.25 }); }
+    }
+    for (const p of pts) {
+      p.x0 = CX + (p.x1 - CX) * 0.474;
+      p.y0 = p.y1;
+      p.dl = (Math.abs(p.x1 - CX) / CX) * 0.22 + rnd() * 0.06;
+      p.j = (rnd() - 0.5) * 16;
+      p.tw = rnd() * 6.28;
+    }
+    this._pts = pts;
+    return pts;
+  }
+  _start() {
+    if (this._running || !this._cv || !this._alive) return;
+    const ctx = this._cv.getContext('2d'); if (!ctx) return;
+    this._running = true; this._ctx = ctx;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    this._dpr = dpr; this._cv.width = Math.round(620 * dpr); this._cv.height = Math.round(722 * dpr);
+    this._t0 = performance.now();
+    const step = (now) => {
+      if (!this._alive) { this._running = false; return; }
+      this._draw((now - this._t0) / 1000);
+      this._raf = requestAnimationFrame(step);
+    };
+    this._raf = requestAnimationFrame(step);
+  }
+  _draw(t) {
+    const ctx = this._ctx, dpr = this._dpr, W = 620, H = 722, CX = W / 2, pts = this._scene();
+    const u = t % 4.8;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalAlpha = 1; ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#ffffff';
+    const dot = (x, y, r, a) => { if (a <= 0.01) return; ctx.globalAlpha = a > 1 ? 1 : a; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill(); };
+    const c1 = 1.70158, c3 = c1 + 1;
+    const back = (x) => 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+    const edgeA = u < 0.5 ? 0.35 : Math.max(0, 0.35 - (u - 0.5) * 1.2);
+    if (edgeA > 0) { for (let y = 6; y < H; y += 8) { dot(CX - 147, y, 0.7, edgeA); dot(CX + 147, y, 0.7, edgeA); } }
+    for (const p of pts) {
+      const l = Math.max(0, Math.min(1, (u - 0.5 - p.dl) / 0.85));
+      const e = back(l);
+      const x = p.x0 + (p.x1 - p.x0) * e;
+      const y = p.y0 + (p.y1 - p.y0) * e + Math.sin(Math.PI * l) * p.j;
+      const tw = p.star ? 0.7 + 0.3 * Math.sin(t * 1.5 + p.tw) : 1;
+      dot(x, y, p.r, p.a * tw);
+    }
+    if (u > 0.5 && u < 1.3) {
+      const k = (u - 0.5) / 0.8, rad = 10 + k * 260, n = 64;
+      for (let i = 0; i < n; i++) { const a = (i / n) * 6.2832; dot(CX + Math.cos(a) * rad, H / 2 + Math.sin(a) * rad * 0.9, 1.1, (1 - k) * 0.8); }
+    }
+  }
+  renderVals() {
+    if (!this._h) {
+      this._h = {
+        setCanvas: (el) => { if (el) { this._cv = el; if (this._alive) this._start(); } },
+        replay: () => { this._t0 = performance.now(); }
+      };
+    }
+    return { setCanvas: this._h.setCanvas, replay: this._h.replay };
+  }
+}
+</script>
+</body>
+</html>

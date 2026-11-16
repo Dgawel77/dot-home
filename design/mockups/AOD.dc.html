@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Always On Display</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#bdbdbd}a:hover{color:#ffffff}
+.doto{font-family:'Doto',ui-monospace,monospace}
+.ico{fill:none;stroke:#bdbdbd;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+sc-for,sc-if{display:contents}
+.mx{display:flex;gap:calc(var(--g) * 2.2)}
+.mx .dg{display:grid;grid-template-columns:repeat(5,var(--d));grid-auto-rows:var(--d);gap:var(--g)}
+.mx .cn{display:grid;grid-template-columns:var(--d);grid-auto-rows:var(--d);gap:var(--g)}
+.mx .on,.mx .off{border-radius:50%}
+.mx .on{background:#d0d0d0}
+.mx .off{background:#101010}
+.mxa{--d:6px;--g:5px}
+</style>
+</helmet>
+<div style="width: 410px; height: 940px; box-sizing: border-box; padding: 40px 40px 0; background: #111111; display: flex; flex-direction: column; align-items: center; gap: 20px; font-family: Inter, system-ui, sans-serif; color: #ffffff">
+<div style="position: relative; width: 330px; height: 810px; flex-shrink: 0; border-radius: 34px; overflow: hidden; background: #000000; box-shadow: 0 0 0 1px #2c2c2c">
+<canvas id="dh-aod-cv" ref="{{ setCanvas }}" role="img" aria-label="A few dim dots from the game" style="position: absolute; left: 0; top: 0; width: 330px; height: 810px; display: block"></canvas>
+<div style="position: absolute; left: 0; top: 0; width: 330px; height: 810px; display: flex; flex-direction: column; align-items: center">
+<div class="mx mxa" role="img" aria-label="{{ time }}" style="margin-top: 250px"><sc-for list="{{ clock }}" as="b" hint-placeholder-count="5"><div class="{{ b.cls }}"><sc-for list="{{ b.cells }}" as="c" hint-placeholder-count="35"><div class="{{ c.c }}"></div></sc-for></div></sc-for></div>
+<div style="margin-top: 18px; font-size: 14px; color: #9a9a9a">{{ date }}</div>
+<div style="margin-top: 14px; display: flex; align-items: center; gap: 16px">
+<svg class="ico" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v10H9l-5 4z"></path></svg>
+<svg class="ico" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="2"></rect><path d="M3.5 7l8.5 6 8.5-6"></path></svg>
+<div class="doto" style="font-size: 15px; color: #9a9a9a">82%</div>
+</div>
+</div>
+</div>
+<div style="font-size: 13px; color: #a0a0a0; text-align: center; line-height: 1.5">Always On Display · cover screen only<br>Made with Samsung's ClockFace · dim and sparse to save battery · the clock font may differ</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":410,"height":940}}'>
+class Component extends DCLogic {
+  componentDidMount() {
+    this._alive = true;
+    this._clock = setInterval(() => { this.setState({ now: Date.now() }); }, 10000);
+    this._find(0);
+  }
+  componentWillUnmount() { this._alive = false; clearInterval(this._clock); }
+  _find(n) {
+    if (!this._alive) return;
+    if (!this._cv) this._cv = document.getElementById('dh-aod-cv');
+    if (this._cv) { this._paint(this._cv); return; }
+    if (n < 40) setTimeout(() => this._find(n + 1), 100);
+  }
+  _rng(seed) {
+    let a = seed >>> 0;
+    return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  _paint(cv) {
+    if (this._done || !cv) return;
+    const ctx = cv.getContext('2d'); if (!ctx) return;
+    this._done = true;
+    const W = 330, H = 810, dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#ffffff';
+    const dot = (x, y, r, a) => { ctx.globalAlpha = a; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill(); };
+    const rnd = this._rng(41);
+    for (let i = 0; i < 46; i++) { const y = rnd() * H; if (y > 220 && y < 420) continue; dot(rnd() * W, y, 0.7, 0.08 + rnd() * 0.18); }
+    const cx = 236, cy = 600, R = 26, nv = 10, v = [];
+    for (let i = 0; i < nv; i++) { const a = (i / nv) * 6.2832; const rr = R * (0.74 + rnd() * 0.36); v.push([Math.cos(a) * rr, Math.sin(a) * rr]); }
+    for (let i = 0; i < nv; i++) {
+      const a = v[i], b = v[(i + 1) % nv], L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.round(L / 5));
+      for (let k = 0; k < n; k++) { const t = k / n; dot(cx + a[0] + (b[0] - a[0]) * t, cy + a[1] + (b[1] - a[1]) * t, 0.9, 0.28); }
+    }
+    const sx = 104, sy = 650, sa = -2.4, sv = [[15, 0], [-10, -9.5], [-5, 0], [-10, 9.5]];
+    for (let i = 0; i < 4; i++) {
+      const a = sv[i], b = sv[(i + 1) % 4], L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.round(L / 3));
+      for (let k = 0; k < n; k++) { const t = k / n, px = a[0] + (b[0] - a[0]) * t, py = a[1] + (b[1] - a[1]) * t; dot(sx + px * Math.cos(sa) - py * Math.sin(sa), sy + px * Math.sin(sa) + py * Math.cos(sa), 0.9, 0.4); }
+    }
+    ctx.globalAlpha = 1;
+  }
+  _mx(str) {
+    const F = { '0': ['01110', '10001', '10011', '10101', '11001', '10001', '01110'], '1': ['00100', '01100', '00100', '00100', '00100', '00100', '01110'], '2': ['01110', '10001', '00001', '00010', '00100', '01000', '11111'], '3': ['11111', '00010', '00100', '00010', '00001', '10001', '01110'], '4': ['00010', '00110', '01010', '10010', '11111', '00010', '00010'], '5': ['11111', '10000', '11110', '00001', '00001', '10001', '01110'], '6': ['00110', '01000', '10000', '11110', '10001', '10001', '01110'], '7': ['11111', '00001', '00010', '00100', '01000', '01000', '01000'], '8': ['01110', '10001', '10001', '01110', '10001', '10001', '01110'], '9': ['01110', '10001', '10001', '01111', '00001', '00010', '01100'] };
+    const out = [];
+    for (const ch of String(str)) {
+      if (ch === ':') { out.push({ cls: 'cn', cells: [0, 0, 1, 0, 1, 0, 0].map((v) => ({ c: v ? 'on' : 'off' })) }); continue; }
+      const rows = F[ch]; if (!rows) continue;
+      const cells = [];
+      for (const r of rows) for (const b of r) cells.push({ c: b === '1' ? 'on' : 'off' });
+      out.push({ cls: 'dg', cells: cells });
+    }
+    return out;
+  }
+  renderVals() {
+    if (!this._setCv) this._setCv = (el) => { if (el) { this._cv = el; if (this._alive) this._paint(el); } };
+    const st = this.state || {};
+    const d = new Date(st.now || Date.now());
+    let h = d.getHours() % 12; if (h === 0) h = 12;
+    const time = h + ':' + String(d.getMinutes()).padStart(2, '0');
+    return { setCanvas: this._setCv, time: time, clock: this._mx(time), date: d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) };
+  }
+}
+</script>
+</body>
+</html>

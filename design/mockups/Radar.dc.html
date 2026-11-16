@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Radar screen</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#bdbdbd}a:hover{color:#ffffff}
+.seg{display:flex;padding:3px;border-radius:22px;background:#101010;box-shadow:0 0 0 1px #2b2b2b;pointer-events:auto}
+.sb{height:38px;min-width:78px;padding:0 16px;border-radius:19px;border:0;background:transparent;color:#bdbdbd;font:500 13px Inter,system-ui,sans-serif;cursor:pointer}
+.area .b1,.region .b2{background:#ffffff;color:#000000}
+</style>
+</helmet>
+<div style="width: 700px; height: 860px; box-sizing: border-box; padding: 40px 40px 0; background: #111111; display: flex; flex-direction: column; align-items: center; gap: 18px; font-family: Inter, system-ui, sans-serif; color: #ffffff">
+<div style="position: relative; width: 620px; height: 722px; flex-shrink: 0; border-radius: 36px; overflow: hidden; background: #000000; box-shadow: 0 0 0 1px #2c2c2c">
+<canvas id="dh-radar-cv" ref="{{ setCanvas }}" onPointerDown="{{ toggle }}" role="img" aria-label="Sample radar map drawn in dots around Chicago" style="position: absolute; left: 0; top: 0; width: 620px; height: 722px; display: block; cursor: pointer"></canvas>
+<div style="position: absolute; left: 0; top: 0; width: 620px; height: 120px; background: linear-gradient(180deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.6) 60%, rgba(0,0,0,0) 100%); pointer-events: none"></div>
+<div style="position: absolute; left: 28px; top: 30px; display: flex; flex-direction: column; gap: 4px; pointer-events: none">
+<div style="font-size: 20px; font-weight: 600">Radar</div>
+<div style="font-size: 13px; color: #a6a6a6">Chicago · sample echo, not live</div>
+</div>
+<div class="seg {{ viewClass }}" style="position: absolute; right: 24px; top: 30px">
+<button class="sb b1" onClick="{{ showArea }}">Area</button>
+<button class="sb b2" onClick="{{ showRegion }}">Region</button>
+</div>
+<div style="position: absolute; right: 26px; top: 668px; display: flex; align-items: center; gap: 8px; font-size: 11px; color: #a6a6a6; letter-spacing: 1px; pointer-events: none">
+<div>LIGHT</div>
+<div style="width: 3px; height: 3px; border-radius: 50%; background: #9a9a9a"></div>
+<div style="width: 5px; height: 5px; border-radius: 50%; background: #cfcfcf"></div>
+<div style="width: 7px; height: 7px; border-radius: 50%; background: #ffffff"></div>
+<div>HEAVY</div>
+</div>
+</div>
+<div style="font-size: 12px; color: #a0a0a0; text-align: center; line-height: 1.5; max-width: 600px">Tap the map or the buttons to switch views. The storm is made up and the roads are approximate. The real screen would use NWS radar via Iowa State's Mesonet and real map data.</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":700,"height":860}}'>
+class Component extends DCLogic {
+  componentDidMount() {
+    this._alive = true;
+    this._find(0);
+  }
+  componentWillUnmount() { this._alive = false; if (this._raf) cancelAnimationFrame(this._raf); }
+  _find(n) {
+    if (!this._alive) return;
+    if (!this._cv) { const el = document.getElementById('dh-radar-cv'); if (el) this._cv = el; }
+    if (this._cv) { this._start(); return; }
+    if (n < 40) setTimeout(() => this._find(n + 1), 100);
+  }
+  _rng(seed) {
+    let a = seed >>> 0;
+    return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  _data() {
+    if (this._d) return this._d;
+    const shore = [[45.30, -86.95], [44.85, -87.22], [44.46, -87.50], [44.09, -87.65], [43.75, -87.70], [43.55, -87.78], [43.38, -87.86], [43.20, -87.90], [43.04, -87.89], [42.93, -87.85], [42.73, -87.78], [42.58, -87.82], [42.50, -87.80], [42.36, -87.82], [42.18, -87.79], [42.06, -87.67], [41.98, -87.65], [41.90, -87.62], [41.86, -87.61], [41.80, -87.58], [41.76, -87.54], [41.71, -87.51], [41.69, -87.47], [41.66, -87.43], [41.62, -87.34], [41.61, -87.20], [41.63, -87.05], [41.68, -86.92], [41.80, -86.75], [42.00, -86.55], [42.10, -86.48], [42.40, -86.28], [42.67, -86.21], [43.00, -86.23], [43.23, -86.35], [43.42, -86.43], [43.70, -86.47], [43.95, -86.45], [44.25, -86.32], [44.62, -86.24], [44.90, -86.05], [45.10, -85.75]];
+    this._d = {
+      shore: shore,
+      lake: shore.concat([[46.20, -85.75], [46.20, -86.95]]),
+      borders: [
+        [[42.50, -87.80], [42.50, -90.64]],
+        [[41.70, -87.525], [39.00, -87.53]],
+        [[41.76, -86.82], [41.76, -84.80]],
+        [[44.00, -91.50], [43.50, -91.22], [43.10, -91.18], [42.75, -91.05], [42.51, -90.64], [42.25, -90.42], [41.95, -90.17], [41.75, -90.20], [41.55, -90.45], [41.45, -90.85], [41.15, -91.00], [40.65, -91.10], [40.38, -91.42], [39.85, -91.40]]
+      ],
+      cells: [[41.30, -88.85, 0.18, 0.8], [41.55, -88.70, 0.20, 1.0], [41.80, -88.55, 0.16, 1.1], [42.00, -88.45, 0.18, 0.95], [42.25, -88.40, 0.20, 0.85], [42.50, -88.50, 0.18, 0.7], [42.75, -88.70, 0.22, 0.55], [41.90, -89.30, 0.45, 0.35], [42.30, -89.40, 0.50, 0.30], [41.40, -89.40, 0.45, 0.30], [41.80, -91.20, 0.35, 0.6], [42.20, -91.00, 0.30, 0.5], [42.15, -87.35, 0.22, 0.18]],
+      views: {
+        area: {
+          lon0: -88.40, lon1: -87.10, latC: 41.90, G: 8, grat: 0.25, seed: 5,
+          cities: [['Chicago', 41.88, -87.63], ["O'Hare", 41.98, -87.90], ['Midway', 41.79, -87.75], ['Evanston', 42.05, -87.69], ['Skokie', 42.03, -87.74], ['Oak Park', 41.885, -87.79], ['Schaumburg', 42.03, -88.08], ['Oak Brook', 41.83, -87.93], ['Naperville', 41.75, -88.15], ['Aurora', 41.76, -88.32], ['Elgin', 42.04, -88.28], ['Joliet', 41.53, -88.08], ['Orland Park', 41.63, -87.85], ['Hammond', 41.58, -87.50], ['Gary', 41.60, -87.34], ['Arlington Hts', 42.09, -87.98]],
+          labels: [['LAKE MICHIGAN', 41.95, -87.36]],
+          roads: [
+            ['90', [[41.98, -87.90], [41.97, -87.80], [41.95, -87.73], [41.92, -87.69], [41.89, -87.655], [41.875, -87.643], [41.85, -87.635], [41.80, -87.63], [41.75, -87.627], [41.72, -87.625]]],
+            ['94', [[41.72, -87.625], [41.66, -87.60], [41.60, -87.56], [41.57, -87.50], [41.58, -87.35]]],
+            ['90', [[41.75, -87.627], [41.73, -87.57], [41.70, -87.53], [41.67, -87.46], [41.64, -87.40], [41.62, -87.30]]],
+            ['94', [[41.97, -87.73], [42.02, -87.75], [42.08, -87.77], [42.15, -87.80], [42.25, -87.88], [42.40, -87.94]]],
+            ['290', [[41.875, -87.643], [41.875, -87.70], [41.875, -87.77], [41.865, -87.85], [41.88, -87.92], [41.93, -87.98], [41.99, -88.02], [42.06, -88.05]]],
+            ['55', [[41.86, -87.64], [41.835, -87.69], [41.81, -87.76], [41.78, -87.86], [41.74, -87.96], [41.66, -88.08], [41.57, -88.17], [41.45, -88.27], [41.35, -88.35]]],
+            ['88', [[41.86, -87.93], [41.83, -88.02], [41.81, -88.12], [41.80, -88.22], [41.79, -88.35], [41.80, -88.50]]],
+            ['294', [[42.25, -87.84], [42.12, -87.86], [42.03, -87.87], [41.97, -87.89], [41.88, -87.91], [41.80, -87.88], [41.72, -87.80], [41.66, -87.72], [41.62, -87.62], [41.59, -87.53]]],
+            ['80', [[41.52, -88.40], [41.52, -88.15], [41.54, -87.95], [41.57, -87.75], [41.58, -87.55], [41.58, -87.30], [41.58, -87.10]]],
+            ['57', [[41.72, -87.645], [41.65, -87.70], [41.56, -87.75], [41.45, -87.80], [41.30, -87.86]]],
+            ['90', [[41.99, -87.92], [42.02, -88.00], [42.04, -88.10], [42.05, -88.22], [42.08, -88.40]]],
+            ['355', [[42.03, -88.04], [41.92, -88.04], [41.83, -88.03], [41.72, -88.04], [41.60, -88.06], [41.55, -88.06]]]
+          ]
+        },
+        region: {
+          lon0: -92.20, lon1: -85.20, latC: 42.20, G: 7, grat: 1, seed: 9,
+          cities: [['Chicago', 41.88, -87.63], ['Milwaukee', 43.04, -87.91], ['Madison', 43.07, -89.40], ['Rockford', 42.27, -89.09], ['Quad Cities', 41.52, -90.58], ['Iowa City', 41.66, -91.53], ['Peoria', 40.69, -89.59], ['Bloomington', 40.48, -88.99], ['Champaign', 40.12, -88.24], ['South Bend', 41.68, -86.25], ['Dubuque', 42.50, -90.66], ['Indianapolis', 39.77, -86.16]],
+          labels: [['LAKE MICHIGAN', 43.10, -87.05], ['ILLINOIS', 40.95, -89.30], ['WISCONSIN', 43.75, -89.60], ['IOWA', 41.15, -91.70], ['INDIANA', 40.60, -86.60], ['MICHIGAN', 42.45, -85.85]],
+          roads: [
+            ['90', [[41.88, -87.64], [41.98, -87.90], [42.08, -88.40], [42.20, -88.80], [42.27, -89.09], [42.55, -89.10], [42.75, -89.20], [43.07, -89.40], [43.60, -89.80], [44.00, -90.30]]],
+            ['94', [[41.88, -87.64], [42.15, -87.80], [42.50, -87.94], [42.75, -87.95], [43.04, -87.95], [43.10, -88.30], [43.10, -88.80], [43.07, -89.40]]],
+            ['80', [[41.58, -87.10], [41.58, -87.55], [41.52, -88.15], [41.40, -88.80], [41.38, -89.40], [41.45, -90.10], [41.55, -90.55], [41.62, -91.00], [41.66, -91.53], [41.65, -92.20]]],
+            ['55', [[41.86, -87.64], [41.57, -88.17], [41.20, -88.45], [40.90, -88.70], [40.48, -88.99], [40.10, -89.30], [39.80, -89.65]]],
+            ['57', [[41.72, -87.645], [41.30, -87.86], [40.90, -88.00], [40.12, -88.24], [39.50, -88.30]]],
+            ['65', [[41.60, -87.34], [41.20, -87.30], [40.80, -87.10], [40.42, -86.89], [39.77, -86.16]]],
+            ['88', [[41.86, -87.93], [41.80, -88.50], [41.80, -89.10], [41.75, -89.70], [41.55, -90.40]]],
+            ['39', [[42.27, -89.09], [41.90, -89.08], [41.35, -89.10], [40.90, -89.05], [40.48, -88.99]]],
+            ['43', [[43.04, -87.92], [42.70, -88.30], [42.50, -89.03]]],
+            ['74', [[41.52, -90.50], [41.00, -90.10], [40.69, -89.59], [40.48, -88.99], [40.12, -88.24], [39.90, -87.60]]]
+          ]
+        }
+      }
+    };
+    return this._d;
+  }
+  _proj(v, W, H) {
+    const kx = W / (v.lon1 - v.lon0), ky = kx / Math.cos((v.latC * Math.PI) / 180);
+    return {
+      x: (lon) => (lon - v.lon0) * kx,
+      y: (lat) => H / 2 - (lat - v.latC) * ky,
+      lon: (x) => v.lon0 + x / kx,
+      lat: (y) => v.latC - (y - H / 2) / ky
+    };
+  }
+  _base(name, v, p, W, H) {
+    this._bases = this._bases || {};
+    if (this._bases[name]) return this._bases[name];
+    const d = this._data();
+    const poly = d.lake.map((q) => [p.x(q[1]), p.y(q[0])]);
+    const inLake = (x, y) => {
+      let c = false;
+      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+        if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
+      }
+      return c;
+    };
+    const lake = [], land = [];
+    let row = 0;
+    for (let y = 3; y < H; y += 5, row++) {
+      for (let x = 3 + (row % 2) * 2.5; x < W; x += 5) if (inLake(x, y)) lake.push([x, y]);
+    }
+    const rnd = this._rng(v.seed);
+    for (let i = 0; i < 1400; i++) {
+      const x = rnd() * W, y = rnd() * H;
+      if (!inLake(x, y)) land.push([x, y, 0.05 + rnd() * 0.1]);
+    }
+    this._bases[name] = { lake: lake, land: land };
+    return this._bases[name];
+  }
+  _start() {
+    if (this._running || !this._cv || !this._alive) return;
+    const ctx = this._cv.getContext('2d'); if (!ctx) return;
+    this._running = true; this._ctx = ctx;
+    const W = 620, H = 722, dpr = Math.min(2, window.devicePixelRatio || 1);
+    this._dpr = dpr; this._cv.width = Math.round(W * dpr); this._cv.height = Math.round(H * dpr);
+    const t0 = performance.now();
+    let frame = 0;
+    const step = (now) => {
+      if (!this._alive) { this._running = false; return; }
+      frame++;
+      if (frame % 2 === 0) this._draw((now - t0) / 1000, W, H);
+      this._raf = requestAnimationFrame(step);
+    };
+    this._raf = requestAnimationFrame(step);
+  }
+  _draw(t, W, H) {
+    const ctx = this._ctx, dpr = this._dpr, d = this._data();
+    const st = this.state || {};
+    const name = st.view === 'region' ? 'region' : 'area';
+    const v = d.views[name];
+    const p = this._proj(v, W, H);
+    const base = this._base(name, v, p, W, H);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalAlpha = 1; ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#ffffff';
+    const dot = (x, y, r, a) => { if (a <= 0.01 || r <= 0.05) return; ctx.globalAlpha = a > 1 ? 1 : a; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill(); };
+    for (const q of base.land) dot(q[0], q[1], 0.65, q[2]);
+    for (const q of base.lake) dot(q[0], q[1], 0.75, 0.2);
+    const poly = (pts, step, r, a) => {
+      for (let i = 0; i < pts.length - 1; i++) {
+        const x1 = p.x(pts[i][1]), y1 = p.y(pts[i][0]), x2 = p.x(pts[i + 1][1]), y2 = p.y(pts[i + 1][0]);
+        const L = Math.hypot(x2 - x1, y2 - y1), n = Math.max(1, Math.round(L / step));
+        for (let j = 0; j < n; j++) { const u = j / n, xx = x1 + (x2 - x1) * u, yy = y1 + (y2 - y1) * u; if (xx > -4 && xx < W + 4 && yy > -4 && yy < H + 4) dot(xx, yy, r, a); }
+      }
+    };
+    ctx.font = '500 9px Inter, system-ui, sans-serif'; ctx.textBaseline = 'alphabetic';
+    const g = v.grat;
+    for (let lat = Math.ceil(p.lat(H) / g) * g; lat <= p.lat(0); lat += g) {
+      const y = p.y(lat);
+      for (let x = 4; x < W; x += 9) dot(x, y, 0.55, 0.1);
+    }
+    for (let lon = Math.ceil(p.lon(0) / g) * g; lon <= p.lon(W); lon += g) {
+      const x = p.x(lon);
+      for (let y = 4; y < H; y += 9) dot(x, y, 0.55, 0.1);
+    }
+    for (const b of d.borders) poly(b, 6, 0.9, 0.38);
+    for (const r of v.roads) poly(r[1], 3.4, 0.8, 0.42);
+    poly(d.shore, 3.2, 1.2, 0.85);
+    ctx.textAlign = 'center';
+    ctx.font = '600 11px Inter, system-ui, sans-serif';
+    for (const l of v.labels) {
+      const x = p.x(l[2]), y = p.y(l[1]);
+      if (y < 130 || y > H - 100) continue;
+      ctx.globalAlpha = 0.42;
+      ctx.fillText(l[0].split('').join('  '), x, y);
+    }
+    ctx.font = '600 9px Inter, system-ui, sans-serif';
+    for (const r of v.roads) {
+      const q = r[1][Math.floor(r[1].length / 2)];
+      const x = p.x(q[1]), y = p.y(q[0]);
+      if (x < 16 || x > W - 16 || y < 130 || y > H - 100) continue;
+      const tw = ctx.measureText(r[0]).width + 8;
+      ctx.globalAlpha = 0.95; ctx.fillStyle = '#000000';
+      ctx.beginPath(); ctx.rect(x - tw / 2, y - 7, tw, 13); ctx.fill();
+      ctx.globalAlpha = 0.6; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.rect(x - tw / 2 + 0.5, y - 6.5, tw - 1, 12); ctx.stroke();
+      ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.8; ctx.fillText(r[0], x, y + 3);
+    }
+    ctx.textAlign = 'left';
+    const cyc = 7.5, ph = t % cyc, k = Math.min(1, ph / 6), m = -60 + k * 60;
+    const G = v.G, vlon = 0.5, vlat = 0.12;
+    const cur = d.cells.map((c) => [c[0] + vlat * (m / 60), c[1] + vlon * (m / 60), 2 * c[2] * c[2], c[3]]);
+    ctx.fillStyle = '#ffffff';
+    for (let y = G / 2; y < H; y += G) {
+      const lat = p.lat(y), cl = Math.cos((lat * Math.PI) / 180);
+      for (let x = G / 2; x < W; x += G) {
+        const lon = p.lon(x);
+        let I = 0;
+        for (const c of cur) {
+          const dy = lat - c[0], dx = (lon - c[1]) * cl;
+          const q = (dx * dx + dy * dy) / c[2];
+          if (q < 6) I += c[3] * Math.exp(-q);
+        }
+        I *= 0.85 + 0.15 * Math.sin(lat * 41 + lon * 29 + m * 0.05);
+        if (I > 0.08) { const n = I > 1 ? 1 : I; dot(x, y, G * 0.46 * Math.pow(n, 0.7), 0.4 + 0.6 * n); }
+      }
+    }
+    ctx.font = '500 11px Inter, system-ui, sans-serif';
+    for (const c of v.cities) {
+      const x = p.x(c[2]), y = p.y(c[1]);
+      if (x < 8 || x > W - 8 || y < 130 || y > H - 100) continue;
+      const me = c[0] === 'Chicago';
+      ctx.fillStyle = '#ffffff';
+      if (!me) dot(x, y, 1.8, 0.75);
+      ctx.globalAlpha = me ? 0.95 : 0.62;
+      ctx.fillText(c[0], x + 8, y + 4);
+    }
+    const yx = p.x(-87.63), yy = p.y(41.88);
+    dot(yx, yy, 3.4, 1);
+    const pr = (t % 2) / 2, rad = 8 + pr * 22;
+    for (let i = 0; i < 20; i++) { const a = (i / 20) * 6.2832; dot(yx + Math.cos(a) * rad, yy + Math.sin(a) * rad, 1.3, (1 - pr) * 0.9); }
+    ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(0, H - 92, 300, 92);
+    ctx.fillStyle = '#ffffff';
+    const lineY = H - 66;
+    for (let x = 28; x <= 268; x += 6) dot(x, lineY, 1, 0.35);
+    dot(28 + k * 240, lineY, 3.2, 1);
+    ctx.globalAlpha = 1;
+    ctx.font = '400 24px Doto, ui-monospace, monospace';
+    ctx.fillText(m > -1 ? 'NOW' : '−' + Math.round(-m) + ' MIN', 28, H - 28);
+  }
+  renderVals() {
+    if (!this._h) {
+      this._h = {
+        setCanvas: (el) => { if (el) { this._cv = el; if (this._alive) this._start(); } },
+        showArea: () => this.setState({ view: 'area' }),
+        showRegion: () => this.setState({ view: 'region' }),
+        toggle: () => { const st = this.state || {}; this.setState({ view: st.view === 'region' ? 'area' : 'region' }); }
+      };
+    }
+    const st = this.state || {};
+    return {
+      setCanvas: this._h.setCanvas, showArea: this._h.showArea, showRegion: this._h.showRegion, toggle: this._h.toggle,
+      viewClass: st.view === 'region' ? 'region' : 'area'
+    };
+  }
+}
+</script>
+</body>
+</html>

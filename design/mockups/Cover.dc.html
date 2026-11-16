@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cover home screen</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#bdbdbd}a:hover{color:#ffffff}
+.doto{font-family:'Doto',ui-monospace,monospace}
+.ico{fill:none;stroke:#ffffff;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.icof{fill:#ffffff;stroke:none}
+.w{pointer-events:auto;border-radius:26px;border:1px solid transparent;transition:background 200ms ease,border-color 200ms ease}
+.tiles .w{background:rgba(13,13,13,0.9);border-color:#262626}
+.ic{width:56px;height:56px;border-radius:17px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;background:transparent;padding:0;cursor:pointer;pointer-events:auto}
+.square .ic{background:#101010;border-color:#2b2b2b}
+.ic:hover{border-color:#5a5a5a}
+.mb{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:transparent;border:0;padding:0;cursor:pointer}
+.mb:hover{background:#1c1c1c}
+sc-for,sc-if{display:contents}
+.mx{display:flex;gap:calc(var(--g) * 2.2)}
+.mx .dg{display:grid;grid-template-columns:repeat(5,var(--d));grid-auto-rows:var(--d);gap:var(--g)}
+.mx .cn{display:grid;grid-template-columns:var(--d);grid-auto-rows:var(--d);gap:var(--g)}
+.mx .on,.mx .off{border-radius:50%}
+.mx .on{background:#ffffff;box-shadow:0 0 5px rgba(255,255,255,0.4);animation:mxp 3.6s ease-in-out infinite}
+.mx .on:nth-child(2n){animation-delay:-1.2s}
+.mx .on:nth-child(3n){animation-delay:-2.4s}
+.mx .off{background:#1a1a1a}
+.mx .cn .on{animation:mxb 2s ease-in-out infinite}
+.mxc{--d:5px;--g:4px}
+@keyframes mxp{0%,100%{opacity:1}50%{opacity:0.72}}
+@keyframes mxb{0%,100%{opacity:1}50%{opacity:0.25}}
+</style>
+</helmet>
+<div style="width: 410px; height: 940px; box-sizing: border-box; padding: 40px 40px 0; background: #111111; display: flex; flex-direction: column; align-items: center; gap: 20px; font-family: Inter, system-ui, sans-serif; color: #ffffff">
+<div style="position: relative; width: 330px; height: 810px; flex-shrink: 0; border-radius: 34px; overflow: hidden; background: #000000; box-shadow: 0 0 0 1px #2c2c2c" onPointerMove="{{ onMove }}" onPointerLeave="{{ onLeave }}">
+<canvas id="dh-cover-cv" ref="{{ setCanvas }}" onPointerDown="{{ onTap }}" role="img" aria-label="Dot space shooter wallpaper" style="position: absolute; left: 0; top: 0; width: 330px; height: 810px; display: block; touch-action: none; cursor: crosshair"></canvas>
+<div class="{{ layerClass }}" style="position: absolute; left: 0; top: 0; width: 330px; height: 810px; pointer-events: none">
+<div class="w" style="position: absolute; left: 12px; top: 20px; width: 306px; height: 196px; box-sizing: border-box; padding: 18px 18px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div class="mx mxc" role="img" aria-label="{{ time }}" style="padding: 6px 0 6px 2px"><sc-for list="{{ clock }}" as="b" hint-placeholder-count="5"><div class="{{ b.cls }}"><sc-for list="{{ b.cells }}" as="c" hint-placeholder-count="35"><div class="{{ c.c }}"></div></sc-for></div></sc-for></div>
+<div style="font-size: 13px; color: #a6a6a6; padding-left: 3px">{{ date }}</div>
+</div>
+<div style="display: flex; align-items: center; gap: 12px">
+<svg class="ico" width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.2 11 3.5 3.5 0 0 0 7 18z"></path></svg>
+<div class="doto" style="font-size: 36px; line-height: 1; font-weight: 400">41°</div>
+<div style="display: flex; flex-direction: column; gap: 3px">
+<div style="font-size: 12px; color: #d6d6d6">Cloudy · H 45° L 33°</div>
+<div style="font-size: 12px; color: #949494">Chicago · sample data</div>
+</div>
+</div>
+</div>
+<div class="doto" style="position: absolute; left: 26px; top: 230px; font-size: 14px; font-weight: 400; color: #a6a6a6; letter-spacing: 1px">TODAY {{ score }} · BEST {{ best }}</div>
+<div class="w" style="position: absolute; left: 12px; top: 580px; width: 306px; height: 120px; box-sizing: border-box; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; align-items: center; gap: 12px">
+<div style="width: 44px; height: 44px; border-radius: 11px; flex-shrink: 0; background-color: #0a0a0a; background-image: radial-gradient(circle, #8c8c8c 1.1px, transparent 1.6px); background-size: 6px 6px; box-shadow: 0 0 0 1px #262626"></div>
+<div style="display: flex; flex-direction: column; gap: 3px; min-width: 0">
+<div style="font-size: 14px; font-weight: 500">Track name</div>
+<div style="font-size: 12px; color: #9c9c9c">Artist</div>
+</div>
+</div>
+<div style="display: flex; align-items: center; gap: 8px">
+<div style="height: 2px; background: #2a2a2a; border-radius: 1px; position: relative; flex-grow: 1"><div style="position: absolute; left: 0; top: 0; height: 2px; width: 38%; background: #ffffff; border-radius: 1px"></div></div>
+<button class="mb" aria-label="Previous track"><svg class="ico" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 6v12M18 6l-8 6 8 6z"></path></svg></button>
+<button class="mb" aria-label="{{ playLabel }}" onClick="{{ togglePlay }}">
+<sc-if value="{{ playing }}" hint-placeholder-val="{{ false }}"><svg class="icof" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="5.5" width="3.2" height="13" rx="1"></rect><rect x="13.8" y="5.5" width="3.2" height="13" rx="1"></rect></svg></sc-if>
+<sc-if value="{{ paused }}" hint-placeholder-val="{{ true }}"><svg class="icof" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z"></path></svg></sc-if>
+</button>
+<button class="mb" aria-label="Next track"><svg class="ico" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 6v12M6 6l8 6-8 6z"></path></svg></button>
+</div>
+</div>
+<div class="{{ dockClass }}" style="position: absolute; left: 24px; top: 718px; width: 282px; height: 72px; display: flex; align-items: center; justify-content: space-between">
+<button class="ic" aria-label="Phone"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5h3l1.5 4-2 1.2a11 11 0 0 0 5.8 5.8l1.2-2 4 1.5v3a2 2 0 0 1-2 2A16 16 0 0 1 3 5.5a2 2 0 0 1 2-2z"></path></svg></button>
+<button class="ic" aria-label="Messages"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v10H9l-5 4z"></path></svg></button>
+<button class="ic" aria-label="Camera"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="12" rx="3"></rect><circle cx="12" cy="13" r="3.5"></circle><path d="M8.5 7l1.5-2.5h4L15.5 7"></path></svg></button>
+<button class="ic" aria-label="Browser"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M3.5 12h17M12 3.5c2.6 2.4 3.8 5.2 3.8 8.5s-1.2 6.1-3.8 8.5c-2.6-2.4-3.8-5.2-3.8-8.5S9.4 5.9 12 3.5z"></path></svg></button>
+</div>
+</div>
+</div>
+<div style="font-size: 13px; color: #a0a0a0; text-align: center; line-height: 1.5">Cover screen · tilt with the pointer · click to shoot</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dotSize":{"editor":"range","default":1.2,"min":0.8,"max":3.6,"step":0.1,"unit":"px","section":"Dots"},"dotSpacing":{"editor":"range","default":4,"min":3,"max":10,"step":0.5,"unit":"px","section":"Dots"},"widgetStyle":{"editor":"enum","default":"bare","options":["bare","tiles"],"section":"Style"},"iconStyle":{"editor":"enum","default":"glyph","options":["glyph","square"],"section":"Style"},"$preview":{"width":410,"height":940}}'>
+class Component extends DCLogic {
+  _dims() {
+    return { W: 330, H: 810, ROCKS: 5, R: 26, CID: 'dh-cover-cv',
+      zones: [[12, 20, 306, 196], [12, 580, 306, 120], [16, 712, 298, 84]] };
+  }
+  componentDidMount() {
+    this.D = this._dims();
+    this._alive = true;
+    this._clock = setInterval(() => { this.setState({ now: Date.now() }); }, 10000);
+    this._onOri = (e) => {
+      const g = this._g;
+      if (!g || e.gamma == null || e.beta == null) return;
+      if (!g.ori) g.ori = { g0: e.gamma, b0: e.beta };
+      g.oriOn = true;
+      g.tilt.x = this._cl((e.gamma - g.ori.g0) / 22, -1, 1);
+      g.tilt.y = this._cl((e.beta - g.ori.b0) / 22, -1, 1);
+    };
+    try { window.addEventListener('deviceorientation', this._onOri); } catch (err) {}
+    this._findCanvas(0);
+  }
+  componentWillUnmount() {
+    this._alive = false;
+    if (this._raf) cancelAnimationFrame(this._raf);
+    clearInterval(this._clock);
+    try { window.removeEventListener('deviceorientation', this._onOri); } catch (err) {}
+  }
+  _cl(v, a, b) { return v < a ? a : v > b ? b : v; }
+  _DS() { const v = Number(this.props.dotSize); return isFinite(v) && v > 0 ? this._cl(v, 0.6, 5) : 1.2; }
+  _S() { const v = Number(this.props.dotSpacing); return isFinite(v) && v > 0 ? this._cl(v, 2.5, 14) : 4; }
+  _findCanvas(n) {
+    if (!this._alive) return;
+    if (!this._cv) { const el = document.getElementById(this.D.CID); if (el) this._cv = el; }
+    if (this._cv) { this._start(); return; }
+    if (n < 40) setTimeout(() => this._findCanvas(n + 1), 100);
+  }
+  _start() {
+    if (this._running || !this._cv || !this._alive) return;
+    if (!this.D) this.D = this._dims();
+    const ctx = this._cv.getContext('2d');
+    if (!ctx) return;
+    this._running = true;
+    this._ctx = ctx;
+    const D = this.D;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    this._dpr = dpr;
+    this._cv.width = Math.round(D.W * dpr);
+    this._cv.height = Math.round(D.H * dpr);
+    this._initGame();
+    let last = performance.now();
+    const step = (now) => {
+      if (!this._alive) { this._running = false; return; }
+      let dt = (now - last) / 1000; last = now;
+      if (dt > 0.05) dt = 0.05; if (dt < 0) dt = 0;
+      this._update(dt);
+      this._draw();
+      this._raf = requestAnimationFrame(step);
+    };
+    this._raf = requestAnimationFrame(step);
+  }
+  _initGame() {
+    const D = this.D;
+    const g = { t: 0, tilt: { x: 0, y: 0 }, oriOn: false, ori: null,
+      ship: { x: D.W / 2, y: D.H * 0.54, vx: 0, vy: 0, a: -Math.PI / 2, cool: 0, fire: 0, aim: 0 },
+      rocks: [], shots: [], parts: [], rings: [], trail: [], trailT: 0, spawnT: 2, stars: [] };
+    this._g = g;
+    const n = Math.round((D.W * D.H) / 2300);
+    for (let i = 0; i < n; i++) g.stars.push({ x: Math.random() * D.W, y: Math.random() * D.H, a: 0.05 + Math.random() * 0.3, p: Math.random() * 6.283, s: 0.3 + Math.random() * 0.9 });
+    for (let i = 0; i < D.ROCKS; i++) g.rocks.push(this._newRock(i % 3 === 2 ? 2 : 3, null, true));
+  }
+  _newRock(size, parent, anywhere) {
+    const D = this.D, g = this._g;
+    const r = D.R * (size === 3 ? 1 : size === 2 ? 0.62 : 0.38);
+    let x, y, vx, vy;
+    if (parent) {
+      x = parent.x; y = parent.y;
+      const ang = Math.random() * 6.283, sp = 18 + Math.random() * 26;
+      vx = parent.vx * 0.6 + Math.cos(ang) * sp; vy = parent.vy * 0.6 + Math.sin(ang) * sp;
+    } else if (anywhere) {
+      let tries = 0;
+      do { x = Math.random() * D.W; y = Math.random() * D.H; tries++; } while (tries < 30 && Math.hypot(x - g.ship.x, y - g.ship.y) < 120);
+      const ang = Math.random() * 6.283, sp = 10 + Math.random() * 18;
+      vx = Math.cos(ang) * sp; vy = Math.sin(ang) * sp;
+    } else {
+      const side = Math.floor(Math.random() * 4);
+      if (side === 0) { x = -r; y = Math.random() * D.H; }
+      else if (side === 1) { x = D.W + r; y = Math.random() * D.H; }
+      else if (side === 2) { x = Math.random() * D.W; y = -r; }
+      else { x = Math.random() * D.W; y = D.H + r; }
+      const tx = D.W * (0.25 + Math.random() * 0.5), ty = D.H * (0.25 + Math.random() * 0.5);
+      const ang = Math.atan2(ty - y, tx - x), sp = 10 + Math.random() * 18;
+      vx = Math.cos(ang) * sp; vy = Math.sin(ang) * sp;
+    }
+    const nv = 9 + Math.floor(Math.random() * 4);
+    const verts = [];
+    for (let i = 0; i < nv; i++) { const a = (i / nv) * 6.2832; const rr = r * (0.72 + Math.random() * 0.4); verts.push([Math.cos(a) * rr, Math.sin(a) * rr]); }
+    return { x: x, y: y, vx: vx, vy: vy, r: r, size: size, rot: Math.random() * 6.283, vr: (Math.random() - 0.5) * 0.5, verts: verts, dots: null, sp: 0 };
+  }
+  _rockDots(rock, S) {
+    const pts = [], v = rock.verts;
+    for (let i = 0; i < v.length; i++) {
+      const a = v[i], b = v[(i + 1) % v.length];
+      const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      const n = Math.max(1, Math.round(L / S));
+      for (let k = 0; k < n; k++) { const t = k / n; pts.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, 1]); }
+    }
+    const m = Math.round((rock.r * rock.r * 2.2) / (S * S * 3.2));
+    for (let k = 0; k < m; k++) {
+      const ang = Math.random() * 6.2832;
+      const idx = Math.floor((ang / 6.2832) * v.length) % v.length;
+      const vr = Math.hypot(v[idx][0], v[idx][1]);
+      const rr = Math.sqrt(Math.random()) * vr * 0.8;
+      pts.push([Math.cos(ang) * rr, Math.sin(ang) * rr, 0.18 + Math.random() * 0.2]);
+    }
+    rock.dots = pts; rock.sp = S;
+  }
+  _shipDots(S) {
+    const sp = S * 0.55;
+    if (this._shipPts && this._shipS === sp) return this._shipPts;
+    const v = [[15, 0], [-10, -9.5], [-5, 0], [-10, 9.5]];
+    const pts = [];
+    for (let i = 0; i < v.length; i++) {
+      const a = v[i], b = v[(i + 1) % v.length];
+      const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      const n = Math.max(1, Math.round(L / sp));
+      for (let k = 0; k < n; k++) { const t = k / n; pts.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]); }
+    }
+    this._shipS = sp; this._shipPts = pts;
+    return pts;
+  }
+  _fire(x, y) {
+    const g = this._g; if (!g) return;
+    const s = g.ship;
+    if (s.fire > 0) return;
+    s.fire = 0.1;
+    const a = Math.atan2(y - s.y, x - s.x);
+    s.a = a; s.aim = 0.45;
+    const v = 520;
+    g.shots.push({ x: s.x + Math.cos(a) * 15, y: s.y + Math.sin(a) * 15, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1.4 });
+  }
+  _kill(i) {
+    const g = this._g, r = g.rocks[i];
+    g.rocks.splice(i, 1);
+    if (!r.dots) this._rockDots(r, this._S());
+    const c = Math.cos(r.rot), sn = Math.sin(r.rot);
+    for (const p of r.dots) {
+      if (g.parts.length > 2000) break;
+      const wx = r.x + p[0] * c - p[1] * sn, wy = r.y + p[0] * sn + p[1] * c;
+      const dx = wx - r.x, dy = wy - r.y, dd = Math.hypot(dx, dy) || 1, out = 18 + Math.random() * 65;
+      const l = 0.7 + Math.random() * 1.0;
+      g.parts.push({ x: wx, y: wy, vx: r.vx + (dx / dd) * out + (Math.random() - 0.5) * 24, vy: r.vy + (dy / dd) * out + (Math.random() - 0.5) * 24, life: l, l0: l, a: p[2] === 1 ? 1 : p[2] + 0.2 });
+    }
+    if (r.size > 1) { g.rocks.push(this._newRock(r.size - 1, r, false)); g.rocks.push(this._newRock(r.size - 1, r, false)); }
+    this._sc = (this._sc || 0) + 1;
+    this._best = Math.max(this._best || 0, this._sc);
+    this.setState({ score: this._sc, best: this._best });
+  }
+  _update(dt) {
+    const g = this._g, D = this.D, s = g.ship;
+    g.t += dt;
+    const live = g.t > 1.2;
+    if (live) { s.vx += g.tilt.x * 260 * dt; s.vy += g.tilt.y * 260 * dt; }
+    const damp = Math.exp(-1.5 * dt); s.vx *= damp; s.vy *= damp;
+    const sp = Math.hypot(s.vx, s.vy);
+    if (sp > 190) { s.vx *= 190 / sp; s.vy *= 190 / sp; }
+    s.x += s.vx * dt; s.y += s.vy * dt;
+    const m = 18;
+    if (s.x < m) { s.x = m; s.vx = Math.abs(s.vx) * 0.45; }
+    if (s.x > D.W - m) { s.x = D.W - m; s.vx = -Math.abs(s.vx) * 0.45; }
+    if (s.y < m) { s.y = m; s.vy = Math.abs(s.vy) * 0.45; }
+    if (s.y > D.H - m) { s.y = D.H - m; s.vy = -Math.abs(s.vy) * 0.45; }
+    if (s.aim > 0) s.aim -= dt;
+    else if (sp > 14) {
+      const ta = Math.atan2(s.vy, s.vx);
+      let da = ta - s.a;
+      while (da > Math.PI) da -= 2 * Math.PI;
+      while (da < -Math.PI) da += 2 * Math.PI;
+      s.a += da * (1 - Math.exp(-5 * dt));
+    }
+    if (s.fire > 0) s.fire -= dt;
+    if (s.cool > 0) s.cool -= dt;
+    g.trailT += dt;
+    if (g.trailT > 0.04 && sp > 10) { g.trailT = 0; g.trail.push({ x: s.x - Math.cos(s.a) * 9, y: s.y - Math.sin(s.a) * 9, life: 0.7 }); }
+    for (const tr of g.trail) tr.life -= dt;
+    g.trail = g.trail.filter((tr) => tr.life > 0);
+    for (const r of g.rocks) {
+      r.x += r.vx * dt; r.y += r.vy * dt; r.rot += r.vr * dt;
+      const e = r.r * 1.3;
+      if (r.x < -e) r.x = D.W + e; else if (r.x > D.W + e) r.x = -e;
+      if (r.y < -e) r.y = D.H + e; else if (r.y > D.H + e) r.y = -e;
+    }
+    for (const sh of g.shots) {
+      sh.x += sh.vx * dt; sh.y += sh.vy * dt; sh.life -= dt;
+      if (sh.x < -10 || sh.x > D.W + 10 || sh.y < -10 || sh.y > D.H + 10) sh.life = 0;
+    }
+    for (const sh of g.shots) {
+      if (sh.life <= 0) continue;
+      for (let i = 0; i < g.rocks.length; i++) {
+        const r = g.rocks[i];
+        if (Math.hypot(sh.x - r.x, sh.y - r.y) < r.r * 0.92) { sh.life = 0; this._kill(i); break; }
+      }
+    }
+    g.shots = g.shots.filter((sh) => sh.life > 0);
+    if (live) {
+      for (const r of g.rocks) {
+        const dx = s.x - r.x, dy = s.y - r.y, d = Math.hypot(dx, dy) || 1, lim = r.r * 0.82 + 10;
+        if (d < lim) {
+          const nx = dx / d, ny = dy / d;
+          s.x = r.x + nx * (lim + 1); s.y = r.y + ny * (lim + 1);
+          if (s.cool <= 0) {
+            s.vx += nx * 140; s.vy += ny * 140;
+            r.vx -= nx * 20; r.vy -= ny * 20;
+            s.cool = 0.4;
+            g.rings.push({ x: s.x - nx * 6, y: s.y - ny * 6, t: 0 });
+          }
+        }
+      }
+    }
+    for (const rg of g.rings) rg.t += dt;
+    g.rings = g.rings.filter((rg) => rg.t < 0.8);
+    const fr = Math.exp(-0.8 * dt);
+    for (const p of g.parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= fr; p.vy *= fr; p.life -= dt; }
+    g.parts = g.parts.filter((p) => p.life > 0);
+    let mass = 0;
+    for (const r of g.rocks) mass += r.size === 3 ? 1 : r.size === 2 ? 0.45 : 0.2;
+    g.spawnT -= dt;
+    if (g.spawnT <= 0 && mass < D.ROCKS * 0.85) { g.rocks.push(this._newRock(3, null, false)); g.spawnT = 1.6 + Math.random() * 1.4; }
+  }
+  _sprite() {
+    if (this._spr) return this._spr;
+    const c = document.createElement('canvas');
+    c.width = 32; c.height = 32;
+    const x = c.getContext('2d');
+    x.fillStyle = '#ffffff'; x.beginPath(); x.arc(16, 16, 15, 0, 6.2832); x.fill();
+    this._spr = c;
+    return c;
+  }
+  _rr(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+  _draw() {
+    const ctx = this._ctx, g = this._g, D = this.D, dpr = this._dpr;
+    const ds = this._DS(), S = this._S();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalAlpha = 1; ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, D.W, D.H);
+    const spr = this._sprite();
+    const dot = (x, y, r, a) => { if (a <= 0.01 || r <= 0.05) return; ctx.globalAlpha = a > 1 ? 1 : a; ctx.drawImage(spr, x - r, y - r, r * 2, r * 2); };
+    const f = this._cl((g.t - 0.5) / 1.1, 0, 1), fade = f * f * (3 - 2 * f);
+    for (const st of g.stars) dot(st.x, st.y, ds * 0.55, st.a * (0.65 + 0.35 * Math.sin(g.t * st.s * 2 + st.p)) * fade);
+    for (const r of g.rocks) {
+      if (!r.dots || r.sp !== S) this._rockDots(r, S);
+      const c = Math.cos(r.rot), sn = Math.sin(r.rot);
+      for (const p of r.dots) dot(r.x + p[0] * c - p[1] * sn, r.y + p[0] * sn + p[1] * c, p[2] === 1 ? ds : ds * 0.75, (p[2] === 1 ? 0.9 : p[2]) * fade);
+    }
+    for (const p of g.parts) { const k = p.life / p.l0; dot(p.x, p.y, ds * (0.45 + 0.55 * k), p.a * k); }
+    for (const tr of g.trail) { const k = tr.life / 0.7; dot(tr.x, tr.y, ds * (0.3 + 0.6 * k), 0.55 * k * fade); }
+    for (const sh of g.shots) {
+      dot(sh.x, sh.y, ds * 1.4, 1);
+      dot(sh.x - sh.vx * 0.012, sh.y - sh.vy * 0.012, ds, 0.45);
+      dot(sh.x - sh.vx * 0.024, sh.y - sh.vy * 0.024, ds * 0.8, 0.2);
+    }
+    const s = g.ship;
+    if (g.t < 1.4) { const pr = ds * (1.3 + 1.4 * Math.abs(Math.sin(g.t * 3.2))); dot(s.x, s.y, pr, 1 - this._cl((g.t - 1.0) / 0.4, 0, 1)); }
+    const sa = this._cl((g.t - 0.9) / 0.5, 0, 1);
+    if (sa > 0) {
+      const pts = this._shipDots(S), c = Math.cos(s.a), sn = Math.sin(s.a);
+      const blink = s.cool > 0 ? 0.55 + 0.45 * Math.cos(s.cool * 40) : 1;
+      for (const p of pts) dot(s.x + p[0] * c - p[1] * sn, s.y + p[0] * sn + p[1] * c, ds * 1.05, sa * blink);
+    }
+    for (const rg of g.rings) {
+      const k = rg.t / 0.8, rad = 8 + k * 56, n = 28;
+      for (let i = 0; i < n; i++) { const a = (i / n) * 6.2832; dot(rg.x + Math.cos(a) * rad, rg.y + Math.sin(a) * rad, ds * (1.25 - 0.6 * k), (1 - k) * 0.95); }
+    }
+    ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    for (const z of D.zones) { this._rr(ctx, z[0], z[1], z[2], z[3], 24); ctx.fill(); }
+  }
+  _mx(str) {
+    const F = { '0': ['01110', '10001', '10011', '10101', '11001', '10001', '01110'], '1': ['00100', '01100', '00100', '00100', '00100', '00100', '01110'], '2': ['01110', '10001', '00001', '00010', '00100', '01000', '11111'], '3': ['11111', '00010', '00100', '00010', '00001', '10001', '01110'], '4': ['00010', '00110', '01010', '10010', '11111', '00010', '00010'], '5': ['11111', '10000', '11110', '00001', '00001', '10001', '01110'], '6': ['00110', '01000', '10000', '11110', '10001', '10001', '01110'], '7': ['11111', '00001', '00010', '00100', '01000', '01000', '01000'], '8': ['01110', '10001', '10001', '01110', '10001', '10001', '01110'], '9': ['01110', '10001', '10001', '01111', '00001', '00010', '01100'] };
+    const out = [];
+    for (const ch of String(str)) {
+      if (ch === ':') { out.push({ cls: 'cn', cells: [0, 0, 1, 0, 1, 0, 0].map((v) => ({ c: v ? 'on' : 'off' })) }); continue; }
+      const rows = F[ch]; if (!rows) continue;
+      const cells = [];
+      for (const r of rows) for (const b of r) cells.push({ c: b === '1' ? 'on' : 'off' });
+      out.push({ cls: 'dg', cells: cells });
+    }
+    return out;
+  }
+  renderVals() {
+    if (!this._h) {
+      this._h = {
+        setCanvas: (el) => { if (el) { this._cv = el; if (this._alive) this._start(); } },
+        onMove: (e) => {
+          const g = this._g; if (!g || g.oriOn) return;
+          const r = e.currentTarget.getBoundingClientRect(); if (!r.width) return;
+          const x = ((e.clientX - r.left) / r.width) * 2 - 1, y = ((e.clientY - r.top) / r.height) * 2 - 1;
+          const dz = (v) => (Math.abs(v) < 0.08 ? 0 : (v - Math.sign(v) * 0.08) / 0.92);
+          g.tilt.x = this._cl(dz(x) * 1.3, -1, 1); g.tilt.y = this._cl(dz(y) * 1.3, -1, 1);
+        },
+        onLeave: () => { const g = this._g; if (g && !g.oriOn) { g.tilt.x = 0; g.tilt.y = 0; } },
+        onTap: (e) => {
+          const r = e.currentTarget.getBoundingClientRect(); if (!r.width) return;
+          const D = this.D || this._dims();
+          this._fire(((e.clientX - r.left) / r.width) * D.W, ((e.clientY - r.top) / r.height) * D.H);
+        },
+        togglePlay: () => { const st = this.state || {}; this.setState({ playing: !st.playing }); }
+      };
+    }
+    const st = this.state || {};
+    const d = new Date(st.now || Date.now());
+    let h = d.getHours() % 12; if (h === 0) h = 12;
+    const time = h + ':' + String(d.getMinutes()).padStart(2, '0');
+    const date = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    const ws = this.props.widgetStyle === 'tiles' ? 'tiles' : 'bare';
+    const is = this.props.iconStyle === 'square' ? 'square' : 'glyph';
+    return {
+      setCanvas: this._h.setCanvas, onMove: this._h.onMove, onLeave: this._h.onLeave, onTap: this._h.onTap, togglePlay: this._h.togglePlay,
+      time: time, date: date, score: st.score || 0, best: st.best || 0,
+      playing: !!st.playing, paused: !st.playing, playLabel: st.playing ? 'Pause' : 'Play',
+      layerClass: 'layer ' + ws, dockClass: 'dock ' + is, clock: this._mx(time)
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bears and Blue Line widgets</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#bdbdbd}a:hover{color:#ffffff}
+.doto{font-family:'Doto',ui-monospace,monospace}
+sc-for,sc-if{display:contents}
+</style>
+</helmet>
+<div style="width: 1090px; height: 640px; box-sizing: border-box; padding: 36px 40px; background: #111111; display: flex; flex-direction: column; gap: 22px; font-family: Inter, system-ui, sans-serif; color: #ffffff">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="font-size: 22px; font-weight: 600">Phase 3 widgets</div>
+<div style="font-size: 14px; color: #a6a6a6">Sample data. They sit bare on the game like the other widgets. The Bears one only shows around game time.</div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 12px">
+<div style="font-size: 12px; color: #a6a6a6; letter-spacing: 1px">BEARS · BEFORE, DURING, AFTER</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 18px 22px; border-radius: 22px; background-color: #000000; background-image: radial-gradient(circle, #242424 1px, transparent 1.5px); background-size: 10px 10px">
+<div style="font-size: 11px; color: #a6a6a6; letter-spacing: 1px">GAME DAY</div>
+<div class="doto" style="font-size: 34px; line-height: 1">SUN 12:00</div>
+<div style="font-size: 13px; color: #cfcfcf">vs Green Bay · Soldier Field</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 18px 22px; border-radius: 22px; background-color: #000000; background-image: radial-gradient(circle, #242424 1px, transparent 1.5px); background-size: 10px 10px">
+<div style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: #a6a6a6; letter-spacing: 1px"><div style="width: 6px; height: 6px; border-radius: 50%; background: #ffffff"></div><div>LIVE</div></div>
+<div style="display: flex; align-items: baseline; gap: 18px">
+<div class="doto" style="font-size: 50px; line-height: 1">CHI 17</div>
+<div class="doto" style="font-size: 50px; line-height: 1; color: #8f8f8f">10 GB</div>
+</div>
+<div style="font-size: 13px; color: #cfcfcf">Q3 · 8:42 · Bears ball</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 18px 22px; border-radius: 22px; background-color: #000000; background-image: radial-gradient(circle, #242424 1px, transparent 1.5px); background-size: 10px 10px">
+<div style="font-size: 11px; color: #a6a6a6; letter-spacing: 1px">FINAL</div>
+<div class="doto" style="font-size: 34px; line-height: 1">CHI 24 · 20 GB</div>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 12px">
+<div style="font-size: 12px; color: #a6a6a6; letter-spacing: 1px">BLUE LINE · NEAREST STATION, BOTH WAYS</div>
+<div style="display: flex; flex-direction: column; gap: 14px; padding: 20px 22px; border-radius: 22px; background-color: #000000; background-image: radial-gradient(circle, #242424 1px, transparent 1.5px); background-size: 10px 10px">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<div style="display: flex; align-items: center; gap: 10px"><div style="width: 9px; height: 9px; border-radius: 50%; border: 2px solid #ffffff; box-sizing: border-box"></div><div style="font-size: 14px; font-weight: 500">Blue Line · Damen</div></div>
+<div style="font-size: 12px; color: #8f8f8f">sample</div>
+</div>
+<sc-for list="{{ trains }}" as="t" hint-placeholder-count="4">
+<div style="display: flex; align-items: baseline; justify-content: space-between; padding-top: 12px; border-top: 1px dotted #333333">
+<div class="doto" style="font-size: 26px; line-height: 1">{{ t.dest }}</div>
+<div class="doto" style="font-size: 26px; line-height: 1">{{ t.eta }}</div>
+</div>
+</sc-for>
+</div>
+<div style="font-size: 12px; color: #a6a6a6; line-height: 1.5">The times count down live here. On the phone they refresh about once a minute while the screen is on. The station follows your location, or you can pin a home station.</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1090,"height":640}}'>
+class Component extends DCLogic {
+  componentDidMount() { this._clock = setInterval(() => { this.setState({ now: Date.now() }); }, 15000); }
+  componentWillUnmount() { clearInterval(this._clock); }
+  renderVals() {
+    const st = this.state || {};
+    const mins = Math.floor((st.now || Date.now()) / 60000);
+    const eta = (base) => { const m = (((base - mins) % 24) + 24) % 24; return m === 0 ? 'DUE' : m + ' MIN'; };
+    const val = (base) => (((base - mins) % 24) + 24) % 24;
+    const ohare = [3, 11, 19].sort((a, b) => val(a) - val(b)).slice(0, 2);
+    const forest = [5, 14, 22].sort((a, b) => val(a) - val(b)).slice(0, 2);
+    const trains = [];
+    for (const b of ohare) trains.push({ dest: "O'HARE", eta: eta(b) });
+    for (const b of forest) trains.push({ dest: 'FOREST PARK', eta: eta(b) });
+    return { trains: trains };
+  }
+}
+</script>
+</body>
+</html>

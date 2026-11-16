@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Style options</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#bdbdbd}a:hover{color:#ffffff}
+.doto{font-family:'Doto',ui-monospace,monospace}
+.ico{fill:none;stroke:#ffffff;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.ic{width:52px;height:52px;border-radius:16px;display:flex;align-items:center;justify-content:center;border:1px solid transparent;background:transparent;padding:0}
+.square .ic{background:#101010;border-color:#2b2b2b}
+sc-for,sc-if{display:contents}
+.mx{display:flex;gap:calc(var(--g) * 2.2)}
+.mx .dg{display:grid;grid-template-columns:repeat(5,var(--d));grid-auto-rows:var(--d);gap:var(--g)}
+.mx .cn{display:grid;grid-template-columns:var(--d);grid-auto-rows:var(--d);gap:var(--g)}
+.mx .on,.mx .off{border-radius:50%}
+.mx .on{background:#ffffff;box-shadow:0 0 5px rgba(255,255,255,0.4);animation:mxp 3.6s ease-in-out infinite}
+.mx .on:nth-child(2n){animation-delay:-1.2s}
+.mx .on:nth-child(3n){animation-delay:-2.4s}
+.mx .off{background:#1a1a1a}
+.mx .cn .on{animation:mxb 2s ease-in-out infinite}
+.lit .off{background:transparent}
+.mxs{--d:4px;--g:3.5px}
+@keyframes mxp{0%,100%{opacity:1}50%{opacity:0.72}}
+@keyframes mxb{0%,100%{opacity:1}50%{opacity:0.25}}
+</style>
+</helmet>
+<div style="width: 860px; height: 940px; box-sizing: border-box; padding: 36px 40px; background: #111111; display: flex; flex-direction: column; gap: 26px; font-family: Inter, system-ui, sans-serif; color: #ffffff">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="font-size: 24px; font-weight: 600">Pick a direction</div>
+<div style="font-size: 14px; color: #a6a6a6">Tell me A, B or C for each row.</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 13px; color: #a6a6a6; letter-spacing: 1px">1 · DOT SIZE AND SPACING</div>
+<canvas id="dh-opt-cv" ref="{{ setCanvas }}" role="img" aria-label="Three rocks drawn with fine, medium and bold dots" style="width: 780px; height: 160px; display: block; background: #000000; border-radius: 18px"></canvas>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0px; font-size: 13px; color: #d6d6d6; text-align: center">
+<div>A · Fine · picked</div>
+<div>B · Medium</div>
+<div>C · Bold</div>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 13px; color: #a6a6a6; letter-spacing: 1px">2 · ICONS</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 10px; padding: 18px; background: #000000; border-radius: 18px">
+<div class="square" style="display: flex; justify-content: space-between">
+<div class="ic"><svg class="ico" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5h3l1.5 4-2 1.2a11 11 0 0 0 5.8 5.8l1.2-2 4 1.5v3a2 2 0 0 1-2 2A16 16 0 0 1 3 5.5a2 2 0 0 1 2-2z"></path></svg></div>
+<div class="ic"><svg class="ico" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v10H9l-5 4z"></path></svg></div>
+<div class="ic"><svg class="ico" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="12" rx="3"></rect><circle cx="12" cy="13" r="3.5"></circle><path d="M8.5 7l1.5-2.5h4L15.5 7"></path></svg></div>
+<div class="ic"><svg class="ico" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M3.5 12h17M12 3.5c2.6 2.4 3.8 5.2 3.8 8.5s-1.2 6.1-3.8 8.5c-2.6-2.4-3.8-5.2-3.8-8.5S9.4 5.9 12 3.5z"></path></svg></div>
+<div class="ic"><svg class="ico" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="2"></rect><path d="M3.5 7l8.5 6 8.5-6"></path></svg></div>
+</div>
+<div style="font-size: 13px; color: #d6d6d6">A · Glyph on a dark rounded square</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px; padding: 18px; background: #000000; border-radius: 18px">
+<div class="glyph" style="display: flex; justify-content: space-between">
+<div class="ic"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5h3l1.5 4-2 1.2a11 11 0 0 0 5.8 5.8l1.2-2 4 1.5v3a2 2 0 0 1-2 2A16 16 0 0 1 3 5.5a2 2 0 0 1 2-2z"></path></svg></div>
+<div class="ic"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v10H9l-5 4z"></path></svg></div>
+<div class="ic"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="12" rx="3"></rect><circle cx="12" cy="13" r="3.5"></circle><path d="M8.5 7l1.5-2.5h4L15.5 7"></path></svg></div>
+<div class="ic"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M3.5 12h17M12 3.5c2.6 2.4 3.8 5.2 3.8 8.5s-1.2 6.1-3.8 8.5c-2.6-2.4-3.8-5.2-3.8-8.5S9.4 5.9 12 3.5z"></path></svg></div>
+<div class="ic"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="2"></rect><path d="M3.5 7l8.5 6 8.5-6"></path></svg></div>
+</div>
+<div style="font-size: 13px; color: #d6d6d6">B · Glyph only, floating on the game · picked</div>
+</div>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 13px; color: #a6a6a6; letter-spacing: 1px">3 · WIDGETS</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="height: 150px; border-radius: 18px; background-color: #000000; background-image: radial-gradient(circle, #3a3a3a 1px, transparent 1.5px); background-size: 11px 11px; box-sizing: border-box; padding: 16px">
+<div style="height: 118px; box-sizing: border-box; padding: 14px 16px; display: flex; justify-content: space-between; align-items: flex-start; border-radius: 22px; background: rgba(0,0,0,0.6)">
+<div class="mx mxs" role="img" aria-label="12:41" style="padding-top: 4px"><sc-for list="{{ sample }}" as="b" hint-placeholder-count="5"><div class="{{ b.cls }}"><sc-for list="{{ b.cells }}" as="c" hint-placeholder-count="35"><div class="{{ c.c }}"></div></sc-for></div></sc-for></div>
+<div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px">
+<div class="doto" style="font-size: 30px; font-weight: 400; line-height: 1">41°</div>
+<div style="font-size: 12px; color: #d6d6d6">Cloudy</div>
+</div>
+</div>
+</div>
+<div style="font-size: 13px; color: #d6d6d6">A · Bare: text sits right on the game, which dims behind it · assumed</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="height: 150px; border-radius: 18px; background-color: #000000; background-image: radial-gradient(circle, #3a3a3a 1px, transparent 1.5px); background-size: 11px 11px; box-sizing: border-box; padding: 16px">
+<div style="height: 118px; box-sizing: border-box; padding: 14px 16px; display: flex; justify-content: space-between; align-items: flex-start; border-radius: 22px; background: #0d0d0d; box-shadow: 0 0 0 1px #262626">
+<div class="mx mxs" role="img" aria-label="12:41" style="padding-top: 4px"><sc-for list="{{ sample }}" as="b" hint-placeholder-count="5"><div class="{{ b.cls }}"><sc-for list="{{ b.cells }}" as="c" hint-placeholder-count="35"><div class="{{ c.c }}"></div></sc-for></div></sc-for></div>
+<div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px">
+<div class="doto" style="font-size: 30px; font-weight: 400; line-height: 1">41°</div>
+<div style="font-size: 12px; color: #d6d6d6">Cloudy</div>
+</div>
+</div>
+</div>
+<div style="font-size: 13px; color: #d6d6d6">B · Tiles: solid dark cards with a hairline edge (Nothing-style)</div>
+</div>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 13px; color: #a6a6a6; letter-spacing: 1px">4 · CLOCK DOTS</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 12px; padding: 18px; background: #000000; border-radius: 18px">
+<div class="mx mxs" role="img" aria-label="12:41"><sc-for list="{{ sample }}" as="b" hint-placeholder-count="5"><div class="{{ b.cls }}"><sc-for list="{{ b.cells }}" as="c" hint-placeholder-count="35"><div class="{{ c.c }}"></div></sc-for></div></sc-for></div>
+<div style="font-size: 13px; color: #d6d6d6">A · Fine matrix with a faint grid · picked</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 12px; padding: 18px; background: #000000; border-radius: 18px">
+<div class="mx mxs lit" role="img" aria-label="12:41"><sc-for list="{{ sample }}" as="b" hint-placeholder-count="5"><div class="{{ b.cls }}"><sc-for list="{{ b.cells }}" as="c" hint-placeholder-count="35"><div class="{{ c.c }}"></div></sc-for></div></sc-for></div>
+<div style="font-size: 13px; color: #d6d6d6">B · Lit dots only, no grid</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 12px; padding: 18px; background: #000000; border-radius: 18px">
+<div class="doto" style="font-size: 52px; line-height: 1; font-weight: 400">12:41</div>
+<div style="font-size: 13px; color: #d6d6d6">C · Doto font, light</div>
+</div>
+</div>
+<div style="font-size: 13px; color: #a6a6a6">The clock is a grid of fine dots that softly pulse, and the colon breathes. Small numbers use Doto, a free dot-matrix font. Words use Inter.</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":860,"height":940}}'>
+class Component extends DCLogic {
+  componentDidMount() {
+    this._alive = true;
+    this._find(0);
+  }
+  componentWillUnmount() { this._alive = false; }
+  _find(n) {
+    if (!this._alive) return;
+    if (!this._cv) { const el = document.getElementById('dh-opt-cv'); if (el) this._cv = el; }
+    if (this._cv) { this._paint(); return; }
+    if (n < 40) setTimeout(() => this._find(n + 1), 100);
+  }
+  _rng(seed) {
+    let a = seed >>> 0;
+    return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  _paint() {
+    if (this._painted || !this._cv) return;
+    const ctx = this._cv.getContext('2d'); if (!ctx) return;
+    this._painted = true;
+    const W = 780, H = 160, dpr = Math.min(2, window.devicePixelRatio || 1);
+    this._cv.width = Math.round(W * dpr); this._cv.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, W, H);
+    const dot = (x, y, r, a) => { ctx.globalAlpha = a; ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill(); };
+    const cfg = [[1.2, 4], [1.8, 5.5], [2.6, 8]];
+    const rnd = this._rng(7);
+    const verts = [];
+    const nv = 11;
+    for (let i = 0; i < nv; i++) { const a = (i / nv) * 6.2832; const rr = 48 * (0.74 + rnd() * 0.36); verts.push([Math.cos(a) * rr, Math.sin(a) * rr]); }
+    for (let c = 0; c < 3; c++) {
+      const ds = cfg[c][0], S = cfg[c][1], cx = 110 + c * 260, cy = 82;
+      const r2 = this._rng(11 + c);
+      for (let k = 0; k < 26; k++) dot(c * 260 + r2() * 260, r2() * H, ds * 0.55, 0.08 + r2() * 0.25);
+      for (let i = 0; i < nv; i++) {
+        const a = verts[i], b = verts[(i + 1) % nv];
+        const L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.round(L / S));
+        for (let k = 0; k < n; k++) { const t = k / n; dot(cx + a[0] + (b[0] - a[0]) * t, cy + a[1] + (b[1] - a[1]) * t, ds, 0.92); }
+      }
+      const m = Math.round((48 * 48 * 2.2) / (S * S * 3.2));
+      for (let k = 0; k < m; k++) {
+        const ang = r2() * 6.2832, idx = Math.floor((ang / 6.2832) * nv) % nv;
+        const vr = Math.hypot(verts[idx][0], verts[idx][1]), rr = Math.sqrt(r2()) * vr * 0.8;
+        dot(cx + Math.cos(ang) * rr, cy + Math.sin(ang) * rr, ds * 0.75, 0.18 + r2() * 0.2);
+      }
+      const sv = [[15, 0], [-10, -9.5], [-5, 0], [-10, 9.5]], sx = cx + 96, sy = cy + 30, sa = -0.6, sp = S * 0.55;
+      for (let i = 0; i < 4; i++) {
+        const a = sv[i], b = sv[(i + 1) % 4];
+        const L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.round(L / sp));
+        for (let k = 0; k < n; k++) {
+          const t = k / n, px = a[0] + (b[0] - a[0]) * t, py = a[1] + (b[1] - a[1]) * t;
+          dot(sx + px * Math.cos(sa) - py * Math.sin(sa), sy + px * Math.sin(sa) + py * Math.cos(sa), ds * 1.05, 1);
+        }
+      }
+      for (let k = 1; k <= 4; k++) dot(sx + Math.cos(sa) * (16 + k * 9), sy + Math.sin(sa) * (16 + k * 9), ds * (1.4 - k * 0.15), 1 - k * 0.2);
+    }
+    ctx.globalAlpha = 1;
+  }
+  _mx(str) {
+    const F = { '0': ['01110', '10001', '10011', '10101', '11001', '10001', '01110'], '1': ['00100', '01100', '00100', '00100', '00100', '00100', '01110'], '2': ['01110', '10001', '00001', '00010', '00100', '01000', '11111'], '3': ['11111', '00010', '00100', '00010', '00001', '10001', '01110'], '4': ['00010', '00110', '01010', '10010', '11111', '00010', '00010'], '5': ['11111', '10000', '11110', '00001', '00001', '10001', '01110'], '6': ['00110', '01000', '10000', '11110', '10001', '10001', '01110'], '7': ['11111', '00001', '00010', '00100', '01000', '01000', '01000'], '8': ['01110', '10001', '10001', '01110', '10001', '10001', '01110'], '9': ['01110', '10001', '10001', '01111', '00001', '00010', '01100'] };
+    const out = [];
+    for (const ch of String(str)) {
+      if (ch === ':') { out.push({ cls: 'cn', cells: [0, 0, 1, 0, 1, 0, 0].map((v) => ({ c: v ? 'on' : 'off' })) }); continue; }
+      const rows = F[ch]; if (!rows) continue;
+      const cells = [];
+      for (const r of rows) for (const b of r) cells.push({ c: b === '1' ? 'on' : 'off' });
+      out.push({ cls: 'dg', cells: cells });
+    }
+    return out;
+  }
+  renderVals() {
+    if (!this._setCv) this._setCv = (el) => { if (el) { this._cv = el; if (this._alive) this._paint(); } };
+    if (!this._sample) this._sample = this._mx('12:41');
+    return { setCanvas: this._setCv, sample: this._sample };
+  }
+}
+</script>
+</body>
+</html>
