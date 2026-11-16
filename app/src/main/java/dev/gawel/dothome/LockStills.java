@@ -51,6 +51,8 @@ final class LockStills {
                 if (def == null && displays.length > 0) def = displays[0];
                 Point p = realSize(def);
                 world.resize(p.x, p.y);
+                // never ran: play the intro and let rocks exist (simulation only, nothing is drawn here)
+                for (int i = 0; i < 150; i++) world.step(1f / 60f);
             }
             DotRenderer renderer = new DotRenderer(app);
             for (Display d : displays) {

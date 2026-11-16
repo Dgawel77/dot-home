@@ -91,7 +91,9 @@ public class MediaWatcher extends NotificationListenerService {
 
     private void track(List<MediaController> list) {
         try {
-            List<MediaController> now = list == null ? new ArrayList<MediaController>() : list;
+            List<MediaController> now = new ArrayList<>();
+            // Sessions come only from this user (the API cannot return another profile's), minus work apps.
+            if (list != null) for (MediaController c : list) if (NowPlaying.packageAllowed(c.getPackageName())) now.add(c);
             // drop callbacks for sessions that went away
             List<MediaController> gone = new ArrayList<>();
             for (MediaController old : callbacks.keySet()) {
@@ -132,6 +134,7 @@ public class MediaWatcher extends NotificationListenerService {
             List<NowPlaying> items = new ArrayList<>();
             Map<String, MediaController> byKey = new java.util.HashMap<>();
             for (MediaController c : callbacks.keySet()) {
+                if (!NowPlaying.packageAllowed(c.getPackageName())) continue;
                 NowPlaying n;
                 try {
                     n = build(c);
@@ -145,7 +148,11 @@ public class MediaWatcher extends NotificationListenerService {
             }
             NowPlaying pick = NowPlaying.choose(NowPlaying.eligible(items));
             chosen = pick == null ? null : byKey.get(pick.sessionKey);
-            MusicWidget.update(getApplicationContext(), pick);
+            if (NowPlaying.sameDisplayed(MusicWidget.last(), pick)) {
+                MusicWidget.remember(pick); // fresh position anchor, no redundant widget push
+            } else {
+                MusicWidget.update(getApplicationContext(), pick);
+            }
         } catch (RuntimeException e) {
             Log.w(TAG, "media refresh failed: " + e);
         }

@@ -89,4 +89,32 @@ public final class NowPlayingTest {
         T.check(NowPlaying.choose(NowPlaying.eligible(l)) == null, "only stopped -> hidden");
         T.eq(0, NowPlaying.eligible(null).size(), "null safe");
     }
+
+    public static void testPackageDenylist() {
+        T.eq(10, NowPlaying.BLOCKED_PACKAGES.size(), "denylist size");
+        String[] blocked = {"com.google.android.gm", "com.microsoft.office.outlook", "com.microsoft.office.officehubrow",
+            "com.microsoft.skydrive", "com.Slack", "com.okta.android.auth", "com.azure.authenticator",
+            "com.pagerduty.android", "com.tripactions.alpha", "com.adpmobile.android"};
+        for (String p : blocked) T.check(!NowPlaying.packageAllowed(p), "blocked " + p);
+        T.check(NowPlaying.packageAllowed("com.spotify.music"), "music app allowed");
+        T.check(!NowPlaying.packageAllowed(null), "null package not allowed");
+    }
+
+    public static void testSameDisplayedIgnoresPosition() {
+        NowPlaying a = np("a", "T", true, 1);
+        a.artist = "X";
+        a.durationMs = 1000;
+        NowPlaying b = np("a", "T", true, 2);
+        b.artist = "X";
+        b.durationMs = 1000;
+        b.positionMs = 500;
+        T.check(NowPlaying.sameDisplayed(a, b), "position and changedAt do not count");
+        b.playing = false;
+        T.check(!NowPlaying.sameDisplayed(a, b), "playing counts");
+        b.playing = true;
+        b.title = "U";
+        T.check(!NowPlaying.sameDisplayed(a, b), "title counts");
+        T.check(NowPlaying.sameDisplayed(null, null), "both null");
+        T.check(!NowPlaying.sameDisplayed(a, null), "one null");
+    }
 }

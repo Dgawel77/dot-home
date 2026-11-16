@@ -69,7 +69,7 @@ public class WeatherJob extends JobService {
             try {
                 WeatherRepo.refresh(app, () -> w.stopped);
                 if (!w.stopped) WidgetUpdater.updateAll(app);
-            } catch (RuntimeException e) {
+            } catch (Throwable e) { // an Error here would otherwise kill the shared wallpaper process
                 Log.w("DotHome", "weather job error: " + e);
             } finally {
                 workers.remove(id, w);

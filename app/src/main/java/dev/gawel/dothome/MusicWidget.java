@@ -12,12 +12,20 @@ import dev.gawel.dothome.core.NowPlaying;
 /** The music home-screen widget: shows the chosen media session, hidden when nothing is playing. */
 public class MusicWidget extends AppWidgetProvider {
     private static volatile NowPlaying last;
+    private static volatile boolean goneSent;
+
+    /** True when the last push hid the widget (nothing playing), so another GONE push would be redundant. */
+    static boolean goneAlreadySent() { return goneSent; }
+
+    /** Keeps the newest state (position anchor) without pushing to the widgets. */
+    static void remember(NowPlaying np) { last = np; }
 
     static NowPlaying last() { return last; }
 
     /** Called by MediaWatcher whenever the chosen session changes. */
     static void update(Context ctx, NowPlaying np) {
         last = np;
+        goneSent = np == null;
         try {
             AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
             int[] ids = mgr.getAppWidgetIds(new ComponentName(ctx, MusicWidget.class));

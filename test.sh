@@ -6,7 +6,8 @@ export JAVA_HOME=${JAVA_HOME:-$TOOLS/jdk}
 export PATH=$JAVA_HOME/bin:$PATH
 
 CORE=app/src/main/java/dev/gawel/dothome/core
-if grep -rn 'android\.' "$CORE"; then
+# real framework references only (package-name string literals like "com.google.android.gm" are fine)
+if grep -rnE 'import android\.|[^.a-z]android\.(os|app|content|graphics|util|view|widget|media|net|text|provider)\.' "$CORE"; then
   echo "core/ must not reference android.*" >&2
   exit 1
 fi

@@ -8,7 +8,8 @@ import java.util.Map;
 /** Small recursive-descent JSON parser. Objects, arrays, strings, Doubles, Booleans, null. */
 public final class MiniJson {
     private final String s;
-    private int i;
+    private int i, depth;
+    private static final int MAX_DEPTH = 64;
 
     private MiniJson(String s) { this.s = s; }
 
@@ -62,11 +63,16 @@ public final class MiniJson {
         i += w.length();
     }
 
+    private void enter() {
+        if (++depth > MAX_DEPTH) throw err("nesting too deep");
+    }
+
     private Map<String, Object> object() {
         Map<String, Object> m = new LinkedHashMap<>();
+        enter();
         i++;
         ws();
-        if (peek() == '}') { i++; return m; }
+        if (peek() == '}') { i++; depth--; return m; }
         while (true) {
             ws();
             if (peek() != '"') throw err("expected key");
@@ -79,23 +85,24 @@ public final class MiniJson {
             ws();
             char c = peek();
             i++;
-            if (c == '}') return m;
+            if (c == '}') { depth--; return m; }
             if (c != ',') throw err("expected ',' or '}'");
         }
     }
 
     private List<Object> array() {
         List<Object> l = new ArrayList<>();
+        enter();
         i++;
         ws();
-        if (peek() == ']') { i++; return l; }
+        if (peek() == ']') { i++; depth--; return l; }
         while (true) {
             ws();
             l.add(value());
             ws();
             char c = peek();
             i++;
-            if (c == ']') return l;
+            if (c == ']') { depth--; return l; }
             if (c != ',') throw err("expected ',' or ']'");
         }
     }

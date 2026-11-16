@@ -36,4 +36,22 @@ public final class MiniJsonTest {
             T.check(threw, "should throw: " + s);
         }
     }
+
+    private static String nested(int n) {
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < n; i++) b.append(i % 2 == 0 ? "[" : "{\"a\":");
+        b.append("1");
+        for (int i = n - 1; i >= 0; i--) b.append(i % 2 == 0 ? "]" : "}");
+        return b.toString();
+    }
+
+    public static void testNestingDepthCap() {
+        MiniJson.parse(nested(64)); // exactly at the cap parses
+        boolean threw = false;
+        try { MiniJson.parse(nested(65)); } catch (IllegalArgumentException e) { threw = true; }
+        T.check(threw, "65 levels should throw");
+        threw = false;
+        try { MiniJson.parse(nested(100000)); } catch (IllegalArgumentException e) { threw = true; }
+        T.check(threw, "absurd depth throws IAE, not StackOverflowError");
+    }
 }
