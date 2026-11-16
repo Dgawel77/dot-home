@@ -5,11 +5,9 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.WeakHashMap;
 
-import dev.gawel.dothome.core.ClearZones;
 import dev.gawel.dothome.core.DotStyle;
 import dev.gawel.dothome.core.GameConfig;
 import dev.gawel.dothome.core.GameWorld;
@@ -23,8 +21,8 @@ import dev.gawel.dothome.core.Zones;
  * Draws the game on the 4 dp lattice anchored at the surface origin. Rocks are rasterised every frame into filled
  * lattice silhouettes (regular weight on the edge blending to light in the body, ink by sqrt(coverage)), or, with
  * the outline style, drawn as free outline dots with a body stipple. The shockwave and hit rings are lattice dot
- * rows. The ship, shots, debris, exhaust trail and stars are free soft dots. Clear zones (the widgets and the score
- * line) drop lattice dots (a per-cell dithered mask) and dim free dots to L10; the ship and shots are never hidden.
+ * rows. The ship, shots, debris, exhaust trail and stars are free soft dots.
+ * Dots draw across the whole screen.
  * Only the ship, its opening dot and shots reach L100; everything on a lock still stays at L65 or below. Nothing is
  * allocated per frame.
  */
@@ -43,8 +41,8 @@ final class DotRenderer {
     private static final float MIN_COVERAGE = 0.005f;
     /** A rock whose bounding box needs more lattice cells than this is skipped (a guard; a big rock needs about 500). */
     private static final int MAX_ROCK_CELLS = 1 << 18;
-    /** Layout in dp: the clear-zone dither band, the score label (JetBrains Mono caps, 1 dp tracking) and its margins. */
-    private static final float CLEAR_EDGE_DP = 16f, LABEL_DP = 11f, LABEL_TRACKING_EM = 1f / 11f;
+    /** Layout in dp: the score label (JetBrains Mono caps, 1 dp tracking) and its margins. */
+    private static final float LABEL_DP = 11f, LABEL_TRACKING_EM = 1f / 11f;
     private static final float MARGIN_MAIN_DP = 24f, MARGIN_COVER_DP = 16f, LABEL_BASE_DP = 16f;
 
     /** Cached dots of one rock (outline style): x, y, alpha triples (alpha 1 marks an outline dot), valid for one spacing. */
@@ -56,34 +54,9 @@ final class DotRenderer {
         int n;
     }
 
-    /** Clear zones of one surface: the zones, a keep mask per S4 cell, and where the score line sits. */
-    private static final class ZoneSet {
-        float w = -1, h = -1, density = -1, top = -1;
-        int labelLen = -1;
-        ClearZones zones;
-        /** Per S4 cell from the origin, row-major: 1 where lattice dots draw, 0 where a zone or its dither leaves the cell off. */
-        byte[] keep = new byte[0];
-        int cols, rows;
-        float scoreRight, scoreBase;
-
-        boolean matches(float w, float h, float density, float top, int labelLen) {
-            return zones != null && w == this.w && h == this.h && density == this.density && top == this.top
-                && labelLen == this.labelLen;
-        }
-
-        /** Whether a lattice dot may draw in this cell; cells off the surface have no zone. */
-        boolean keepCell(int col, int row) {
-            if (col < 0 || row < 0 || col >= cols || row >= rows) return true;
-            return keep[row * cols + col] != 0;
-        }
-
-        boolean inside(float x, float y) { return zones.inside(x, y); }
-    }
-
     private final SoftDot dot100 = new SoftDot(DotStyle.L100);
     private final SoftDot dot65 = new SoftDot(DotStyle.L65);
     private final SoftDot dot46 = new SoftDot(DotStyle.L46);
-    private final SoftDot dot10 = new SoftDot(DotStyle.L10);
     private final Paint lattice = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final android.content.res.Resources res;
@@ -117,11 +90,6 @@ final class DotRenderer {
 
     private int lastToday = -1, lastBest = -1;
     private String scoreText = "";
-
-    // clear zones per surface: two engines (cover and main) can draw alternately, so each keeps its own set and
-    // neither rebuilds per frame; a set is rebuilt only when its size, density, inset or score-line length changes
-    private final ZoneSet[] zoneSets = {new ZoneSet(), new ZoneSet()};
-    private int zoneRecent;
 
     // the current draw: screen = (vx, vy) + vs * world; identity live, a centred cover fit for stills
     private float vs = 1f, vx, vy;
@@ -204,57 +172,22 @@ final class DotRenderer {
                 scoreText = "TODAY " + today + " · BEST " + best;
             }
         }
-        ZoneSet z = zonesFor(w.width(), w.height(), topInset, sb != null ? scoreText.length() : 0);
         still = false;
         vs = 1f;
         vx = vy = 0f;
         clearTopY = -1f;
         canvasW = c.getWidth();
         canvasH = c.getHeight();
-        drawScene(c, w, z);
-        if (sb != null) c.drawText(scoreText, z.scoreRight, z.scoreBase, textPaint);
+        drawScene(c, w);
+        if (sb != null) drawScore(c, w, topInset);
     }
 
-    /**
-     * Places the score line (right-aligned on the 24 / 16 dp margin, below the status bar, on the lattice) and builds
-     * the clear zones: the default widget areas plus the score line, a 16 dp dither band, per S4 cell. The label is
-     * monospaced, so its width follows its length and a new score only rebuilds when it gains a digit.
-     */
-    private ZoneSet zonesFor(float w, float h, float topInset, int labelLen) {
-        for (int i = 0; i < zoneSets.length; i++) {
-            if (zoneSets[i].matches(w, h, density, topInset, labelLen)) {
-                zoneRecent = i;
-                return zoneSets[i];
-            }
-        }
-        zoneRecent = 1 - zoneRecent; // replace the set used less recently
-        ZoneSet z = zoneSets[zoneRecent];
-        z.w = w;
-        z.h = h;
-        z.density = density;
-        z.top = topInset;
-        z.labelLen = labelLen;
-        float margin = (Zones.isCover(w, h) ? MARGIN_COVER_DP : MARGIN_MAIN_DP) * density;
-        z.scoreRight = Lattice.snap(w - margin, density);
-        z.scoreBase = Lattice.snap(Math.max(0f, topInset) + LABEL_BASE_DP * density, density);
-        List<float[]> rects = new ArrayList<>(Zones.defaults(w, h));
-        if (labelLen > 0) {
-            Paint.FontMetrics fm = textPaint.getFontMetrics();
-            float tw = textPaint.measureText(scoreText);
-            rects.add(new float[] {z.scoreRight - tw, z.scoreBase + fm.ascent, tw, fm.descent - fm.ascent});
-        }
-        z.zones = ClearZones.of(rects, CLEAR_EDGE_DP * density, step);
-        // the dithered keep decision of every lattice cell, once: lattice dots then look it up instead of measuring
-        z.cols = (int) Math.ceil(w / step);
-        z.rows = (int) Math.ceil(h / step);
-        if (z.keep.length < z.cols * z.rows) z.keep = new byte[z.cols * z.rows];
-        for (int row = 0; row < z.rows; row++) {
-            float cy = (row + 0.5f) * step;
-            for (int col = 0; col < z.cols; col++) {
-                z.keep[row * z.cols + col] = (byte) (z.zones.keep((col + 0.5f) * step, cy) >= 1f ? 1 : 0);
-            }
-        }
-        return z;
+    /** The score line: right-aligned on the 24 / 16 dp margin, below the status bar, on the lattice. */
+    private void drawScore(Canvas c, GameWorld w, float topInset) {
+        float margin = (Zones.isCover(w.width(), w.height()) ? MARGIN_COVER_DP : MARGIN_MAIN_DP) * density;
+        float right = Lattice.snap(w.width() - margin, density);
+        float base = Lattice.snap(Math.max(0f, topInset) + LABEL_BASE_DP * density, density);
+        c.drawText(scoreText, right, base, textPaint);
     }
 
     /**
@@ -278,7 +211,7 @@ final class DotRenderer {
             canvasH = height;
             clearTopY = clearTopFraction * height;
             try {
-                drawScene(c, w, null);
+                drawScene(c, w);
             } finally {
                 still = false;
                 vs = 1f;
@@ -290,7 +223,7 @@ final class DotRenderer {
         return bmp;
     }
 
-    private void drawScene(Canvas c, GameWorld w, ZoneSet z) {
+    private void drawScene(Canvas c, GameWorld w) {
         GameConfig cfg = w.config();
         if (cfg == null) return;
         float k = scaleK(w);
@@ -313,13 +246,13 @@ final class DotRenderer {
             float qx = sx(x), qy = sy(y);
             float twinkle = 0.65f + 0.35f * (float) Math.sin(TAU * t / TWINKLE_PERIOD + st.phase);
             float r = st.depth >= NEAR_DEPTH ? rLight * NEAR_SCALE : rLight;
-            free(z, qx, qy, dot65).draw(c, qx, qy, r, st.alpha * twinkle * fade);
+            dot65.draw(c, qx, qy, r, st.alpha * twinkle * fade);
         }
 
         List<GameWorld.Rock> rocks = w.rocks();
         for (int i = 0; i < rocks.size(); i++) {
-            if (outlineRocks) outlineRock(c, rocks.get(i), fade, z);
-            else latticeRock(c, rocks.get(i), fade, z);
+            if (outlineRocks) outlineRock(c, rocks.get(i), fade);
+            else latticeRock(c, rocks.get(i), fade);
         }
 
         List<GameWorld.Particle> parts = w.particles();
@@ -328,14 +261,14 @@ final class DotRenderer {
             float qx = sx(p.x), qy = sy(p.y);
             if (qy < clearTopY) continue;
             float lk = p.life / p.life0;
-            free(z, qx, qy, dot65).draw(c, qx, qy, rReg * (0.45f + 0.55f * lk), p.alpha * lk);
+            dot65.draw(c, qx, qy, rReg * (0.45f + 0.55f * lk), p.alpha * lk);
         }
 
         if (!still) {
             for (int i = 0; i < TRAIL_MAX; i++) {
                 if (trailLife[i] <= 0) continue;
                 float lk = trailLife[i] / TRAIL_LIFE;
-                free(z, trailX[i], trailY[i], dot46).draw(c, trailX[i], trailY[i], rReg * (0.3f + 0.6f * lk), lk * fade);
+                dot46.draw(c, trailX[i], trailY[i], rReg * (0.3f + 0.6f * lk), lk * fade);
             }
         }
 
@@ -370,20 +303,15 @@ final class DotRenderer {
         GameWorld.Shockwave sw = w.wave();
         if (sw != null && !still) {
             float al = 1f - sw.t / cfg.shockDuration;
-            if (al > 0 && sw.radius > 1f) latticeRing(c, sw.x, sw.y, sw.radius, al, z);
+            if (al > 0 && sw.radius > 1f) latticeRing(c, sw.x, sw.y, sw.radius, al);
         }
 
         List<GameWorld.Ring> rings = w.rings();
         for (int i = 0; i < rings.size(); i++) {
             GameWorld.Ring g = rings.get(i);
             float rk = g.t / cfg.ringLife;
-            if (rk < 1f) latticeRing(c, g.x, g.y, (8f + rk * 62f) * k, 1f - rk, z);
+            if (rk < 1f) latticeRing(c, g.x, g.y, (8f + rk * 62f) * k, 1f - rk);
         }
-    }
-
-    /** The free dot for a point: dimmed to L10 inside a clear zone. */
-    private SoftDot free(ZoneSet z, float x, float y, SoftDot normal) {
-        return z != null && z.inside(x, y) ? dot10 : normal;
     }
 
     /**
@@ -392,7 +320,7 @@ final class DotRenderer {
      * the weakest of the cell and its four neighbours, with ink following sqrt(coverage). It is continuous, so edge
      * dots grow and shrink smoothly as the rock moves and never pop. All in L65, centred on the cell.
      */
-    private void latticeRock(Canvas c, GameWorld.Rock r, float fade, ZoneSet z) {
+    private void latticeRock(Canvas c, GameWorld.Rock r, float fade) {
         float[] v = r.outline;
         int nv = v.length / 2;
         if (fade <= 0f || nv < 3) return;
@@ -432,7 +360,6 @@ final class DotRenderer {
                 if (cov < MIN_COVERAGE) continue;
                 float cx = (gridCol0 + col + 0.5f) * step;
                 if (cx < 0 || cx > canvasW) continue;
-                if (z != null && !z.keepCell(gridCol0 + col, gridRow0 + row)) continue;
                 float side = Math.min(Math.min(gridAt(col - 1, row), gridAt(col + 1, row)),
                     Math.min(gridAt(col, row - 1), gridAt(col, row + 1)));
                 c.drawCircle(cx, cy, LatticeRaster.dotRadius(cov, side, rLight, rReg), lattice);
@@ -446,10 +373,9 @@ final class DotRenderer {
     }
 
     /**
-     * One rock in the outline style: free outline dots (regular) and a seeded body stipple (light), in L65. Like the
-     * other free dots they dim to L10 inside a clear zone (no dither: a free dot crossing cells would flicker).
+     * One rock in the outline style: free outline dots (regular) and a seeded body stipple (light), in L65.
      */
-    private void outlineRock(Canvas c, GameWorld.Rock r, float fade, ZoneSet z) {
+    private void outlineRock(Canvas c, GameWorld.Rock r, float fade) {
         if (clearTopY >= 0 && sy(r.y + 1.12f * r.r) + rReg < clearTopY) return;
         RockDots d = rockCache.get(r);
         if (d == null) {
@@ -463,7 +389,7 @@ final class DotRenderer {
             float px = d.pts[3 * j], py = d.pts[3 * j + 1];
             float x = sx(r.x + px * cs - py * sn), y = sy(r.y + px * sn + py * cs);
             if (y < clearTopY) continue;
-            free(z, x, y, dot65).draw(c, x, y, d.pts[3 * j + 2] == 1f ? rReg : rLight, fade);
+            dot65.draw(c, x, y, d.pts[3 * j + 2] == 1f ? rReg : rLight, fade);
         }
     }
 
@@ -471,7 +397,7 @@ final class DotRenderer {
      * A circle as one lattice dot row: every S4 cell it passes through, once, in L65 at regular weight. The point
      * walks the circle about one step at a time by a fixed rotation, so there is no trig per dot.
      */
-    private void latticeRing(Canvas c, float wx, float wy, float wr, float alpha, ZoneSet z) {
+    private void latticeRing(Canvas c, float wx, float wy, float wr, float alpha) {
         float cx = sx(wx), cy = sy(wy), rad = wr * vs;
         int n = Math.max(12, (int) Math.ceil(TAU * rad / step));
         double da = 2 * Math.PI / n, cd = Math.cos(da), sd = Math.sin(da);
@@ -493,7 +419,6 @@ final class DotRenderer {
             prevRow = row;
             float dx = (col + 0.5f) * step, dy = (row + 0.5f) * step;
             if (dx < 0 || dy < 0 || dx > canvasW || dy > canvasH || dy < clearTopY) continue;
-            if (z != null && !z.keepCell(col, row)) continue;
             c.drawCircle(dx, dy, rReg, lattice);
         }
     }
