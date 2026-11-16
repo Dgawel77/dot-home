@@ -12,7 +12,7 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.Locale;
 
-import dev.gawel.dothome.core.DotFill;
+import dev.gawel.dothome.core.DotMatrixFont;
 import dev.gawel.dothome.core.DotScale;
 import dev.gawel.dothome.core.DotStyle;
 import dev.gawel.dothome.core.NowPlaying;
@@ -22,15 +22,15 @@ import dev.gawel.dothome.core.WeatherCodes;
 
 /**
  * Draws the clock and weather halves of the home-screen widget as transparent bitmaps, in the mockup's
- * proportions. The clock time and the temperature are Inter Bold glyphs filled with soft dots on the wallpaper's
- * own pitch and radius ({@link DotScale}); text sizes scale by k, derived from the bitmap size against a
- * reference box. The bitmap is later stretched back to the widget's size, so every method takes the effective
- * density (display density times the shrink applied to the bitmap) and takes dot size and pitch from it alone.
+ * proportions (6 px dots on an 11 px pitch, Inter text lines, Doto temperature). Everything is scaled by k,
+ * derived from the bitmap size against a reference box. The effective density (display density times the
+ * shrink applied to the bitmap) sizes the panel corner radius and the music art's halftone.
  */
 final class WidgetArt {
     private static final float CLOCK_REF_W = 340f, WEATHER_REF_W = 240f, REF_H = 150f;
     private static final long STALE_MS = 90L * 60 * 1000;
-    private static final float CLOCK_CAP_DP = 64f, WEATHER_CAP_DP = 44f;
+    /** The one corner radius of every panel (clock/weather, music, radar), times the effective density. */
+    static final float PANEL_CORNER_DP = 24f;
 
     private WidgetArt() {}
 
@@ -39,14 +39,20 @@ final class WidgetArt {
         Canvas c = new Canvas(bmp);
         float k = Math.min(wPx / CLOCK_REF_W, hPx / REF_H);
         float u = hPx / REF_H; // height-derived so both halves' backdrop geometry matches at the seam
-        if (backdrop) backdrop(c, wPx, hPx, 4f * u, 24f * u, true, false);
+        if (backdrop) backdrop(c, wPx, hPx, 4f * u, PANEL_CORNER_DP * dens, true, false);
         float pad = 4f * u + 10f * k; // content clearance inside the backdrop edge
 
         Calendar cal = Calendar.getInstance();
         cal.setTimeInMillis(nowMs);
         int hour = cal.get(Calendar.HOUR);
         if (hour == 0) hour = 12;
-        String time = hour + ":" + (cal.get(Calendar.MINUTE) < 10 ? "0" : "") + cal.get(Calendar.MINUTE);
+        DotMatrixFont.Grid g = DotMatrixFont.render(hour + ":" + (cal.get(Calendar.MINUTE) < 10 ? "0" : "")
+            + cal.get(Calendar.MINUTE));
+
+        float padL = pad;
+        float pitch = Math.min(11f * k, (wPx - padL - 2f * k) / g.cols);
+        float radius = pitch * 3f / 11f; // the mockup's 6 px dot on an 11 px pitch
+        float gridH = g.rows * pitch;
 
         Paint date = new Paint(Paint.ANTI_ALIAS_FLAG);
         date.setTypeface(Fonts.inter(ctx));
@@ -54,17 +60,20 @@ final class WidgetArt {
         date.setColor(DotStyle.FG2);
         float dateH = 15f * k;
         float gap = 12f * k;
-
-        float padL = pad;
-        float cap = Math.min(CLOCK_CAP_DP * dens, hPx - 2f * pad - gap - dateH);
-        // sized against a worst-case template, so the cap height does not change from minute to minute
-        GlyphMask m = GlyphMask.render(time, Fonts.interBold(ctx),
-            GlyphMask.fitSize("00:00", Fonts.interBold(ctx), cap, wPx - padL - pad));
-        float pitch = DotScale.pitchPx(dens);
-        DotFill.Dots dots = DotFill.sample(m.alpha, m.w, m.h, pitch, DotFill.DEFAULT_THRESHOLD);
-        float gridH = (float) Math.ceil(m.h / pitch) * pitch;
         float top = Math.max(0f, (hPx - (gridH + gap + dateH)) / 2f);
-        drawDots(c, dots, padL, top, dens);
+
+        Paint unlit = new Paint(Paint.ANTI_ALIAS_FLAG);
+        unlit.setColor(DotStyle.FAINT);
+        Paint lit = new Paint(Paint.ANTI_ALIAS_FLAG);
+        lit.setColor(DotStyle.FG);
+        lit.setShadowLayer(5f * k, 0, 0, (DotStyle.FG & 0x00FFFFFF) | 0x66000000);
+        for (int r = 0; r < g.rows; r++) {
+            for (int col = 0; col < g.cols; col++) {
+                if (!g.present(col, r)) continue;
+                c.drawCircle(padL + (col + 0.5f) * pitch, top + (r + 0.5f) * pitch, radius,
+                    g.lit(col, r) ? lit : unlit);
+            }
+        }
 
         String text = new SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(new Date(nowMs));
         text = TextFit.fit(text, wPx - padL - 8f * k, date::measureText);
@@ -72,24 +81,20 @@ final class WidgetArt {
         return bmp;
     }
 
-    /** Unlit grid points as FAINT dots, then a soft glow (FG at 35%, twice the radius) and an FG dot per lit point. */
-    private static void drawDots(Canvas c, DotFill.Dots d, float x0, float y0, float dens) {
-        float r = DotScale.radiusPx(dens);
-        SoftDot faint = new SoftDot(DotStyle.FAINT), fg = new SoftDot(DotStyle.FG);
-        for (int i = 0; i < d.unlitX.length; i++) faint.draw(c, x0 + d.unlitX[i], y0 + d.unlitY[i], r, 1f);
-        for (int i = 0; i < d.litX.length; i++) fg.draw(c, x0 + d.litX[i], y0 + d.litY[i], 2f * r, 0.35f);
-        for (int i = 0; i < d.litX.length; i++) fg.draw(c, x0 + d.litX[i], y0 + d.litY[i], r, 1f);
-    }
-
     static Bitmap weather(Context ctx, int wPx, int hPx, Weather w, long nowMs, boolean backdrop, float dens) {
         Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
         float k = Math.min(wPx / WEATHER_REF_W, hPx / REF_H);
         float u = hPx / REF_H;
-        if (backdrop) backdrop(c, wPx, hPx, 4f * u, 24f * u, false, true);
+        if (backdrop) backdrop(c, wPx, hPx, 4f * u, PANEL_CORNER_DP * dens, false, true);
         float pad = 4f * u + 10f * k;
         float right = wPx - pad, maxW = wPx - pad - 4f * k;
 
+        Paint doto = new Paint(Paint.ANTI_ALIAS_FLAG);
+        doto.setTypeface(Fonts.doto(ctx));
+        doto.setTextSize(50f * k);
+        doto.setColor(DotStyle.FG);
+        doto.setTextAlign(Paint.Align.RIGHT);
         Paint line = new Paint(Paint.ANTI_ALIAS_FLAG);
         line.setTypeface(Fonts.inter(ctx));
         line.setTextAlign(Paint.Align.RIGHT);
@@ -107,20 +112,13 @@ final class WidgetArt {
         }
         boolean hasAlert = alert != null && !alert.isEmpty();
 
-        // block: temperature dot grid, gap 7k, condition 14k, gap 7k, place 13k, [gap 7k, alert 13k]
-        float pitch = DotScale.pitchPx(dens);
-        float iconW = w == null ? 0f : 40f * k;
-        float cap = Math.min(WEATHER_CAP_DP * dens, hPx * 0.4f);
-        GlyphMask m = GlyphMask.render(temp, Fonts.interBold(ctx),
-            GlyphMask.fitSize("100°", Fonts.interBold(ctx), cap, maxW - iconW));
-        DotFill.Dots dots = DotFill.sample(m.alpha, m.w, m.h, pitch, DotFill.DEFAULT_THRESHOLD);
-        int cols = Math.max(1, (int) Math.ceil(m.w / pitch - 1e-4));
-        float tempH = (float) Math.ceil(m.h / pitch) * pitch, gap = 7f * k;
+        // block: temperature row (50k), gap 7k, condition 14k, gap 7k, place 13k, [gap 7k, alert 13k]
+        float tempH = 50f * k, gap = 7f * k;
         float blockH = tempH + gap + 14f * k + (place.isEmpty() && age == null ? 0 : gap + 13f * k) + (hasAlert ? gap + 13f * k : 0);
         float y = Math.max(0f, (hPx - blockH) / 2f);
 
-        float tempW = cols * pitch;
-        drawDots(c, dots, right - tempW, y, dens);
+        float tempW = doto.measureText(temp);
+        c.drawText(temp, right, y + tempH * 0.8f, doto);
         if (w != null) {
             float icon = 30f * k;
             drawGlyph(c, WeatherCodes.glyph(w.code), right - tempW - 10f * k - icon, y + (tempH - icon) / 2f, icon, k);
@@ -157,7 +155,7 @@ final class WidgetArt {
         Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
         float k = Math.max(0.1f, Math.min(dens, hPx / 72f));
-        if (backdrop) backdrop(c, wPx, hPx, 2f * k, 16f * k, true, true);
+        if (backdrop) backdrop(c, wPx, hPx, 2f * k, PANEL_CORNER_DP * dens, true, true);
         float artS = 64f * k, artY = (hPx - artS) / 2f, artX = 14f * k;
 
         // art square: dark, halftone dots on the shared pitch grid (staggered rows), larger toward a "sun" and a lower band

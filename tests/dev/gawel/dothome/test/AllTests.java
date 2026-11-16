@@ -26,7 +26,7 @@ public final class AllTests {
         dev.gawel.dothome.core.AppFilterTest.class,
         dev.gawel.dothome.core.ShakeDetectorTest.class,
         dev.gawel.dothome.core.DotScaleTest.class,
-        dev.gawel.dothome.core.DotFillTest.class,
+        DotMatrixFontTest.class,
         dev.gawel.dothome.core.BoxSetTest.class,
     };
 

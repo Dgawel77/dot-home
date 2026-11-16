@@ -31,7 +31,6 @@ import dev.gawel.dothome.core.Place;
 public class RadarWidget extends AppWidgetProvider {
     private static final String TAG = "DotHome";
     private static final int DEFAULT_W_DP = 250, DEFAULT_H_DP = 190;
-    private static final float CORNER_DP = 18f; // same value as res/drawable/radar_placeholder.xml
     private static final int ZOOM = 9; // as the full-screen area view
     private static final String NO_DATA = "RADAR · no data";
 
@@ -106,7 +105,7 @@ public class RadarWidget extends AppWidgetProvider {
     static Bitmap render(Context ctx, int w, int h, float eff, Place place, BooleanSupplier cancelled) {
         Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
-        float r = CORNER_DP * eff; // the clock/weather panel radius: 24 x (110 dp / 150) at the clock widget's default height
+        float r = WidgetArt.PANEL_CORNER_DP * eff; // the one panel radius, shared with the clock/weather/music panels
         Path clip = new Path();
         clip.addRoundRect(new RectF(0, 0, w, h), r, r, Path.Direction.CW);
         c.clipPath(clip);
