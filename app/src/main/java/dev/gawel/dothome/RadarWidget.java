@@ -6,8 +6,6 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
-import android.graphics.Path;
-import android.graphics.RectF;
 import android.os.Bundle;
 import android.text.format.DateFormat;
 import android.util.Log;
@@ -25,7 +23,7 @@ import dev.gawel.dothome.core.LocationChooser;
 import dev.gawel.dothome.core.Place;
 
 /**
- * The radar home-screen widget: the area map of the latest echo frame at the shared dot scale, centred on the
+ * The radar home-screen widget: the area map of the latest echo frame on the 4 dp lattice, centred on the
  * cached location. Rendering fetches tiles, so {@link #updateAll} runs on a worker thread (WeatherJob's); the
  * provider callbacks only ask for that job and never touch the network themselves.
  */
@@ -33,7 +31,7 @@ public class RadarWidget extends AppWidgetProvider {
     private static final String TAG = "DotHome";
     private static final int DEFAULT_W_DP = 250, DEFAULT_H_DP = 190;
     private static final int ZOOM = 9; // as the full-screen area view
-    private static final String NO_DATA = "RADAR · no data";
+    private static final String NO_DATA = "RADAR \u00b7 no data";
 
     @Override
     public void onEnabled(Context context) {
@@ -93,7 +91,7 @@ public class RadarWidget extends AppWidgetProvider {
         float wPx = wDp * density, hPx = hDp * density;
         float shrink = Math.min(1f, WidgetUpdater.MAX_SIDE_PX / Math.max(wPx, hPx));
         int w = Math.max(1, Math.round(wPx * shrink)), h = Math.max(1, Math.round(hPx * shrink));
-        float eff = density * shrink; // bitmap px per dp, so the dots come out at DotScale after the launcher scales
+        float eff = density * shrink; // bitmap px per dp, so the dots come out at lattice size after the launcher scales
 
         Bitmap bmp;
         try {
@@ -112,11 +110,7 @@ public class RadarWidget extends AppWidgetProvider {
     static Bitmap render(Context ctx, int w, int h, float eff, Place place, BooleanSupplier cancelled) {
         Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
-        float r = WidgetArt.PANEL_CORNER_DP * eff; // the radar widget's own rounding; Task 3 removes it
-        Path clip = new Path();
-        clip.addRoundRect(new RectF(0, 0, w, h), r, r, Path.Direction.CW);
-        c.clipPath(clip);
-        c.drawColor(DotStyle.BG);
+        c.drawColor(DotStyle.GROUND);
         RadarPainter rp = new RadarPainter(ctx, eff, false, 12, 26);
         if (place == null) {
             rp.drawReadout(c, h, NO_DATA);
@@ -136,11 +130,11 @@ public class RadarWidget extends AppWidgetProvider {
         } catch (RuntimeException | OutOfMemoryError e) {
             Log.w(TAG, "radar widget paint failed, retrying map only: " + e);
             try {
-                c.drawColor(DotStyle.BG);
+                c.drawColor(DotStyle.GROUND);
                 rp.paint(c, w, h, p, Basemap.get(ctx), null, NO_DATA, place.lat, place.lon);
             } catch (RuntimeException | OutOfMemoryError e2) {
                 Log.w(TAG, "radar widget map failed: " + e2);
-                c.drawColor(DotStyle.BG);
+                c.drawColor(DotStyle.GROUND);
                 rp.drawReadout(c, h, NO_DATA);
             }
         }

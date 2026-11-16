@@ -30,8 +30,6 @@ import dev.gawel.dothome.core.WeatherCodes;
  */
 final class WidgetArt {
     private static final long STALE_MS = 90L * 60 * 1000;
-    /** Radar widget rounding, removed with the radar's panel in Task 3. */
-    static final float PANEL_CORNER_DP = 24f;
     private static final int WORST_TEMP_COLS = 23;
     private static final float ART_RADIUS_DP = 12f;
     private static final float ICON_STROKE_DP = 1.6f;

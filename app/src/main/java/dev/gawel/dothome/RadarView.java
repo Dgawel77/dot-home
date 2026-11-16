@@ -4,35 +4,36 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
-import android.graphics.Rect;
 import android.os.SystemClock;
 import android.util.Log;
 import android.view.View;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
+import dev.gawel.dothome.core.ClearZones;
 import dev.gawel.dothome.core.DotStyle;
 import dev.gawel.dothome.core.GeoProjection;
-import dev.gawel.dothome.core.Halftone;
+import dev.gawel.dothome.core.Lattice;
 
 /**
- * The flat dotted map (the mockup's Radar board) with the last hour of NEXRAD echoes rolling in as halftone.
- * Static layers are drawn once per view into bitmaps on a worker thread; the storm is a precomputed intensity
- * grid per frame, so each animation frame is just bitmap blits plus a few thousand dots.
+ * The flat dotted map with the last hour of NEXRAD echoes rolling in as halftone. Static layers are drawn once per
+ * view into bitmaps on a worker thread; the storm is a precomputed dot list per frame, drawn into a cached layer
+ * only when the frame changes. The activity's header, credits and this view's own readout and legend are clear zones.
  */
 final class RadarView extends View {
     private static final String TAG = "DotHome";
     private static final int FRAMES = 12;
     private static final float FRAME_S = 0.5f, HOLD_S = 1.5f; // 12 x 0.5 = 6 s, then a 1.5 s hold on NOW
 
-    private static final float TOP_PAD_DP = 24, BOTTOM_PAD_DP = 100; // labels keep clear of the readout panel
+    private static final float TOP_PAD_DP = 64, BOTTOM_PAD_DP = 100; // labels keep clear of the header and readout
+    private static final float CLEAR_EDGE_DP = 16;
+    private static final int SCRUB_DOTS = 60;
 
     private final float u; // display density
     private final RadarPainter ui; // UI-thread painter (halftone, location pulse, readout dots)
-    private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint bmpPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
-    private final Rect bounds = new Rect();
 
     private double lat = 41.88, lon = -87.63;
     private boolean haveLocation, region, running;
@@ -40,12 +41,12 @@ final class RadarView extends View {
 
     private GeoProjection proj;
     private Bitmap base, overlay;
-    private float[][] grids;
+    private float[][] grids; // per frame: storm dots (cx, cy, diameter) in lattice cells
     private Bitmap layer; // the current frame's halftone, redrawn only when the frame changes
     private Canvas layerCanvas;
     private float[] layerSrc;
     private int[] minutes;
-    private int cols, rows;
+    private float[][] overlays = new float[0][]; // header titles, header controls, credits: x, y, w, h in view px
     private boolean loading, unavailable;
     private long t0;
 
@@ -53,7 +54,7 @@ final class RadarView extends View {
         super(ctx);
         u = ctx.getResources().getDisplayMetrics().density;
         ui = new RadarPainter(ctx, u, false, TOP_PAD_DP, BOTTOM_PAD_DP);
-        setBackgroundColor(DotStyle.BG);
+        setBackgroundColor(DotStyle.GROUND);
     }
 
     boolean isRegion() { return region; }
@@ -69,6 +70,37 @@ final class RadarView extends View {
         this.lon = lon;
         haveLocation = true;
         rebuild();
+    }
+
+    /** The activity's overlaid blocks (header titles, header controls, credits) in view px; null entries are skipped. */
+    void setOverlays(float[]... rects) {
+        List<float[]> keep = new ArrayList<>();
+        for (float[] r : rects) if (r != null && r[2] > 0 && r[3] > 0) keep.add(r);
+        float[][] next = keep.toArray(new float[0][]);
+        if (Arrays.deepEquals(next, overlays)) return;
+        overlays = next;
+        rebuild();
+    }
+
+    /** Top of the credits block (or the view bottom): the readout and legend sit above it. */
+    private float bottomY(int h, float[][] ov) {
+        float b = h;
+        for (int i = 2; i < ov.length; i++) b = Math.min(b, ov[i][1]);
+        return b;
+    }
+
+    /** Where the readout and legend sit, as clear-zone rects, for a view of this size. */
+    private ClearZones zonesFor(int w, int h, float[][] ov) {
+        List<float[]> rects = new ArrayList<>(Arrays.asList(ov));
+        float b = bottomY(h, ov), sy = scrubY(b);
+        rects.add(new float[] {0, sy - 56 * u, 280 * u, b - (sy - 56 * u)});
+        rects.add(new float[] {w - 176 * u, sy - 32 * u, 176 * u, 48 * u});
+        return ClearZones.of(rects, CLEAR_EDGE_DP * u, Lattice.stepPx(Lattice.Step.S4, u));
+    }
+
+    private float scrubY(float bottom) {
+        float s = Lattice.stepPx(Lattice.Step.S4, u);
+        return (float) Math.floor((bottom - 24 * u) / s) * s + s / 2f;
     }
 
     void start() {
@@ -113,26 +145,30 @@ final class RadarView extends View {
         final int g = ++gen;
         final boolean reg = region;
         final double la = lat, lo = lon;
+        final ClearZones zones = zonesFor(w, h, overlays);
         loading = true;
         unavailable = false;
         grids = null;
-        new Thread(() -> build(g, w, h, reg, la, lo), "dothome-radar").start();
+        new Thread(() -> build(g, w, h, reg, la, lo, zones), "dothome-radar").start();
     }
 
     // ---- worker thread ------------------------------------------------------------------------------------
 
-    private void build(int g, int w, int h, boolean reg, double la, double lo) {
+    private void build(int g, int w, int h, boolean reg, double la, double lo, ClearZones zones) {
         try {
             Basemap bm = Basemap.get(getContext());
             GeoProjection p = reg ? GeoProjection.region(la, lo, w, h) : GeoProjection.area(la, lo, w, h);
             RadarPainter rp = new RadarPainter(getContext(), u, reg, TOP_PAD_DP, BOTTOM_PAD_DP);
             Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+            rp.setZones(zones);
             rp.drawBase(new Canvas(b), p, bm, w, h);
             Bitmap o = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-            rp.drawPlaces(new Canvas(o), p, bm, w, h);
+            rp.drawPlaces(new Canvas(o), p, bm, w, h, la, lo);
             post(() -> {
                 if (g != gen) return;
                 proj = p;
+                ui.setZones(zones);
+                layerSrc = null;
                 base = b;
                 overlay = o;
                 invalidate();
@@ -140,22 +176,20 @@ final class RadarView extends View {
 
             List<RadarTiles.Frame> frames = RadarTiles.load(p, reg ? 6 : 9, () -> g != gen);
             if (g != gen) return;
-            float gp = rp.pitch(); // the shared dot pitch
+            float gp = rp.step(); // the S4 lattice
             int c = (int) Math.ceil(w / gp), r = (int) Math.ceil(h / gp);
             double[] lons = rp.lons(p, c), lats = rp.lats(p, r);
             float[][] gr = new float[frames.size()][];
             int[] mins = new int[frames.size()];
             for (int f = 0; f < gr.length; f++) {
                 mins[f] = frames.get(f).minutesAgo;
-                gr[f] = RadarPainter.sample(frames.get(f), lons, lats);
+                gr[f] = RadarPainter.storm(frames.get(f), lons, lats);
             }
             final boolean none = gr.length == 0;
             post(() -> {
                 if (g != gen) return;
                 grids = gr;
                 minutes = mins;
-                cols = c;
-                rows = r;
                 loading = false;
                 unavailable = none;
                 invalidate();
@@ -176,7 +210,7 @@ final class RadarView extends View {
     @Override
     protected void onDraw(Canvas c) {
         int w = getWidth(), h = getHeight();
-        c.drawColor(DotStyle.BG);
+        c.drawColor(DotStyle.GROUND);
         float t = (SystemClock.uptimeMillis() - t0) / 1000f;
         if (base != null) c.drawBitmap(base, 0, 0, bmpPaint);
 
@@ -192,7 +226,7 @@ final class RadarView extends View {
             }
             if (layerSrc != gr[frame]) {
                 layer.eraseColor(0);
-                ui.drawHalftone(layerCanvas, gr[frame], cols, rows);
+                ui.drawStorm(layerCanvas, gr[frame]);
                 layerSrc = gr[frame];
             }
             c.drawBitmap(layer, 0, 0, bmpPaint);
@@ -200,57 +234,44 @@ final class RadarView extends View {
         if (overlay != null) c.drawBitmap(overlay, 0, 0, bmpPaint);
 
         if (proj != null) {
-            float yx = proj.x(lon), yy = proj.y(lat), r = ui.dotRadius();
-            ui.dot(c, yx, yy, 2.5f * r, 1f);
-            float pr = (t % 2f) / 2f, rad = (8 + pr * 22) * u;
-            for (int i = 0; i < 20; i++) {
-                double a = i / 20.0 * Math.PI * 2;
-                ui.dot(c, yx + (float) Math.cos(a) * rad, yy + (float) Math.sin(a) * rad, r, (1 - pr) * 0.9f);
-            }
+            float yx = proj.x(lon), yy = proj.y(lat);
+            ui.drawLocation(c, yx, yy);
+            ui.drawPing(c, yx, yy, (t % 2f) / 2f); // the 2 s signal tempo
         }
         drawReadout(c, w, h, frame, gr);
         if (running) postInvalidateOnAnimation();
     }
 
     private void drawReadout(Canvas c, int w, int h, int frame, float[][] gr) {
-        float r = ui.dotRadius(), pitch = ui.pitch();
-        paint.setStyle(Paint.Style.FILL);
-        paint.setColor(DotStyle.BG);
-        paint.setAlpha(Math.round(0.8f * 255));
-        c.drawRect(0, h - 92 * u, 300 * u, h, paint);
-        float lineY = h - 66 * u;
-        for (float x = 28 * u; x <= 268 * u; x += pitch) ui.dot(c, x, lineY, 0.5f * r, 0.35f);
+        float s = Lattice.stepPx(Lattice.Step.S4, u);
+        float x0 = Lattice.snap(16 * u, u), sy = scrubY(bottomY(h, overlays));
+        // scrubber: a dot row, the head heavy in L100
+        float reg = Lattice.radiusPx(Lattice.Step.S4, Lattice.Weight.REGULAR, u);
+        for (int i = 0; i < SCRUB_DOTS; i++) ui.dotAt(c, x0 + (i + 0.5f) * s, sy, reg, DotStyle.L46);
         float k = frame < 0 || gr.length < 2 ? 1f : frame / (float) (gr.length - 1);
-        ui.dot(c, 28 * u + k * 240 * u, lineY, 2.4f * r, 1f);
+        ui.dotAt(c, x0 + (Math.round(k * (SCRUB_DOTS - 1)) + 0.5f) * s, sy,
+            Lattice.radiusPx(Lattice.Step.S8, Lattice.Weight.HEAVY, u), DotStyle.L100);
         if (frame >= 0) {
-            text.setTypeface(Fonts.interMedium(getContext()));
-            text.setColor(DotStyle.FG);
-            text.setAlpha(255);
-            text.setTextAlign(Paint.Align.LEFT);
-            text.setTextSize(24 * u);
             int m = minutes[frame];
-            c.drawText(m == 0 ? "NOW" : "−" + m + " MIN", 28 * u, h - 28 * u, text);
+            float oy = Lattice.snap(sy - 40 * u, u);
+            if (m == 0) {
+                ui.label(c, "NOW", x0, oy + 7 * s, Paint.Align.LEFT, DotStyle.L65);
+            } else {
+                float nw = ui.matrix(c, "\u2212" + m, x0, oy, DotStyle.L65, DotStyle.L10);
+                ui.label(c, "MIN", x0 + nw + 8 * u, oy + 7 * s, Paint.Align.LEFT, DotStyle.L65);
+            }
         }
-        // legend and status, bottom right; the legend dots are the halftone's own light / medium / heavy sizes
-        text.setTypeface(Fonts.inter(getContext()));
-        text.setTextSize(11 * u);
-        text.setTextAlign(Paint.Align.RIGHT);
-        text.setColor(DotStyle.FG2);
-        float ly = h - 26 * u;
-        float x = w - 26 * u;
-        float heavy = Halftone.radius(1f, pitch), mid = Halftone.radius(0.6f, pitch), light = Halftone.radius(0.25f, pitch);
-        text.getTextBounds("HEAVY", 0, 5, bounds);
-        c.drawText("HEAVY", x, ly + 4 * u, text);
-        x -= bounds.width() + 8 * u;
-        ui.dot(c, x - heavy, ly, heavy, 1f);
-        ui.dot(c, x - heavy - pitch * 1.5f, ly, mid, 0.8f);
-        ui.dot(c, x - heavy - pitch * 3f, ly, light, 0.6f);
-        c.drawText("LIGHT", x - heavy - pitch * 3f - light - 8 * u, ly + 4 * u, text);
-        String status = unavailable ? "Radar unavailable" : loading ? "Loading radar…" : null;
-        if (status != null) {
-            text.setColor(DotStyle.FG);
-            text.setAlpha(Math.round(0.7f * 255));
-            c.drawText(status, w - 26 * u, ly - 24 * u, text);
+        // legend, bottom right: the storm's own light / medium / heavy dot sizes between mono labels
+        float xr = w - Lattice.snap(16 * u, u);
+        ui.label(c, "HEAVY", xr, sy + 4 * u, Paint.Align.RIGHT, DotStyle.L46);
+        float x = ((float) Math.floor((xr - ui.labelWidth("HEAVY") - 12 * u) / s) + 0.5f) * s;
+        float[] levels = {1f, 0.6f, 0.25f};
+        for (float b : levels) {
+            ui.dotAt(c, x, sy, ui.stormDiameter(b) / 2f, DotStyle.L65);
+            x -= 2 * s;
         }
+        ui.label(c, "LIGHT", x - 4 * u, sy + 4 * u, Paint.Align.RIGHT, DotStyle.L46);
+        String status = unavailable ? "Radar unavailable" : loading ? "Loading radar" : null;
+        if (status != null) ui.label(c, status, xr, sy - 24 * u, Paint.Align.RIGHT, DotStyle.L46);
     }
 }

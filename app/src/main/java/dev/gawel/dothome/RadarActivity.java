@@ -4,7 +4,8 @@ import android.app.Activity;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.Insets;
-import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.ShapeDrawable;
+import android.graphics.drawable.shapes.RoundRectShape;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
@@ -21,14 +22,15 @@ import android.widget.TextView;
 import dev.gawel.dothome.core.DotStyle;
 import dev.gawel.dothome.core.Place;
 
-/** Full-screen radar: header (title, place, Area/Region pills), the dotted map, and the credits line. */
+/** Full-screen radar: the dotted map with the header (title, place, Area/Region pills) and credits laid over it. */
 public class RadarActivity extends Activity {
     private static final String TAG = "DotHome";
     static final String CREDITS =
         "Radar: NWS NEXRAD via Iowa Environmental Mesonet · Weather data by Open-Meteo.com · Map: Natural Earth";
 
     private RadarView radar;
-    private TextView subtitle, pillArea, pillRegion;
+    private TextView subtitle, pillArea, pillRegion, credits;
+    private LinearLayout titles, controls;
     private float dp;
     private static final String KEY_REGION = "region", KEY_LAT = "lat", KEY_LON = "lon", KEY_NAME = "name";
     private String placeName = "";
@@ -39,9 +41,8 @@ public class RadarActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         dp = getResources().getDisplayMetrics().density;
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(DotStyle.BG);
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(DotStyle.GROUND);
         if (Build.VERSION.SDK_INT >= 28) {
             getWindow().getAttributes().layoutInDisplayCutoutMode =
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
@@ -60,43 +61,45 @@ public class RadarActivity extends Activity {
             return insets;
         });
 
+        radar = new RadarView(this);
+        radar.setContentDescription("Weather radar map drawn in dots. Tap to switch between Area and Region.");
+        radar.setOnClickListener(v -> setRegion(!radar.isRegion()));
+        root.addView(radar, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT));
+
         FrameLayout header = new FrameLayout(this);
-        header.setPadding(px(20), px(14), px(16), px(10));
-        LinearLayout titles = new LinearLayout(this);
+        header.setPadding(px(16), px(12), px(16), px(12));
+        titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
-        TextView title = text("Radar", 20, DotStyle.FG, Fonts.interMedium(this));
-        subtitle = text("", 13, DotStyle.FG2, Fonts.inter(this));
+        TextView title = text("Radar", 20, DotStyle.L100, Fonts.interMedium(this));
+        subtitle = text("", 13, DotStyle.L65, Fonts.inter(this));
         titles.addView(title);
         titles.addView(subtitle);
         header.addView(titles, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.START | Gravity.CENTER_VERTICAL));
 
-        LinearLayout seg = new LinearLayout(this);
-        GradientDrawable segBg = new GradientDrawable();
-        segBg.setColor(DotStyle.PANEL);
-        segBg.setStroke(Math.max(1, px(1)), DotStyle.FAINT);
-        segBg.setCornerRadius(px(22));
-        seg.setBackground(segBg);
-        seg.setPadding(px(3), px(3), px(3), px(3));
+        controls = new LinearLayout(this);
         pillArea = pill("Area");
         pillRegion = pill("Region");
-        seg.addView(pillArea);
-        seg.addView(pillRegion);
-        header.addView(seg, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+        controls.addView(pillArea);
+        controls.addView(pillRegion);
+        header.addView(controls, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.END | Gravity.CENTER_VERTICAL));
-        root.addView(header, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(header, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP));
 
-        radar = new RadarView(this);
-        radar.setContentDescription("Weather radar map drawn in dots. Tap to switch between Area and Region.");
-        radar.setOnClickListener(v -> setRegion(!radar.isRegion()));
-        root.addView(radar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-
-        TextView credits = text(CREDITS, 10, DotStyle.FG2, Fonts.inter(this));
-        credits.setPadding(px(20), px(8), px(20), px(10));
-        root.addView(credits, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT));
+        credits = text(CREDITS, 13, DotStyle.L46, Fonts.inter(this));
+        credits.setPadding(px(16), px(8), px(16), px(8));
+        root.addView(credits, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
         setContentView(root);
+
+        // the map keeps its dots out from behind the header text, the controls and the credits
+        View.OnLayoutChangeListener push = (v, l, t, r, b, ol, ot, or, ob) -> radar.setOverlays(
+            rectIn(titles), rectIn(controls), rectIn(credits));
+        titles.addOnLayoutChangeListener(push);
+        controls.addOnLayoutChangeListener(push);
+        credits.addOnLayoutChangeListener(push);
 
         pillArea.setOnClickListener(v -> setRegion(false));
         pillRegion.setOnClickListener(v -> setRegion(true));
@@ -190,15 +193,15 @@ public class RadarActivity extends Activity {
     }
 
     private void stylePill(TextView t, boolean on) {
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(px(19));
-        bg.setColor(on ? DotStyle.FG : Color.TRANSPARENT);
+        float r = px(19);
+        ShapeDrawable bg = new ShapeDrawable(new RoundRectShape(new float[] {r, r, r, r, r, r, r, r}, null, null));
+        bg.getPaint().setColor(on ? DotStyle.L10 : Color.TRANSPARENT);
         t.setBackground(bg);
-        t.setTextColor(on ? DotStyle.BG : DotStyle.FG2);
+        t.setTextColor(on ? DotStyle.L100 : DotStyle.L46);
     }
 
     private TextView pill(String label) {
-        TextView t = text(label, 13, DotStyle.FG2, Fonts.interMedium(this));
+        TextView t = text(label, 13, DotStyle.L46, Fonts.interMedium(this));
         t.setGravity(Gravity.CENTER);
         t.setMinWidth(px(78));
         t.setMinHeight(px(38));
@@ -207,10 +210,23 @@ public class RadarActivity extends Activity {
         return t;
     }
 
+    /** v's bounds in the radar view's coordinates (both sit in the same root), or null before layout. */
+    private float[] rectIn(View v) {
+        if (v.getWidth() <= 0 || v.getHeight() <= 0) return null;
+        float x = 0, y = 0;
+        View c = v;
+        while (c != null && c != radar.getParent()) {
+            x += c.getLeft();
+            y += c.getTop();
+            c = c.getParent() instanceof View ? (View) c.getParent() : null;
+        }
+        return new float[] {x - radar.getLeft(), y - radar.getTop(), v.getWidth(), v.getHeight()};
+    }
+
     private TextView text(String s, float sp, int color, Typeface face) {
         TextView t = new TextView(this);
         t.setText(s);
-        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
+        t.setTextSize(TypedValue.COMPLEX_UNIT_DIP, sp);
         t.setTextColor(color);
         t.setTypeface(face);
         t.setIncludeFontPadding(false);

@@ -8,8 +8,8 @@ import android.graphics.Paint;
 import java.util.List;
 import java.util.WeakHashMap;
 
-import dev.gawel.dothome.core.DotScale;
 import dev.gawel.dothome.core.DotStyle;
+import dev.gawel.dothome.core.Lattice;
 import dev.gawel.dothome.core.GameWorld;
 import dev.gawel.dothome.core.Rng;
 import dev.gawel.dothome.core.ScoreBook;
@@ -29,7 +29,7 @@ final class DotRenderer {
         int n;
     }
 
-    private final SoftDot softDot = new SoftDot(DotStyle.FG);
+    private final SoftDot softDot = new SoftDot(DotStyle.L100);
     private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final android.content.res.Resources res;
     private float density;
@@ -55,9 +55,9 @@ final class DotRenderer {
     DotRenderer(Context context) {
         res = context.getResources();
         density = res.getDisplayMetrics().density;
-        softDot.prewarm(DotScale.radiusPx(density));
+        softDot.prewarm(Lattice.radiusPx(Lattice.Step.S4, Lattice.Weight.REGULAR, density));
         textPaint.setTypeface(Fonts.inter(context));
-        textPaint.setColor(DotStyle.FG2);
+        textPaint.setColor(DotStyle.L65);
         textPaint.setTextAlign(Paint.Align.RIGHT);
     }
 
@@ -93,7 +93,7 @@ final class DotRenderer {
     }
 
     void draw(Canvas c, GameWorld w, ScoreBook sb, float topInset) {
-        c.drawColor(DotStyle.BG);
+        c.drawColor(DotStyle.GROUND);
         if (w.width() <= 0) return;
         drawScene(c, w, true);
         float k = scaleK(w);
@@ -117,7 +117,7 @@ final class DotRenderer {
     Bitmap renderStill(GameWorld w, int width, int height, float dim, float clearTopFraction) {
         Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
-        c.drawColor(DotStyle.BG);
+        c.drawColor(DotStyle.GROUND);
         if (w.width() > 0 && w.height() > 0) {
             // uniform "cover" scale, centred: dots stay round when the target aspect differs from the world's
             float s = Math.max(width / w.width(), height / w.height());
@@ -134,14 +134,14 @@ final class DotRenderer {
             }
             c.restore();
         }
-        if (dim > 0) c.drawColor((Math.round(Math.min(1f, dim) * 255) << 24) | (DotStyle.BG & 0x00FFFFFF));
+        if (dim > 0) c.drawColor((Math.round(Math.min(1f, dim) * 255) << 24) | (DotStyle.GROUND & 0x00FFFFFF));
         return bmp;
     }
 
     private void drawScene(Canvas c, GameWorld w, boolean withTrail) {
         float k = scaleK(w);
         density = res.getDisplayMetrics().density; // can change with display size; caches are keyed on it
-        float ds = DotScale.radiusPx(density), spacing = DotScale.pitchPx(density);
+        float ds = Lattice.radiusPx(Lattice.Step.S4, Lattice.Weight.REGULAR, density), spacing = Lattice.stepPx(Lattice.Step.S4, density);
         float t = w.time();
         float f = clamp((t - 0.5f) / 1.1f, 0, 1);
         float fade = f * f * (3 - 2 * f);

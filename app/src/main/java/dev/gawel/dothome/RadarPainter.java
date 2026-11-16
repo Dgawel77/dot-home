@@ -3,98 +3,161 @@ package dev.gawel.dothome;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
-import android.graphics.RectF;
 
+import java.util.ArrayList;
+import java.util.BitSet;
+import java.util.List;
+import java.util.Locale;
 import java.util.Random;
 
 import dev.gawel.dothome.core.BoxSet;
-import dev.gawel.dothome.core.DotScale;
+import dev.gawel.dothome.core.ClearZones;
+import dev.gawel.dothome.core.DotMatrixFont;
 import dev.gawel.dothome.core.DotStyle;
 import dev.gawel.dothome.core.GeoProjection;
 import dev.gawel.dothome.core.Halftone;
+import dev.gawel.dothome.core.Lattice;
 import dev.gawel.dothome.core.RadarScale;
 
 /**
- * Draws the flat dotted radar map: lake texture, graticule, borders, highways with boxed route labels, place
- * labels and the echo halftone. Shared by the full-screen {@link RadarView} and the radar widget. Every dot is a
- * {@link SoftDot} at the shared {@link DotScale}: secondary texture dots are fractions of the dot radius and dot
- * spacings are multiples of the pitch. Not thread-safe (it owns a SoftDot and Paints): one per thread.
+ * Draws the dotted radar map on the 4 dp lattice anchored at the canvas origin: land speckle and lake texture at
+ * light weight, borders, roads and shore as dot rows at regular weight, route numbers in dot-row boxes, mono caps
+ * labels, and the echo storm as a {@link Halftone} of the intensity grid. Shared by the full-screen
+ * {@link RadarView} and the radar widget. Not thread-safe (it owns Paints and a bitset): one per thread.
  */
 final class RadarPainter {
     private final Context ctx;
-    private final float u;          // display density (px per dp) the art is drawn at
-    private final float dotR, pitch; // the shared dot scale at that density
+    private final float u;       // display density (px per dp) the art is drawn at
+    private final float step;    // S4 step in px
+    private final float rLight, rReg;
     private final boolean region;
     private final float topPad, bottomPad; // labels stay out of these bands (px)
-    private final SoftDot dot = new SoftDot(DotStyle.FG);
-    private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint dot = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final RectF box = new RectF();
+    private final BitSet seen = new BitSet();
+    private ClearZones zones;
 
     RadarPainter(Context ctx, float density, boolean region, float topDp, float bottomDp) {
         this.ctx = ctx;
         this.u = density;
-        this.dotR = DotScale.radiusPx(density);
-        this.pitch = DotScale.pitchPx(density);
+        this.step = Lattice.stepPx(Lattice.Step.S4, density);
+        this.rLight = Lattice.radiusPx(Lattice.Step.S4, Lattice.Weight.LIGHT, density);
+        this.rReg = Lattice.radiusPx(Lattice.Step.S4, Lattice.Weight.REGULAR, density);
         this.region = region;
         this.topPad = topDp * density;
         this.bottomPad = bottomDp * density;
-        dot.prewarm(dotR).prewarm(dotR * 2.5f);
+        dot.setStyle(Paint.Style.FILL);
+        text.setTypeface(Fonts.mono(ctx));
+        text.setTextSize(11f * density);
+        text.setLetterSpacing(1f / 11f);
     }
 
-    float pitch() { return pitch; }
+    float step() { return step; }
 
-    float dotRadius() { return dotR; }
+    /** Map dots are skipped inside these rects (x, y, w, h in px) and thinned toward them over edgePx. */
+    void setClear(List<float[]> rects, float edgePx) {
+        zones = rects == null || rects.isEmpty() ? null : ClearZones.of(rects, edgePx, step);
+    }
 
-    void dot(Canvas c, float x, float y, float r, float a) { dot.draw(c, x, y, r, a); }
+    void setZones(ClearZones z) { zones = z; }
 
-    // ---- the full flat map: base, halftone of one frame, labels, location, readout (the widget's render) ----
+    private boolean keep(float x, float y) { return zones == null || zones.keep(x, y) >= 0.5f; }
 
-    private void paintMap(Canvas c, int w, int h, GeoProjection p, Basemap b, RadarTiles.Frame frame) {
+    /** Centre of the lattice cell holding v. */
+    private float cell(float v) { return ((float) Math.floor(v / step) + 0.5f) * step; }
+
+    void dotAt(Canvas c, float x, float y, float r, int color) {
+        dot.setColor(color);
+        c.drawCircle(x, y, r, dot);
+    }
+
+    // ---- labels and matrix numerals -----------------------------------------------------------------------
+
+    /** Mono caps label (11 dp, letter-spacing 1/11 em); y is the baseline. */
+    void label(Canvas c, String s, float x, float y, Paint.Align align, int color) {
+        text.setTextAlign(align);
+        text.setColor(color);
+        c.drawText(s.toUpperCase(Locale.ROOT), x, y, text);
+    }
+
+    float labelWidth(String s) { return text.measureText(s.toUpperCase(Locale.ROOT)); }
+
+    /** Baseline that puts the cap height of a label centred on cy. */
+    private float capBase(float cy) {
+        Paint.FontMetrics m = text.getFontMetrics();
+        return cy - (m.ascent + m.descent) / 2f;
+    }
+
+    /** Matrix-font text at S4 regular, top-left (ox, oy) on the lattice; returns its width in px. */
+    float matrix(Canvas c, String s, float ox, float oy, int lit, int unlit) {
+        byte[] cells = DotMatrixFont.cells(s);
+        int cols = cells.length / DotMatrixFont.ROWS;
+        for (int r = 0; r < DotMatrixFont.ROWS; r++) {
+            for (int k = 0; k < cols; k++) {
+                byte v = cells[r * cols + k];
+                if (v < 0) continue;
+                dotAt(c, ox + (k + 0.5f) * step, oy + (r + 0.5f) * step, rReg, v == 1 ? lit : unlit);
+            }
+        }
+        return cols * step;
+    }
+
+    // ---- the full flat map: base, storm of one frame, labels, location, readout (the widget's render) -------
+
+    private void paintMap(Canvas c, int w, int h, GeoProjection p, Basemap b, RadarTiles.Frame frame, double lat, double lon) {
         drawBase(c, p, b, w, h);
         if (frame != null) {
-            int cols = (int) Math.ceil(w / pitch), rows = (int) Math.ceil(h / pitch);
-            double[] lons = lons(p, cols), lats = lats(p, rows);
-            drawHalftone(c, sample(frame, lons, lats), cols, rows);
+            int cols = (int) Math.ceil(w / step), rows = (int) Math.ceil(h / step);
+            drawStorm(c, storm(frame, lons(p, cols), lats(p, rows)));
         }
-        drawPlaces(c, p, b, w, h);
+        drawPlaces(c, p, b, w, h, lat, lon);
     }
 
     /** The widget's whole render. The location dot is static; readout may be null. */
     void paint(Canvas c, int w, int h, GeoProjection p, Basemap b, RadarTiles.Frame frame, String readout,
                double lat, double lon) {
-        paintMap(c, w, h, p, b, frame);
+        List<float[]> rects = new ArrayList<>();
+        if (readout != null) {
+            float rw = labelWidth(readout) + 2 * step;
+            rects.add(new float[] {readoutX() - step, readoutBase(h) - 12 * u, rw, 18 * u});
+        }
+        setClear(rects, 8 * u);
+        paintMap(c, w, h, p, b, frame, lat, lon);
         drawLocation(c, p.x(lon), p.y(lat));
         drawReadout(c, h, readout);
     }
 
-    /** A solid location dot with a faint halo, no animation. */
+    private float readoutX() { return Lattice.snap(16f * u, u); }
+
+    private float readoutBase(int h) { return Lattice.snap(h - 16f * u, u); }
+
+    /** The user's place: a heavy S8 dot in L100. */
     void drawLocation(Canvas c, float x, float y) {
-        dot.draw(c, x, y, 2.5f * dotR, 1f);
-        dot.draw(c, x, y, 4f * dotR, 0.25f);
+        dotAt(c, cell(x), cell(y), Lattice.radiusPx(Lattice.Step.S8, Lattice.Weight.HEAVY, u), DotStyle.L100);
     }
 
-    /** Small Inter FG2 text, bottom left, on a PANEL pill so it reads over echoes. */
+    /** The ping ring at phase pr in 0..1 (period is the 2 s signal tempo): dots on the lattice, stepping down the greys. */
+    void drawPing(Canvas c, float x, float y, float pr) {
+        float rad = (8 + pr * 22) * u;
+        int n = Math.max(12, Math.round((float) (2 * Math.PI * rad / (2 * step))));
+        int color = pr < 0.4f ? DotStyle.L65 : pr < 0.75f ? DotStyle.L46 : DotStyle.L10;
+        for (int i = 0; i < n; i++) {
+            double a = i / (double) n * Math.PI * 2;
+            dotAt(c, cell(x + (float) Math.cos(a) * rad), cell(y + (float) Math.sin(a) * rad), rReg, color);
+        }
+    }
+
+    /** Mono label, bottom left. */
     void drawReadout(Canvas c, int h, String readout) {
         if (readout == null) return;
-        text.setTypeface(Fonts.inter(ctx));
-        text.setTextAlign(Paint.Align.LEFT);
-        text.setTextSize(10 * u);
-        float x = 12 * u, base = h - 12 * u;
-        float tw = text.measureText(readout);
-        fill.setStyle(Paint.Style.FILL);
-        fill.setColor(DotStyle.PANEL);
-        box.set(x - 6 * u, base - 14 * u, x + tw + 6 * u, base + 6 * u);
-        c.drawRoundRect(box, 6 * u, 6 * u, fill);
-        text.setColor(DotStyle.FG2);
-        text.setAlpha(255);
-        c.drawText(readout, x, base, text);
+        label(c, readout, readoutX(), readoutBase(h), Paint.Align.LEFT, DotStyle.L65);
     }
 
     // ---- static layers -------------------------------------------------------------------------------------
 
     void drawBase(Canvas c, GeoProjection p, Basemap bm, int w, int h) {
-        c.drawColor(DotStyle.BG);
+        c.drawColor(DotStyle.GROUND);
+        int cols = (int) Math.ceil(w / step), rows = (int) Math.ceil(h / step);
         // lake polygons in view pixels, with bounding boxes for a cheap reject
         int nl = bm.lakes.size();
         float[][] px = new float[nl][], py = new float[nl][], bb = new float[nl][];
@@ -111,129 +174,130 @@ final class RadarPainter {
             }
             bb[k] = new float[] {minx, miny, maxx, maxy};
         }
-        // land speckle first, so lake points are excluded from it. About one per 20 pitch cells, the old density (1400 per screen).
+        // land speckle first, one light dot per about 20 lattice cells, never on a lake
+        dot.setColor(DotStyle.L46);
         Random rnd = new Random(region ? 9 : 5);
-        int speckles = (int) Math.min(6000, w * (double) h / (20.0 * pitch * pitch));
+        int speckles = (int) Math.min(6000, cols * (long) rows / 20);
         for (int i = 0; i < speckles; i++) {
-            float x = rnd.nextFloat() * w, y = rnd.nextFloat() * h, a = 0.05f + rnd.nextFloat() * 0.1f;
-            if (!inLake(px, py, bb, x, y)) dot.draw(c, x, y, 0.35f * dotR, a);
+            float x = (rnd.nextInt(cols) + 0.5f) * step, y = (rnd.nextInt(rows) + 0.5f) * step;
+            if (keep(x, y) && !inLake(px, py, bb, x, y)) c.drawCircle(x, y, rLight, dot);
         }
-        // lake stipple on the shared pitch grid, alternate rows offset by half a pitch
-        int row = 0;
-        for (float y = pitch * 0.5f; y < h; y += pitch, row++) {
-            for (float x = pitch * 0.5f + (row % 2) * pitch * 0.5f; x < w; x += pitch) {
-                if (inLake(px, py, bb, x, y)) dot.draw(c, x, y, 0.55f * dotR, 0.2f);
+        // lake texture: light dots on alternate lattice cells
+        for (int j = 0; j < rows; j++) {
+            float y = (j + 0.5f) * step;
+            for (int i = j & 1; i < cols; i += 2) {
+                float x = (i + 0.5f) * step;
+                if (inLake(px, py, bb, x, y) && keep(x, y)) c.drawCircle(x, y, rLight, dot);
             }
         }
-        // graticule: very faint dots, no labels
-        double gstep = region ? 1.0 : 0.25;
-        for (double la = Math.ceil(p.lat(h) / gstep) * gstep; la <= p.lat(0); la += gstep) {
-            float y = p.y(la);
-            for (float x = pitch; x < w; x += 2 * pitch) dot.draw(c, x, y, 0.4f * dotR, 0.10f);
-        }
-        for (double lo = Math.ceil(p.lon(0) / gstep) * gstep; lo <= p.lon(w); lo += gstep) {
-            float x = p.x(lo);
-            for (float y = pitch; y < h; y += 2 * pitch) dot.draw(c, x, y, 0.4f * dotR, 0.10f);
-        }
-        for (double[][] s : bm.states) poly(c, p, s, 1.5f * pitch, 0.65f * dotR, 0.38f, w, h);
-        for (Basemap.Road r : bm.roads) poly(c, p, r.pts, pitch, 0.6f * dotR, 0.42f, w, h);
-        for (double[][] s : bm.shore) poly(c, p, s, pitch, dotR, 0.85f, w, h);
+        // dot rows at regular weight: borders and roads L46, shore L65
+        dot.setColor(DotStyle.L46);
+        seen.clear();
+        for (double[][] s : bm.states) row(c, p, s, cols, rows);
+        seen.clear();
+        for (Basemap.Road r : bm.roads) row(c, p, r.pts, cols, rows);
+        dot.setColor(DotStyle.L65);
+        seen.clear();
+        for (double[][] s : bm.shore) row(c, p, s, cols, rows);
 
-        text.setTypeface(Fonts.interMedium(ctx));
-        text.setColor(DotStyle.FG);
         text.setTextAlign(Paint.Align.CENTER);
-        text.setTextSize(11 * u);
+        text.setColor(DotStyle.L46);
         for (Basemap.Label l : bm.regions) {
             if (!region && !l.name.startsWith("LAKE")) continue;
             float x = p.x(l.lon), y = p.y(l.lat);
-            if (y < topPad || y > h - bottomPad || x < 0 || x > w) continue;
-            text.setAlpha(Math.round(0.42f * 255));
-            c.drawText(spaced(l.name), x, y, text);
+            if (y < topPad || y > h - bottomPad || x < 0 || x > w || !keep(x, y)) continue;
+            c.drawText(l.name.toUpperCase(Locale.ROOT), x, y, text);
         }
-        text.setTextSize(9 * u);
         BoxSet drawn = new BoxSet();
         for (Basemap.Road r : bm.roads) {
             if (r.pts.length == 0) continue;
             double[] q = r.pts[r.pts.length / 2];
             float x = p.x(q[0]), y = p.y(q[1]);
-            if (x < 16 * u || x > w - 16 * u || y < topPad || y > h - bottomPad) continue;
-            float tw = text.measureText(r.ref) + 8 * u;
-            if (!drawn.tryAdd(x - tw / 2, y - 7 * u, x + tw / 2, y + 6 * u)) continue; // a duplicate nearby
-            fill.setStyle(Paint.Style.FILL);
-            fill.setColor(DotStyle.BG);
-            fill.setAlpha(Math.round(0.95f * 255));
-            c.drawRect(x - tw / 2, y - 7 * u, x + tw / 2, y + 6 * u, fill);
-            fill.setStyle(Paint.Style.STROKE);
-            fill.setStrokeWidth(Math.max(1f, 0.8f * u));
-            fill.setColor(DotStyle.FG);
-            fill.setAlpha(Math.round(0.6f * 255));
-            c.drawRect(x - tw / 2 + 0.5f * u, y - 6.5f * u, x + tw / 2 - 0.5f * u, y + 5.5f * u, fill);
-            text.setAlpha(Math.round(0.8f * 255));
-            c.drawText(r.ref, x, y + 3 * u, text);
+            if (x < 16 * u || x > w - 16 * u || y < topPad || y > h - bottomPad || !keep(x, y)) continue;
+            routeBox(c, r.ref, x, y, drawn);
         }
     }
 
-    void drawPlaces(Canvas c, GeoProjection p, Basemap bm, int w, int h) {
-        text.setTypeface(Fonts.inter(ctx));
-        text.setColor(DotStyle.FG);
-        text.setTextAlign(Paint.Align.LEFT);
-        text.setTextSize(11 * u);
+    /** A route number: a rectangle outline of S4 regular L46 dots (4 rows tall, snapped to the lattice) around an L65 mono label. */
+    private void routeBox(Canvas c, String ref, float x, float y, BoxSet drawn) {
+        float tw = labelWidth(ref);
+        int nc = (int) Math.ceil((tw + 8 * u) / step) + 1;
+        float left = cell(x - (nc - 1) * step / 2f), top = cell(y - 1.5f * step);
+        float cx = left + (nc - 1) * step / 2f, cy = top + 1.5f * step;
+        if (!drawn.tryAdd(left - step, top - step, left + nc * step, top + 4 * step)) return; // overlaps another box
+        dot.setColor(DotStyle.L46);
+        for (int i = 0; i < nc; i++) {
+            c.drawCircle(left + i * step, top, rReg, dot);
+            c.drawCircle(left + i * step, top + 3 * step, rReg, dot);
+        }
+        for (int j = 1; j <= 2; j++) {
+            c.drawCircle(left, top + j * step, rReg, dot);
+            c.drawCircle(left + (nc - 1) * step, top + j * step, rReg, dot);
+        }
+        label(c, ref, cx, capBase(cy), Paint.Align.CENTER, DotStyle.L65);
+    }
+
+    void drawPlaces(Canvas c, GeoProjection p, Basemap bm, int w, int h, double userLat, double userLon) {
         int maxRank = region ? 2 : 3;
+        boolean haveUser = !Double.isNaN(userLat) && !Double.isNaN(userLon);
+        float ux = haveUser ? p.x(userLon) : -1e9f, uy = haveUser ? p.y(userLat) : -1e9f;
         for (Basemap.Label l : bm.places) {
             if (l.rank > maxRank) continue;
             float x = p.x(l.lon), y = p.y(l.lat);
-            if (x < 8 * u || x > w - 8 * u || y < topPad || y > h - bottomPad) continue;
-            dot.draw(c, x, y, 1.3f * dotR, 0.75f);
-            text.setAlpha(Math.round(0.62f * 255));
-            c.drawText(l.name, x + 8 * u, y + 4 * u, text);
+            if (x < 8 * u || x > w - 8 * u || y < topPad || y > h - bottomPad || !keep(x, y)) continue;
+            boolean mine = Math.hypot(x - ux, y - uy) < 12 * u;
+            int color = mine ? DotStyle.L100 : DotStyle.L65;
+            float cx = cell(x), cy = cell(y);
+            dotAt(c, cx, cy, rReg, color);
+            label(c, l.name, cx + 2 * step, capBase(cy), Paint.Align.LEFT, color);
         }
     }
 
-    // ---- echoes --------------------------------------------------------------------------------------------
+    // ---- storm ---------------------------------------------------------------------------------------------
 
-    /** Longitudes of the pitch-grid column centres. */
+    /** Longitudes of the lattice column centres. */
     double[] lons(GeoProjection p, int cols) {
         double[] a = new double[cols];
-        for (int i = 0; i < cols; i++) a[i] = p.lon(pitch * (i + 0.5f));
+        for (int i = 0; i < cols; i++) a[i] = p.lon(step * (i + 0.5f));
         return a;
     }
 
-    /** Latitudes of the pitch-grid row centres. */
+    /** Latitudes of the lattice row centres. */
     double[] lats(GeoProjection p, int rows) {
         double[] a = new double[rows];
-        for (int j = 0; j < rows; j++) a[j] = p.lat(pitch * (j + 0.5f));
+        for (int j = 0; j < rows; j++) a[j] = p.lat(step * (j + 0.5f));
         return a;
     }
 
-    /** Echo intensity (0..1) of one frame on the pitch grid, row-major cols x rows. */
-    static float[] sample(RadarTiles.Frame fr, double[] lons, double[] lats) {
-        float[] cell = new float[lons.length * lats.length];
-        for (int j = 0; j < lats.length; j++) {
-            for (int i = 0; i < lons.length; i++) cell[j * lons.length + i] = RadarScale.intensity(fr.argbAt(lons[i], lats[j]));
-        }
-        return cell;
-    }
-
-    /** One FG soft dot per lit cell: radius from {@link Halftone}, so heavy echoes nearly touch. */
-    void drawHalftone(Canvas c, float[] cell, int cols, int rows) {
+    /**
+     * One frame's storm as (cx, cy, diameter) triples in lattice-cell units: the echo intensity at each S4 cell
+     * centre becomes a grey image of one pixel per cell, and {@link Halftone#dots} makes the dots.
+     */
+    static float[] storm(RadarTiles.Frame fr, double[] lons, double[] lats) {
+        int cols = lons.length, rows = lats.length;
+        int[] argb = new int[cols * rows];
         for (int j = 0; j < rows; j++) {
-            float y = pitch * (j + 0.5f);
             for (int i = 0; i < cols; i++) {
-                float in = cell[j * cols + i];
-                if (in < 0.08f) continue;
-                dot.draw(c, pitch * (i + 0.5f), y, Halftone.radius(in, pitch), 0.4f + 0.6f * in);
+                int g = Math.round(Math.min(1f, Math.max(0f, RadarScale.intensity(fr.argbAt(lons[i], lats[j])))) * 255f);
+                argb[j * cols + i] = 0xFF000000 | (g << 16) | (g << 8) | g;
             }
         }
+        return Halftone.dots(argb, cols, rows, 1);
     }
 
-    private static String spaced(String s) {
-        StringBuilder b = new StringBuilder();
-        for (int i = 0; i < s.length(); i++) {
-            if (i > 0) b.append("  ");
-            b.append(s.charAt(i));
+    /** The storm in L65 dots, scaled from cell units to px. */
+    void drawStorm(Canvas c, float[] dots) {
+        dot.setColor(DotStyle.L65);
+        for (int i = 0; i + 2 < dots.length; i += 3) {
+            float x = dots[i] * step, y = dots[i + 1] * step;
+            if (keep(x, y)) c.drawCircle(x, y, dots[i + 2] * step / 2f, dot);
         }
-        return b.toString();
     }
+
+    /** Dot diameter in px of a legend sample at this brightness (Halftone's rule). */
+    float stormDiameter(float brightness) { return (float) Math.sqrt(brightness) * 0.85f * step; }
+
+    // ---- helpers -------------------------------------------------------------------------------------------
 
     private static boolean inLake(float[][] px, float[][] py, float[][] bb, float x, float y) {
         for (int k = 0; k < px.length; k++) {
@@ -249,17 +313,24 @@ final class RadarPainter {
         return false;
     }
 
-    private void poly(Canvas c, GeoProjection p, double[][] pts, float step, float r, float a, int w, int h) {
-        float m = pitch;
+    /** A polyline as a dot row: sampled every S4 step, each point snapped to its lattice cell, a cell drawn once per pass. */
+    private void row(Canvas c, GeoProjection p, double[][] pts, int cols, int rows) {
+        float w = cols * step, h = rows * step;
         for (int i = 0; i < pts.length - 1; i++) {
             float x1 = p.x(pts[i][0]), y1 = p.y(pts[i][1]), x2 = p.x(pts[i + 1][0]), y2 = p.y(pts[i + 1][1]);
             if ((x1 < -step && x2 < -step) || (x1 > w + step && x2 > w + step)
                 || (y1 < -step && y2 < -step) || (y1 > h + step && y2 > h + step)) continue;
             float len = (float) Math.hypot(x2 - x1, y2 - y1);
             int n = Math.max(1, Math.round(len / step));
-            for (int j = 0; j < n; j++) {
-                float t = j / (float) n, xx = x1 + (x2 - x1) * t, yy = y1 + (y2 - y1) * t;
-                if (xx > -m && xx < w + m && yy > -m && yy < h + m) dot.draw(c, xx, yy, r, a);
+            for (int j = 0; j <= n; j++) {
+                float t = j / (float) n;
+                int ci = (int) Math.floor((x1 + (x2 - x1) * t) / step), cj = (int) Math.floor((y1 + (y2 - y1) * t) / step);
+                if (ci < 0 || cj < 0 || ci >= cols || cj >= rows) continue;
+                int k = cj * cols + ci;
+                if (seen.get(k)) continue;
+                seen.set(k);
+                float cx = (ci + 0.5f) * step, cy = (cj + 0.5f) * step;
+                if (keep(cx, cy)) c.drawCircle(cx, cy, rReg, dot);
             }
         }
     }

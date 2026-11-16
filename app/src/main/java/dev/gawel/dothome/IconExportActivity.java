@@ -7,7 +7,6 @@ import android.content.pm.ResolveInfo;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.drawable.AdaptiveIconDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
@@ -41,8 +40,8 @@ public class IconExportActivity extends Activity {
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
         status = new TextView(this);
-        status.setTextColor(Color.WHITE);
-        status.setBackgroundColor(Color.BLACK);
+        status.setTextColor(DotStyle.L100);
+        status.setBackgroundColor(DotStyle.GROUND);
         status.setTextSize(18);
         status.setPadding(48, 96, 48, 48);
         status.setText("Exporting icons...");
@@ -103,7 +102,7 @@ public class IconExportActivity extends Activity {
                             colour = render(new Drawable[] {icon}, false);
                             shape = MonoIcon.fromFullIcon(MonoIcon.overBlack(colour), SIZE, SIZE);
                         }
-                        writePng(new File(dir, name + ".png"), MonoIcon.flatten(shape, DotStyle.FG));
+                        writePng(new File(dir, name + ".png"), MonoIcon.flatten(shape, DotStyle.L100));
                         // A themed icon is our own pack: its tone would feed our dots back in. Without
                         // a tone layer iconfix uses its default level.
                         if (!themed) writePng(new File(dir, name + ".tone.png"), MonoIcon.tone(colour));

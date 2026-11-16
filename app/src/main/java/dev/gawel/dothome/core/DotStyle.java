@@ -13,12 +13,4 @@ public final class DotStyle {
     public static final int L46 = 0xFF757575;
     /** Unlit matrix cells. */
     public static final int L10 = 0xFF1A1A1A;
-
-    // DEPRECATED aliases, removed in Task 3 once their uses are migrated.
-    public static final int BG = GROUND;
-    public static final int FG = L100;
-    public static final int FG2 = L65;
-    public static final int FAINT = L10;
-    /** DEPRECATED: still used by the radar (RadarPainter, RadarActivity); Task 3 removes it. */
-    public static final int PANEL = 0xCC000000;
 }

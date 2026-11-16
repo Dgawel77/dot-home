@@ -45,10 +45,4 @@ public final class Halftone {
         }
         return Arrays.copyOf(out, n);
     }
-
-    /** DEPRECATED radar sizing, kept until Task 3 migrates RadarView/RadarPainter. */
-    public static float radius(float intensity, float pitch) {
-        if (intensity < 0.08f) return 0f;
-        return (float) (pitch * 0.46 * Math.pow(Math.min(1f, intensity), 0.7));
-    }
 }

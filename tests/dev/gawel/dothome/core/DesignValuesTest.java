@@ -13,10 +13,6 @@ public final class DesignValuesTest {
         T.eq(0xFFA6A6A6, DotStyle.L65, "L65");
         T.eq(0xFF757575, DotStyle.L46, "L46");
         T.eq(0xFF1A1A1A, DotStyle.L10, "L10");
-        T.eq(DotStyle.GROUND, DotStyle.BG, "BG alias");
-        T.eq(DotStyle.L100, DotStyle.FG, "FG alias");
-        T.eq(DotStyle.L65, DotStyle.FG2, "FG2 alias");
-        T.eq(DotStyle.L10, DotStyle.FAINT, "FAINT alias");
     }
 
     public static void testLatticeRadius() {
