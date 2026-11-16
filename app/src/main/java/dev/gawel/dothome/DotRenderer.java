@@ -3,11 +3,7 @@ package dev.gawel.dothome;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
-import android.graphics.RadialGradient;
-import android.graphics.Shader;
 import android.graphics.Paint;
-import android.graphics.Rect;
-import android.graphics.RectF;
 
 import java.util.List;
 import java.util.WeakHashMap;
@@ -23,7 +19,6 @@ final class DotRenderer {
     private static final float TAU = (float) (Math.PI * 2);
     private static final float[] SHIP = {15, 0, -10, -9.5f, -5, 0, -10, 9.5f};
     private static final int TRAIL_MAX = 48;
-    private static final int SPRITE_PX = 64;
 
     /** Cached dots of one rock: x, y, alpha triples (alpha 1 marks an outline dot), valid for one spacing. */
     private static final class RockDots {
@@ -33,12 +28,9 @@ final class DotRenderer {
         int n;
     }
 
-    private final Paint dotPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+    private final SoftDot softDot = new SoftDot(DotStyle.FG);
     private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Bitmap sprite;
-    private final Rect spriteSrc = new Rect(0, 0, SPRITE_PX, SPRITE_PX);
     private final float density;
-    private final RectF dst = new RectF();
     private final WeakHashMap<GameWorld.Rock, RockDots> rockCache = new WeakHashMap<>();
     private long rockSeed = 1;
     private float[] shipPts = new float[0];
@@ -60,13 +52,6 @@ final class DotRenderer {
 
     DotRenderer(Context context) {
         density = context.getResources().getDisplayMetrics().density;
-        sprite = Bitmap.createBitmap(SPRITE_PX, SPRITE_PX, Bitmap.Config.ARGB_8888);
-        // soft dot: opaque core out to 70% of the radius, fading to nothing at the radius
-        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        float h = SPRITE_PX / 2f;
-        p.setShader(new RadialGradient(h, h, h, new int[] {DotStyle.FG, DotStyle.FG, DotStyle.FG & 0x00FFFFFF},
-            new float[] {0f, 0.7f, 1f}, Shader.TileMode.CLAMP));
-        new Canvas(sprite).drawCircle(h, h, h, p);
         textPaint.setTypeface(Fonts.doto(context));
         textPaint.setColor(DotStyle.FG2);
         textPaint.setTextAlign(Paint.Align.RIGHT);
@@ -259,10 +244,7 @@ final class DotRenderer {
     }
 
     private void dot(Canvas c, float x, float y, float r, float a) {
-        if (a <= 0.01f || r <= 0.05f) return;
-        dotPaint.setAlpha(Math.round((a > 1f ? 1f : a) * 255));
-        dst.set(x - r, y - r, x + r, y + r);
-        c.drawBitmap(sprite, spriteSrc, dst, dotPaint);
+        softDot.draw(c, x, y, r, a);
     }
 
     /** Outline dots every `spacing` px plus a stable interior stipple (seeded per rock, so it never flickers). */

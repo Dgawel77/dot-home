@@ -61,6 +61,7 @@ final class WidgetUpdater {
         float shrink = Math.min(1f, MAX_SIDE_PX / Math.max(wPx, hPx));
         wPx *= shrink;
         hPx *= shrink;
+        float eff = density * shrink; // bitmap px per dp: dot scale must come out right after the launcher stretches it back
         float total = CLOCK_WEIGHT + WEATHER_WEIGHT;
         int clockW = Math.max(1, Math.round(wPx * CLOCK_WEIGHT / total));
         int weatherW = Math.max(1, Math.round(wPx * WEATHER_WEIGHT / total));
@@ -68,8 +69,8 @@ final class WidgetUpdater {
 
         RemoteViews rv = new RemoteViews(ctx.getPackageName(), R.layout.widget_clock);
         boolean bd = WidgetArt.backdropOn(ctx);
-        Bitmap clock = safe(h, clockW, () -> WidgetArt.clock(ctx, clockW, h, now, bd));
-        Bitmap weather = safe(h, weatherW, () -> WidgetArt.weather(ctx, weatherW, h, wx, now, bd));
+        Bitmap clock = safe(h, clockW, () -> WidgetArt.clock(ctx, clockW, h, now, bd, eff));
+        Bitmap weather = safe(h, weatherW, () -> WidgetArt.weather(ctx, weatherW, h, wx, now, bd, eff));
         rv.setImageViewBitmap(R.id.clock_img, clock);
         rv.setImageViewBitmap(R.id.weather_img, weather);
         rv.setOnClickPendingIntent(R.id.clock_img, PendingIntent.getActivity(ctx, 1, clockIntent(ctx), flags()));
@@ -96,8 +97,9 @@ final class WidgetUpdater {
         float wPx = wDp * density, hPx = hDp * density;
         float shrink = Math.min(1f, MAX_SIDE_PX / Math.max(wPx, hPx));
         int w = Math.max(1, Math.round(wPx * shrink)), h = Math.max(1, Math.round(hPx * shrink));
+        float eff = density * shrink;
         boolean bd = WidgetArt.backdropOn(ctx);
-        Bitmap art = safe(h, w, () -> WidgetArt.music(ctx, w, h, np, bd));
+        Bitmap art = safe(h, w, () -> WidgetArt.music(ctx, w, h, np, bd, eff));
         rv.setViewVisibility(R.id.music_root, android.view.View.VISIBLE);
         rv.setImageViewBitmap(R.id.music_img, art);
         rv.setImageViewResource(R.id.music_play, np.playing ? R.drawable.ic_pause : R.drawable.ic_play);

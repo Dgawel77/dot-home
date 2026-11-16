@@ -3,7 +3,6 @@ package dev.gawel.dothome;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
@@ -13,7 +12,9 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.Locale;
 
-import dev.gawel.dothome.core.DotMatrixFont;
+import dev.gawel.dothome.core.DotFill;
+import dev.gawel.dothome.core.DotScale;
+import dev.gawel.dothome.core.DotStyle;
 import dev.gawel.dothome.core.NowPlaying;
 import dev.gawel.dothome.core.TextFit;
 import dev.gawel.dothome.core.Weather;
@@ -21,17 +22,19 @@ import dev.gawel.dothome.core.WeatherCodes;
 
 /**
  * Draws the clock and weather halves of the home-screen widget as transparent bitmaps, in the mockup's
- * proportions (6 px dots on an 11 px pitch, Inter text lines, Doto temperature). Everything is scaled by k,
- * derived from the bitmap size against a reference box (the mockup's widget slot).
+ * proportions. The clock time and the temperature are Inter Bold glyphs filled with soft dots on the wallpaper's
+ * own pitch and radius ({@link DotScale}); text sizes scale by k, derived from the bitmap size against a
+ * reference box. The bitmap is later stretched back to the widget's size, so every method takes the effective
+ * density (display density times the shrink applied to the bitmap) and takes dot size and pitch from it alone.
  */
 final class WidgetArt {
     private static final float CLOCK_REF_W = 340f, WEATHER_REF_W = 240f, REF_H = 150f;
     private static final long STALE_MS = 90L * 60 * 1000;
-    static final int UNLIT = 0xFF1A1A1A, DATE = 0xFFA6A6A6, LINE = 0xFFD6D6D6, PLACE = 0xFF949494;
+    private static final float CLOCK_CAP_DP = 64f, WEATHER_CAP_DP = 44f;
 
     private WidgetArt() {}
 
-    static Bitmap clock(Context ctx, int wPx, int hPx, long nowMs, boolean backdrop) {
+    static Bitmap clock(Context ctx, int wPx, int hPx, long nowMs, boolean backdrop, float dens) {
         Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
         float k = Math.min(wPx / CLOCK_REF_W, hPx / REF_H);
@@ -43,34 +46,24 @@ final class WidgetArt {
         cal.setTimeInMillis(nowMs);
         int hour = cal.get(Calendar.HOUR);
         if (hour == 0) hour = 12;
-        DotMatrixFont.Grid g = DotMatrixFont.render(hour + ":" + (cal.get(Calendar.MINUTE) < 10 ? "0" : "")
-            + cal.get(Calendar.MINUTE));
-
-        float padL = pad;
-        float pitch = Math.min(11f * k, (wPx - padL - 2f * k) / g.cols);
-        float radius = pitch * 3f / 11f; // the mockup's 6 px dot on an 11 px pitch
-        float gridH = g.rows * pitch;
+        String time = hour + ":" + (cal.get(Calendar.MINUTE) < 10 ? "0" : "") + cal.get(Calendar.MINUTE);
 
         Paint date = new Paint(Paint.ANTI_ALIAS_FLAG);
         date.setTypeface(Fonts.inter(ctx));
         date.setTextSize(15f * k);
-        date.setColor(DATE);
+        date.setColor(DotStyle.FG2);
         float dateH = 15f * k;
         float gap = 12f * k;
-        float top = Math.max(0f, (hPx - (gridH + gap + dateH)) / 2f);
 
-        Paint unlit = new Paint(Paint.ANTI_ALIAS_FLAG);
-        unlit.setColor(UNLIT);
-        Paint lit = new Paint(Paint.ANTI_ALIAS_FLAG);
-        lit.setColor(Color.WHITE);
-        lit.setShadowLayer(5f * k, 0, 0, 0x66FFFFFF);
-        for (int r = 0; r < g.rows; r++) {
-            for (int col = 0; col < g.cols; col++) {
-                if (!g.present(col, r)) continue;
-                c.drawCircle(padL + (col + 0.5f) * pitch, top + (r + 0.5f) * pitch, radius,
-                    g.lit(col, r) ? lit : unlit);
-            }
-        }
+        float padL = pad;
+        float cap = Math.min(CLOCK_CAP_DP * dens, hPx - 2f * pad - gap - dateH);
+        GlyphMask m = GlyphMask.render(time, Fonts.interBold(ctx),
+            GlyphMask.fitSize(time, Fonts.interBold(ctx), cap, wPx - padL - pad));
+        float pitch = DotScale.pitchPx(dens);
+        DotFill.Dots dots = DotFill.sample(m.alpha, m.w, m.h, pitch, DotFill.DEFAULT_THRESHOLD);
+        float gridH = (float) Math.ceil(m.h / pitch) * pitch;
+        float top = Math.max(0f, (hPx - (gridH + gap + dateH)) / 2f);
+        drawDots(c, dots, padL, top, dens);
 
         String text = new SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(new Date(nowMs));
         text = TextFit.fit(text, wPx - padL - 8f * k, date::measureText);
@@ -78,7 +71,16 @@ final class WidgetArt {
         return bmp;
     }
 
-    static Bitmap weather(Context ctx, int wPx, int hPx, Weather w, long nowMs, boolean backdrop) {
+    /** Unlit grid points as FAINT dots, then a soft glow (FG at 35%, twice the radius) and an FG dot per lit point. */
+    private static void drawDots(Canvas c, DotFill.Dots d, float x0, float y0, float dens) {
+        float r = DotScale.radiusPx(dens);
+        SoftDot faint = new SoftDot(DotStyle.FAINT), fg = new SoftDot(DotStyle.FG);
+        for (int i = 0; i < d.unlitX.length; i++) faint.draw(c, x0 + d.unlitX[i], y0 + d.unlitY[i], r, 1f);
+        for (int i = 0; i < d.litX.length; i++) fg.draw(c, x0 + d.litX[i], y0 + d.litY[i], 2f * r, 0.35f);
+        for (int i = 0; i < d.litX.length; i++) fg.draw(c, x0 + d.litX[i], y0 + d.litY[i], r, 1f);
+    }
+
+    static Bitmap weather(Context ctx, int wPx, int hPx, Weather w, long nowMs, boolean backdrop, float dens) {
         Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
         float k = Math.min(wPx / WEATHER_REF_W, hPx / REF_H);
@@ -87,11 +89,6 @@ final class WidgetArt {
         float pad = 4f * u + 10f * k;
         float right = wPx - pad, maxW = wPx - pad - 4f * k;
 
-        Paint doto = new Paint(Paint.ANTI_ALIAS_FLAG);
-        doto.setTypeface(Fonts.doto(ctx));
-        doto.setTextSize(50f * k);
-        doto.setColor(Color.WHITE);
-        doto.setTextAlign(Paint.Align.RIGHT);
         Paint line = new Paint(Paint.ANTI_ALIAS_FLAG);
         line.setTypeface(Fonts.inter(ctx));
         line.setTextAlign(Paint.Align.RIGHT);
@@ -109,13 +106,20 @@ final class WidgetArt {
         }
         boolean hasAlert = alert != null && !alert.isEmpty();
 
-        // block: temperature row (50k), gap 7k, condition 14k, gap 7k, place 13k, [gap 7k, alert 13k]
-        float tempH = 50f * k, gap = 7f * k;
+        // block: temperature dot grid, gap 7k, condition 14k, gap 7k, place 13k, [gap 7k, alert 13k]
+        float pitch = DotScale.pitchPx(dens);
+        float iconW = w == null ? 0f : 40f * k;
+        float cap = Math.min(WEATHER_CAP_DP * dens, hPx * 0.4f);
+        GlyphMask m = GlyphMask.render(temp, Fonts.interBold(ctx),
+            GlyphMask.fitSize(temp, Fonts.interBold(ctx), cap, maxW - iconW));
+        DotFill.Dots dots = DotFill.sample(m.alpha, m.w, m.h, pitch, DotFill.DEFAULT_THRESHOLD);
+        int cols = Math.max(1, (int) Math.ceil(m.w / pitch - 1e-4));
+        float tempH = (float) Math.ceil(m.h / pitch) * pitch, gap = 7f * k;
         float blockH = tempH + gap + 14f * k + (place.isEmpty() && age == null ? 0 : gap + 13f * k) + (hasAlert ? gap + 13f * k : 0);
         float y = Math.max(0f, (hPx - blockH) / 2f);
 
-        float tempW = doto.measureText(temp);
-        c.drawText(temp, right, y + tempH * 0.8f, doto);
+        float tempW = cols * pitch;
+        drawDots(c, dots, right - tempW, y, dens);
         if (w != null) {
             float icon = 30f * k;
             drawGlyph(c, WeatherCodes.glyph(w.code), right - tempW - 10f * k - icon, y + (tempH - icon) / 2f, icon, k);
@@ -123,13 +127,13 @@ final class WidgetArt {
         y += tempH + gap;
 
         line.setTextSize(14f * k);
-        line.setColor(LINE);
+        line.setColor(DotStyle.FG);
         c.drawText(TextFit.fit(cond, maxW, line::measureText), right, y + 14f * k * 0.8f, line);
         y += 14f * k;
         if (!place.isEmpty() || age != null) {
             y += gap;
             line.setTextSize(13f * k);
-            line.setColor(PLACE);
+            line.setColor(DotStyle.FG2);
             String suffix = age == null ? "" : (place.isEmpty() ? age : " · " + age);
             c.drawText(TextFit.fitWithSuffix(place, suffix, maxW, line::measureText), right, y + 13f * k * 0.8f, line);
             y += 13f * k;
@@ -137,7 +141,7 @@ final class WidgetArt {
         if (hasAlert) {
             y += gap;
             line.setTextSize(13f * k);
-            line.setColor(Color.WHITE);
+            line.setColor(DotStyle.FG);
             c.drawText(TextFit.fit(alert, maxW, line::measureText), right, y + 13f * k * 0.8f, line);
         }
         return bmp;
@@ -145,50 +149,51 @@ final class WidgetArt {
 
     /**
      * The music widget body: 64k dotted art square, title (Inter Medium 15k), artist (13k) and a 2k progress
-     * hairline. k is the display density (capped so the art fits the height). The right 132 dp is left clear
+     * hairline. k is the effective density (capped so the art fits the height). The right 132 dp is left clear
      * for the three transport buttons.
      */
-    static Bitmap music(Context ctx, int wPx, int hPx, NowPlaying np, boolean backdrop) {
+    static Bitmap music(Context ctx, int wPx, int hPx, NowPlaying np, boolean backdrop, float dens) {
         Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
-        float density = ctx.getResources().getDisplayMetrics().density;
-        float k = Math.max(0.1f, Math.min(density, hPx / 72f));
+        float k = Math.max(0.1f, Math.min(dens, hPx / 72f));
         if (backdrop) backdrop(c, wPx, hPx, 2f * k, 16f * k, true, true);
         float artS = 64f * k, artY = (hPx - artS) / 2f, artX = 14f * k;
 
-        // art square: black, dots on a staggered 4k grid brightest toward a "sun" and a lower band
+        // art square: dark, halftone dots on the shared pitch grid (staggered rows), larger toward a "sun" and a lower band
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         p.setColor(0xFF0A0A0A);
         c.drawRect(artX, artY, artX + artS, artY + artS, p);
-        p.setColor(Color.WHITE);
+        SoftDot dot = new SoftDot(DotStyle.FG);
+        float pitch = DotScale.pitchPx(dens), rMax = DotScale.radiusPx(dens);
         int row = 0;
-        for (float y = 2f; y < 64f; y += 4f, row++) {
-            for (float x = 2f + (row % 2) * 2f; x < 64f; x += 4f) {
-                double d1 = Math.hypot(x - 42, y - 22) / 18, sun = Math.max(0, 1 - d1 * d1);
-                double band = Math.max(0, Math.sin((x + y) * 0.22)) * Math.max(0, (y - 34) / 30);
+        for (float y = pitch / 2f; y < artS; y += pitch, row++) {
+            for (float x = pitch / 2f + (row % 2) * pitch / 2f; x < artS; x += pitch) {
+                double nx = x / artS * 64, ny = y / artS * 64;
+                double d1 = Math.hypot(nx - 42, ny - 22) / 18, sun = Math.max(0, 1 - d1 * d1);
+                double band = Math.max(0, Math.sin((nx + ny) * 0.22)) * Math.max(0, (ny - 34) / 30);
                 double b = Math.min(1, sun + band * 0.8 + 0.06);
-                float r = (float) (1.9 * Math.sqrt(b));
-                if (r < 0.25f) continue;
-                c.drawCircle(artX + x * k, artY + y * k, r * k, p);
+                float r = (float) (rMax * Math.sqrt(b));
+                if (r < 0.25f * rMax) continue;
+                dot.draw(c, artX + x, artY + y, r, 1f);
             }
         }
         p.setStyle(Paint.Style.STROKE);
         p.setStrokeWidth(Math.max(1f, k));
-        p.setColor(0xFF262626);
+        p.setColor(DotStyle.FAINT);
         c.drawRect(artX + p.getStrokeWidth() / 2f, artY + p.getStrokeWidth() / 2f,
             artX + artS - p.getStrokeWidth() / 2f, artY + artS - p.getStrokeWidth() / 2f, p);
 
         if (np == null) return bmp;
         float textX = artX + artS + 14f * k;
-        float maxW = Math.max(1f, wPx - 132f * density - textX - 4f * k);
+        float maxW = Math.max(1f, wPx - 132f * dens - textX - 4f * k);
         Paint title = new Paint(Paint.ANTI_ALIAS_FLAG);
         title.setTypeface(Fonts.interMedium(ctx));
         title.setTextSize(15f * k);
-        title.setColor(Color.WHITE);
+        title.setColor(DotStyle.FG);
         Paint artist = new Paint(Paint.ANTI_ALIAS_FLAG);
         artist.setTypeface(Fonts.inter(ctx));
         artist.setTextSize(13f * k);
-        artist.setColor(0xFF9C9C9C);
+        artist.setColor(DotStyle.FG2);
 
         float blockH = 15f * k + 3f * k + 13f * k + 9f * k + 2f * k;
         float y = (hPx - blockH) / 2f;
@@ -198,12 +203,12 @@ final class WidgetArt {
         y += 13f * k + 9f * k;
 
         Paint bar = new Paint();
-        bar.setColor(0xFF2A2A2A);
+        bar.setColor(DotStyle.FAINT);
         c.drawRect(textX, y, textX + maxW, y + 2f * k, bar);
         if (np.durationMs > 0) {
             long pos = np.positionAt(android.os.SystemClock.elapsedRealtime());
             float frac = Math.max(0f, Math.min(1f, pos / (float) np.durationMs));
-            bar.setColor(Color.WHITE);
+            bar.setColor(DotStyle.FG);
             c.drawRect(textX, y, textX + maxW * frac, y + 2f * k, bar);
         }
         return bmp;
@@ -215,15 +220,13 @@ final class WidgetArt {
     }
 
     /**
-     * Soft dark rounded backing: a faint larger rounded rect under a 55% black one. Rounds only the outer
+     * Soft dark rounded backing in {@link DotStyle#PANEL}. Rounds only the outer
      * corners on the sides flagged (left/right); an unflagged side runs square to the bitmap edge so adjacent
      * widget halves read as one continuous panel. inset and radius are passed in so halves can share them.
      */
     private static void backdrop(Canvas c, int wPx, int hPx, float inset, float r, boolean left, boolean right) {
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        p.setColor(0x40000000);
-        c.drawPath(panel(0, 0, wPx, hPx, r + inset, left, right), p);
-        p.setColor(0x8C000000);
+        p.setColor(DotStyle.PANEL);
         float l = left ? inset : 0f, rt = right ? wPx - inset : wPx;
         c.drawPath(panel(l, inset, rt, hPx - inset, r, left, right), p);
     }
@@ -249,7 +252,7 @@ final class WidgetArt {
         p.setStyle(Paint.Style.STROKE);
         p.setStrokeCap(Paint.Cap.ROUND);
         p.setStrokeJoin(Paint.Join.ROUND);
-        p.setColor(Color.WHITE);
+        p.setColor(DotStyle.FG);
         float u = size / 24f;
         c.save();
         c.translate(x, y);

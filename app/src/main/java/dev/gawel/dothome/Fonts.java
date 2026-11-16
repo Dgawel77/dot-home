@@ -24,6 +24,8 @@ final class Fonts {
 
     static Typeface interMedium(Context c) { return load(c.getAssets(), INTER_MEDIUM, 500); }
 
+    static Typeface interBold(Context c) { return load(c.getAssets(), INTER, 700); }
+
     static synchronized Typeface load(AssetManager assets, String path, int weight) {
         String key = path + "@" + weight;
         Typeface cached = CACHE.get(key);

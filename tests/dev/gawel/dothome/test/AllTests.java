@@ -9,7 +9,6 @@ import java.util.Comparator;
 public final class AllTests {
     /** Add each new test class here. */
     static final Class<?>[] SUITES = {
-        DotMatrixFontTest.class,
         MiniJsonTest.class,
         NowPlayingTest.class,
         RngTest.class,
@@ -27,6 +26,7 @@ public final class AllTests {
         dev.gawel.dothome.core.AppFilterTest.class,
         dev.gawel.dothome.core.ShakeDetectorTest.class,
         dev.gawel.dothome.core.DotScaleTest.class,
+        dev.gawel.dothome.core.DotFillTest.class,
     };
 
     public static void main(String[] args) throws Exception {
