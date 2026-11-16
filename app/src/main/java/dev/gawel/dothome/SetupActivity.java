@@ -60,13 +60,13 @@ public class SetupActivity extends Activity {
             });
         });
 
-        FireMode[] modes = {FireMode.TAP_COMMAND, FireMode.TAP_TOUCH, FireMode.AUTO};
-        String[] names = {"Tap (home screen tap)", "Tap (raw touch)", "Auto-fire"};
+        FireMode[] modes = {FireMode.TAP_TOUCH, FireMode.TAP_COMMAND, FireMode.AUTO};
+        String[] names = {"Tap (raw touch) - recommended", "Tap (home screen tap)", "Auto-fire"};
         FireMode current;
         try {
-            current = FireMode.valueOf(prefs.get("fire.mode", FireMode.TAP_COMMAND.name()));
+            current = FireMode.valueOf(prefs.get("fire.mode", FireMode.TAP_TOUCH.name()));
         } catch (IllegalArgumentException e) {
-            current = FireMode.TAP_COMMAND;
+            current = FireMode.TAP_TOUCH;
         }
         RadioGroup group = findViewById(R.id.fire_group);
         for (int i = 0; i < modes.length; i++) {

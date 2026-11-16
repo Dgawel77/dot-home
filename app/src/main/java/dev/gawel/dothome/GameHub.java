@@ -1,13 +1,7 @@
 package dev.gawel.dothome;
 
 import android.content.Context;
-import android.util.Log;
 
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.TimeZone;
@@ -18,7 +12,6 @@ import dev.gawel.dothome.core.Rng;
 import dev.gawel.dothome.core.Weather;
 import dev.gawel.dothome.core.TiltInput;
 import dev.gawel.dothome.core.ScoreBook;
-import dev.gawel.dothome.core.Zones;
 
 /**
  * Per-process hub: one GameWorld shared by every wallpaper engine, so a fold/unfold carries the same run.
@@ -35,7 +28,6 @@ final class GameHub {
     private final SensorTilt tilt;
     private final List<DotWallpaperService.DotEngine> visible = new ArrayList<>();
     private FireMode fireMode;
-    private String zonesJson;
     private DotRenderer renderer;
 
     static synchronized GameHub get(Context context) {
@@ -79,11 +71,6 @@ final class GameHub {
 
     FireMode fireMode() { return fireMode; }
 
-    /** Zones in surface pixels for the given size: zones.json when present and valid, else the defaults. */
-    List<float[]> zonesPx(float w, float h) {
-        return zonesJson == null ? Zones.defaults(w, h) : Zones.parse(zonesJson, w, h);
-    }
-
     /** True when this engine is the most recently visible one that is actually rendering (has a surface). */
     boolean isActive(DotWallpaperService.DotEngine e) {
         for (int i = visible.size() - 1; i >= 0; i--) {
@@ -96,7 +83,6 @@ final class GameHub {
         visible.remove(e);
         visible.add(e);
         fireMode = readFireMode();
-        zonesJson = readZonesJson();
         // the zone may have changed since the last visible period; keep the persisted keys/values
         scoreBook = new ScoreBook(prefs, System::currentTimeMillis, TimeZone.getDefault());
         world.setAutoFire(fireMode == FireMode.AUTO);
@@ -140,26 +126,10 @@ final class GameHub {
 
     private FireMode readFireMode() {
         try {
-            return FireMode.valueOf(prefs.get("fire.mode", FireMode.TAP_COMMAND.name()));
+            return FireMode.valueOf(prefs.get("fire.mode", FireMode.TAP_TOUCH.name()));
         } catch (IllegalArgumentException ex) {
-            return FireMode.TAP_COMMAND;
+            return FireMode.TAP_TOUCH;
         }
     }
 
-    private String readZonesJson() {
-        File dir = appContext.getExternalFilesDir(null);
-        if (dir == null) return null;
-        File f = new File(dir, "zones.json");
-        if (!f.isFile()) return null;
-        try (InputStream in = new FileInputStream(f)) {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            byte[] buf = new byte[4096];
-            int n;
-            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
-            return out.toString("UTF-8");
-        } catch (IOException ex) {
-            Log.w("DotHome", "zones.json unreadable, using defaults: " + ex);
-            return null;
-        }
-    }
 }

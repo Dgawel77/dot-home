@@ -31,11 +31,13 @@ final class WidgetArt {
 
     private WidgetArt() {}
 
-    static Bitmap clock(Context ctx, int wPx, int hPx, long nowMs) {
+    static Bitmap clock(Context ctx, int wPx, int hPx, long nowMs, boolean backdrop) {
         Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
         float k = Math.min(wPx / CLOCK_REF_W, hPx / REF_H);
-        backdrop(ctx, c, wPx, hPx, k, true, false);
+        float u = hPx / REF_H; // height-derived so both halves' backdrop geometry matches at the seam
+        if (backdrop) backdrop(c, wPx, hPx, 4f * u, 24f * u, true, false);
+        float pad = 4f * u + 10f * k; // content clearance inside the backdrop edge
 
         Calendar cal = Calendar.getInstance();
         cal.setTimeInMillis(nowMs);
@@ -44,7 +46,7 @@ final class WidgetArt {
         DotMatrixFont.Grid g = DotMatrixFont.render(hour + ":" + (cal.get(Calendar.MINUTE) < 10 ? "0" : "")
             + cal.get(Calendar.MINUTE));
 
-        float padL = 4f * k;
+        float padL = pad;
         float pitch = Math.min(11f * k, (wPx - padL - 2f * k) / g.cols);
         float radius = pitch * 3f / 11f; // the mockup's 6 px dot on an 11 px pitch
         float gridH = g.rows * pitch;
@@ -76,12 +78,14 @@ final class WidgetArt {
         return bmp;
     }
 
-    static Bitmap weather(Context ctx, int wPx, int hPx, Weather w, long nowMs) {
+    static Bitmap weather(Context ctx, int wPx, int hPx, Weather w, long nowMs, boolean backdrop) {
         Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
         float k = Math.min(wPx / WEATHER_REF_W, hPx / REF_H);
-        backdrop(ctx, c, wPx, hPx, k, false, true);
-        float right = wPx - 4f * k, maxW = wPx - 8f * k;
+        float u = hPx / REF_H;
+        if (backdrop) backdrop(c, wPx, hPx, 4f * u, 24f * u, false, true);
+        float pad = 4f * u + 10f * k;
+        float right = wPx - pad, maxW = wPx - pad - 4f * k;
 
         Paint doto = new Paint(Paint.ANTI_ALIAS_FLAG);
         doto.setTypeface(Fonts.doto(ctx));
@@ -144,13 +148,13 @@ final class WidgetArt {
      * hairline. k is the display density (capped so the art fits the height). The right 132 dp is left clear
      * for the three transport buttons.
      */
-    static Bitmap music(Context ctx, int wPx, int hPx, NowPlaying np) {
+    static Bitmap music(Context ctx, int wPx, int hPx, NowPlaying np, boolean backdrop) {
         Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
         float density = ctx.getResources().getDisplayMetrics().density;
         float k = Math.max(0.1f, Math.min(density, hPx / 72f));
-        backdrop(ctx, c, wPx, hPx, k, true, true);
-        float artS = 64f * k, artY = (hPx - artS) / 2f, artX = 4f * k;
+        if (backdrop) backdrop(c, wPx, hPx, 2f * k, 16f * k, true, true);
+        float artS = 64f * k, artY = (hPx - artS) / 2f, artX = 14f * k;
 
         // art square: black, dots on a staggered 4k grid brightest toward a "sun" and a lower band
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -213,12 +217,10 @@ final class WidgetArt {
     /**
      * Soft dark rounded backing: a faint larger rounded rect under a 55% black one. Rounds only the outer
      * corners on the sides flagged (left/right); an unflagged side runs square to the bitmap edge so adjacent
-     * widget halves read as one continuous panel.
+     * widget halves read as one continuous panel. inset and radius are passed in so halves can share them.
      */
-    private static void backdrop(Context ctx, Canvas c, int wPx, int hPx, float k, boolean left, boolean right) {
-        if (!backdropOn(ctx)) return;
+    private static void backdrop(Canvas c, int wPx, int hPx, float inset, float r, boolean left, boolean right) {
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        float inset = 4f * k, r = 24f * k;
         p.setColor(0x40000000);
         c.drawPath(panel(0, 0, wPx, hPx, r + inset, left, right), p);
         p.setColor(0x8C000000);

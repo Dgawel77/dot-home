@@ -19,7 +19,6 @@ import android.view.SurfaceHolder;
 import android.view.ViewConfiguration;
 import android.view.WindowManager;
 
-
 import dev.gawel.dothome.core.FireMode;
 import dev.gawel.dothome.core.GameWorld;
 
@@ -224,7 +223,11 @@ public class DotWallpaperService extends WallpaperService {
 
         @Override
         public void onTouchEvent(MotionEvent ev) {
-            if (hub.fireMode() != FireMode.TAP_TOUCH || !hub.isActive(this)) return;
+            if (hub.fireMode() != FireMode.TAP_TOUCH) return;
+            if (!hub.isActive(this)) {
+                if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) Log.i(TAG, "touch ignored (inactive engine)");
+                return;
+            }
             switch (ev.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     Log.i(TAG, "touch DOWN x=" + ev.getX() + " y=" + ev.getY());
@@ -255,6 +258,10 @@ public class DotWallpaperService extends WallpaperService {
                     touchValid = false;
                     break;
                 }
+                case MotionEvent.ACTION_CANCEL:
+                    Log.i(TAG, "touch CANCEL");
+                    touchValid = false;
+                    break;
                 default:
                     touchValid = false;
             }
