@@ -39,11 +39,12 @@ public class DotWallpaperService extends WallpaperService {
         public void onSurfaceChanged(SurfaceHolder holder, int format, int w, int h) {
             width = w;
             height = h;
-            hub.world().resize(w, h);
             zones = hub.zonesPx(w, h);
-            if (rendering) Log.i(TAG, "render on " + w + "x" + h);
+            boolean wasRendering = rendering;
             surfaceValid = true;
             maybeStart();
+            if (wasRendering) Log.i(TAG, "render on " + w + "x" + h);
+            fitWorld();
         }
 
         @Override
@@ -58,11 +59,9 @@ public class DotWallpaperService extends WallpaperService {
             visible = isVisible;
             if (isVisible) {
                 hub.onVisible(this);
-                if (width > 0 && height > 0) {
-                    hub.world().resize(width, height);
-                    zones = hub.zonesPx(width, height);
-                }
+                if (width > 0 && height > 0) zones = hub.zonesPx(width, height);
                 maybeStart();
+                fitWorld();
             } else {
                 stopRendering();
                 hub.onHidden(this);
@@ -76,6 +75,18 @@ public class DotWallpaperService extends WallpaperService {
             if (visible) {
                 visible = false;
                 hub.onHidden(this);
+            }
+        }
+
+        boolean isRendering() { return rendering; }
+
+        /** The shared world follows the active engine's size; inactive engines never resize it. */
+        private void fitWorld() {
+            GameWorld world = hub.world();
+            if (width > 0 && height > 0 && hub.isActive(this)
+                    && (world.width() != width || world.height() != height)) {
+                world.resize(width, height);
+                zones = hub.zonesPx(width, height);
             }
         }
 
@@ -100,6 +111,7 @@ public class DotWallpaperService extends WallpaperService {
             float dt = lastNanos == 0 ? 0f : (frameTimeNanos - lastNanos) / 1e9f;
             lastNanos = frameTimeNanos;
             GameWorld world = hub.world();
+            fitWorld(); // covers control passing back to this engine when another one hides
             if (world.width() > 0) {
                 if (hub.isActive(this)) {
                     world.step(dt);

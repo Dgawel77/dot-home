@@ -67,9 +67,12 @@ final class GameHub {
         return zonesJson == null ? Zones.defaults(w, h) : Zones.parse(zonesJson, w, h);
     }
 
-    /** True when this engine is the one that should call world.step(). */
+    /** True when this engine is the most recently visible one that is actually rendering (has a surface). */
     boolean isActive(DotWallpaperService.DotEngine e) {
-        return !visible.isEmpty() && visible.get(visible.size() - 1) == e;
+        for (int i = visible.size() - 1; i >= 0; i--) {
+            if (visible.get(i).isRendering()) return visible.get(i) == e;
+        }
+        return false;
     }
 
     void onVisible(DotWallpaperService.DotEngine e) {

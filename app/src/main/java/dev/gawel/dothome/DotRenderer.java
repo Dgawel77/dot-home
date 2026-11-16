@@ -164,7 +164,7 @@ final class DotRenderer {
         List<GameWorld.Rock> rocks = w.rocks();
         for (int i = 0; i < rocks.size(); i++) {
             GameWorld.Rock r = rocks.get(i);
-            if (r.y + r.r < clearTopY) continue;
+            if (clearTopY >= 0 && r.y + 1.12f * r.r + ds < clearTopY) continue;
             RockDots d = rockCache.get(r);
             if (d == null) {
                 d = new RockDots();
@@ -176,7 +176,7 @@ final class DotRenderer {
             for (int j = 0; j < d.n; j++) {
                 float px = d.pts[3 * j], py = d.pts[3 * j + 1], a = d.pts[3 * j + 2];
                 float x = r.x + px * cs - py * sn, y = r.y + px * sn + py * cs;
-                if (y < clearTopY) continue;
+                if (clearTopY >= 0 && y < clearTopY) continue;
                 if (a == 1f) dot(c, x, y, ds, 0.9f * fade);
                 else dot(c, x, y, ds * 0.75f, a * fade);
             }
@@ -185,7 +185,7 @@ final class DotRenderer {
         List<GameWorld.Particle> parts = w.particles();
         for (int i = 0; i < parts.size(); i++) {
             GameWorld.Particle p = parts.get(i);
-            if (p.y < clearTopY) continue;
+            if (clearTopY >= 0 && p.y < clearTopY) continue;
             float lk = p.life / p.life0;
             dot(c, p.x, p.y, ds * (0.45f + 0.55f * lk), p.alpha * lk);
         }
