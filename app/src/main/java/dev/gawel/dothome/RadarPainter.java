@@ -26,7 +26,6 @@ import dev.gawel.dothome.core.RadarScale;
  * {@link RadarView} and the radar widget. Not thread-safe (it owns Paints and a bitset): one per thread.
  */
 final class RadarPainter {
-    private final Context ctx;
     private final float u;       // display density (px per dp) the art is drawn at
     private final float step;    // S4 step in px
     private final float rLight, rReg;
@@ -38,7 +37,6 @@ final class RadarPainter {
     private ClearZones zones;
 
     RadarPainter(Context ctx, float density, boolean region, float topDp, float bottomDp) {
-        this.ctx = ctx;
         this.u = density;
         this.step = Lattice.stepPx(Lattice.Step.S4, density);
         this.rLight = Lattice.radiusPx(Lattice.Step.S4, Lattice.Weight.LIGHT, density);
@@ -73,14 +71,19 @@ final class RadarPainter {
 
     // ---- labels and matrix numerals -----------------------------------------------------------------------
 
-    /** Mono caps label (11 dp, letter-spacing 1/11 em); y is the baseline. */
+    /** Mono label (11 dp, letter-spacing 1/11 em); s must already be upper case; y is the baseline. */
     void label(Canvas c, String s, float x, float y, Paint.Align align, int color) {
         text.setTextAlign(align);
         text.setColor(color);
-        c.drawText(s.toUpperCase(Locale.ROOT), x, y, text);
+        c.drawText(s, x, y, text);
     }
 
-    float labelWidth(String s) { return text.measureText(s.toUpperCase(Locale.ROOT)); }
+    float labelWidth(String s) { return text.measureText(s); }
+
+    /** True when the whole rect is clear of the zones (corners and centre). */
+    private boolean keepRect(float x0, float y0, float x1, float y1) {
+        return keep(x0, y0) && keep(x1, y0) && keep(x0, y1) && keep(x1, y1) && keep((x0 + x1) / 2f, (y0 + y1) / 2f);
+    }
 
     /** Baseline that puts the cap height of a label centred on cy. */
     private float capBase(float cy) {
@@ -88,15 +91,12 @@ final class RadarPainter {
         return cy - (m.ascent + m.descent) / 2f;
     }
 
-    /** Matrix-font text at S4 regular, top-left (ox, oy) on the lattice; returns its width in px. */
-    float matrix(Canvas c, String s, float ox, float oy, int lit, int unlit) {
-        byte[] cells = DotMatrixFont.cells(s);
+    /** Matrix-font cells (from {@link DotMatrixFont#cells}) at S4 regular, top-left (ox, oy) on the lattice; lit cells only. Returns the width in px. */
+    float matrix(Canvas c, byte[] cells, float ox, float oy, int lit) {
         int cols = cells.length / DotMatrixFont.ROWS;
         for (int r = 0; r < DotMatrixFont.ROWS; r++) {
             for (int k = 0; k < cols; k++) {
-                byte v = cells[r * cols + k];
-                if (v < 0) continue;
-                dotAt(c, ox + (k + 0.5f) * step, oy + (r + 0.5f) * step, rReg, v == 1 ? lit : unlit);
+                if (cells[r * cols + k] == 1) dotAt(c, ox + (k + 0.5f) * step, oy + (r + 0.5f) * step, rReg, lit);
             }
         }
         return cols * step;
@@ -108,7 +108,7 @@ final class RadarPainter {
         drawBase(c, p, b, w, h);
         if (frame != null) {
             int cols = (int) Math.ceil(w / step), rows = (int) Math.ceil(h / step);
-            drawStorm(c, storm(frame, lons(p, cols), lats(p, rows)));
+            drawStorm(c, filterStorm(storm(frame, lons(p, cols), lats(p, rows))));
         }
         drawPlaces(c, p, b, w, h, lat, lon);
     }
@@ -118,10 +118,11 @@ final class RadarPainter {
                double lat, double lon) {
         List<float[]> rects = new ArrayList<>();
         if (readout != null) {
+            readout = readout.toUpperCase(Locale.ROOT);
             float rw = labelWidth(readout) + 2 * step;
             rects.add(new float[] {readoutX() - step, readoutBase(h) - 12 * u, rw, 18 * u});
         }
-        setClear(rects, 8 * u);
+        setClear(rects, 16 * u);
         paintMap(c, w, h, p, b, frame, lat, lon);
         drawLocation(c, p.x(lon), p.y(lat));
         drawReadout(c, h, readout);
@@ -150,7 +151,7 @@ final class RadarPainter {
     /** Mono label, bottom left. */
     void drawReadout(Canvas c, int h, String readout) {
         if (readout == null) return;
-        label(c, readout, readoutX(), readoutBase(h), Paint.Align.LEFT, DotStyle.L65);
+        label(c, readout.toUpperCase(Locale.ROOT), readoutX(), readoutBase(h), Paint.Align.LEFT, DotStyle.L65);
     }
 
     // ---- static layers -------------------------------------------------------------------------------------
@@ -205,32 +206,37 @@ final class RadarPainter {
         for (Basemap.Label l : bm.regions) {
             if (!region && !l.name.startsWith("LAKE")) continue;
             float x = p.x(l.lon), y = p.y(l.lat);
-            if (y < topPad || y > h - bottomPad || x < 0 || x > w || !keep(x, y)) continue;
-            c.drawText(l.name.toUpperCase(Locale.ROOT), x, y, text);
+            if (y < topPad || y > h - bottomPad || x < 0 || x > w) continue;
+            String name = l.name.toUpperCase(Locale.ROOT);
+            float hw = labelWidth(name) / 2f;
+            if (!keepRect(x - hw, y - 9 * u, x + hw, y + 3 * u)) continue;
+            c.drawText(name, x, y, text);
         }
         BoxSet drawn = new BoxSet();
         for (Basemap.Road r : bm.roads) {
             if (r.pts.length == 0) continue;
             double[] q = r.pts[r.pts.length / 2];
             float x = p.x(q[0]), y = p.y(q[1]);
-            if (x < 16 * u || x > w - 16 * u || y < topPad || y > h - bottomPad || !keep(x, y)) continue;
+            if (x < 16 * u || x > w - 16 * u || y < topPad || y > h - bottomPad) continue;
             routeBox(c, r.ref, x, y, drawn);
         }
     }
 
-    /** A route number: a rectangle outline of S4 regular L46 dots (4 rows tall, snapped to the lattice) around an L65 mono label. */
+    /** A route number: a 5-row rectangle outline of S4 regular L46 dots (snapped to the lattice) around an L65 mono label. */
     private void routeBox(Canvas c, String ref, float x, float y, BoxSet drawn) {
+        ref = ref.toUpperCase(Locale.ROOT);
         float tw = labelWidth(ref);
         int nc = (int) Math.ceil((tw + 8 * u) / step) + 1;
-        float left = cell(x - (nc - 1) * step / 2f), top = cell(y - 1.5f * step);
-        float cx = left + (nc - 1) * step / 2f, cy = top + 1.5f * step;
-        if (!drawn.tryAdd(left - step, top - step, left + nc * step, top + 4 * step)) return; // overlaps another box
+        float left = cell(x - (nc - 1) * step / 2f), top = cell(y - 2 * step);
+        float cx = left + (nc - 1) * step / 2f, cy = top + 2 * step;
+        if (!keepRect(left - step, top - step, left + nc * step, top + 5 * step)) return;
+        if (!drawn.tryAdd(left - step, top - step, left + nc * step, top + 5 * step)) return; // overlaps another box
         dot.setColor(DotStyle.L46);
         for (int i = 0; i < nc; i++) {
             c.drawCircle(left + i * step, top, rReg, dot);
-            c.drawCircle(left + i * step, top + 3 * step, rReg, dot);
+            c.drawCircle(left + i * step, top + 4 * step, rReg, dot);
         }
-        for (int j = 1; j <= 2; j++) {
+        for (int j = 1; j <= 3; j++) {
             c.drawCircle(left, top + j * step, rReg, dot);
             c.drawCircle(left + (nc - 1) * step, top + j * step, rReg, dot);
         }
@@ -244,12 +250,14 @@ final class RadarPainter {
         for (Basemap.Label l : bm.places) {
             if (l.rank > maxRank) continue;
             float x = p.x(l.lon), y = p.y(l.lat);
-            if (x < 8 * u || x > w - 8 * u || y < topPad || y > h - bottomPad || !keep(x, y)) continue;
+            if (x < 8 * u || x > w - 8 * u || y < topPad || y > h - bottomPad) continue;
+            String name = l.name.toUpperCase(Locale.ROOT);
+            if (!keepRect(x - step, y - 8 * u, x + 2 * step + labelWidth(name), y + 8 * u)) continue;
             boolean mine = Math.hypot(x - ux, y - uy) < 12 * u;
             int color = mine ? DotStyle.L100 : DotStyle.L65;
             float cx = cell(x), cy = cell(y);
             dotAt(c, cx, cy, rReg, color);
-            label(c, l.name, cx + 2 * step, capBase(cy), Paint.Align.LEFT, color);
+            label(c, name, cx + 2 * step, capBase(cy), Paint.Align.LEFT, color);
         }
     }
 
@@ -270,32 +278,40 @@ final class RadarPainter {
     }
 
     /**
-     * One frame's storm as (cx, cy, diameter) triples in lattice-cell units: the echo intensity at each S4 cell
-     * centre becomes a grey image of one pixel per cell, and {@link Halftone#dots} makes the dots.
+     * One frame's storm as (cx, cy, diameter) triples in lattice-cell units: the calibrated echo intensity at each
+     * S4 cell centre goes to {@link Halftone#dotsAbsolute}, with no contrast stretch.
      */
     static float[] storm(RadarTiles.Frame fr, double[] lons, double[] lats) {
         int cols = lons.length, rows = lats.length;
-        int[] argb = new int[cols * rows];
+        float[] b = new float[cols * rows];
         for (int j = 0; j < rows; j++) {
-            for (int i = 0; i < cols; i++) {
-                int g = Math.round(Math.min(1f, Math.max(0f, RadarScale.intensity(fr.argbAt(lons[i], lats[j])))) * 255f);
-                argb[j * cols + i] = 0xFF000000 | (g << 16) | (g << 8) | g;
-            }
+            for (int i = 0; i < cols; i++) b[j * cols + i] = RadarScale.intensity(fr.argbAt(lons[i], lats[j]));
         }
-        return Halftone.dots(argb, cols, rows, 1);
+        return Halftone.dotsAbsolute(b, cols, rows, 1f);
     }
 
-    /** The storm in L65 dots, scaled from cell units to px. */
+    /** Drops the dots the clear zones remove (run on the worker); input and output are in cell units. */
+    float[] filterStorm(float[] dots) {
+        if (zones == null) return dots;
+        float[] out = new float[dots.length];
+        int n = 0;
+        for (int i = 0; i + 2 < dots.length; i += 3) {
+            if (!keep(dots[i] * step, dots[i + 1] * step)) continue;
+            out[n++] = dots[i];
+            out[n++] = dots[i + 1];
+            out[n++] = dots[i + 2];
+        }
+        return java.util.Arrays.copyOf(out, n);
+    }
+
+    /** The (already filtered) storm in L65 dots, scaled from cell units to px. */
     void drawStorm(Canvas c, float[] dots) {
         dot.setColor(DotStyle.L65);
-        for (int i = 0; i + 2 < dots.length; i += 3) {
-            float x = dots[i] * step, y = dots[i + 1] * step;
-            if (keep(x, y)) c.drawCircle(x, y, dots[i + 2] * step / 2f, dot);
-        }
+        for (int i = 0; i + 2 < dots.length; i += 3) c.drawCircle(dots[i] * step, dots[i + 1] * step, dots[i + 2] * step / 2f, dot);
     }
 
     /** Dot diameter in px of a legend sample at this brightness (Halftone's rule). */
-    float stormDiameter(float brightness) { return (float) Math.sqrt(brightness) * 0.85f * step; }
+    float stormDiameter(float brightness) { return Halftone.diameter(brightness, step); }
 
     // ---- helpers -------------------------------------------------------------------------------------------
 
@@ -321,7 +337,7 @@ final class RadarPainter {
             if ((x1 < -step && x2 < -step) || (x1 > w + step && x2 > w + step)
                 || (y1 < -step && y2 < -step) || (y1 > h + step && y2 > h + step)) continue;
             float len = (float) Math.hypot(x2 - x1, y2 - y1);
-            int n = Math.max(1, Math.round(len / step));
+            int n = Math.max(1, (int) Math.ceil(len / step));
             for (int j = 0; j <= n; j++) {
                 float t = j / (float) n;
                 int ci = (int) Math.floor((x1 + (x2 - x1) * t) / step), cj = (int) Math.floor((y1 + (y2 - y1) * t) / step);

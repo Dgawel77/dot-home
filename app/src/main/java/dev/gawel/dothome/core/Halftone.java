@@ -40,7 +40,32 @@ public final class Halftone {
                 if (b < SKIP_BELOW) continue;
                 out[n++] = (cx + 0.5f) * stepPx;
                 out[n++] = (cy + 0.5f) * stepPx;
-                out[n++] = (float) Math.sqrt(b) * MAX_FILL * stepPx;
+                out[n++] = diameter(b, stepPx);
+            }
+        }
+        return Arrays.copyOf(out, n);
+    }
+
+    /** Dot diameter for brightness b in 0..1: sqrt(b) x 0.85 x step. */
+    public static float diameter(float b, float stepPx) {
+        return (float) Math.sqrt(b) * MAX_FILL * stepPx;
+    }
+
+    /**
+     * Calibrated data (radar intensity): brightness b (0..1, row-major cols x rows) goes straight to dots on a
+     * square lattice of stepPx cells, with no contrast stretch, so a value always gives the same dot.
+     * Cells below 10% are skipped. Returns (cx, cy, diameter) triples.
+     */
+    public static float[] dotsAbsolute(float[] b, int cols, int rows, float stepPx) {
+        float[] out = new float[cols * rows * 3];
+        int n = 0;
+        for (int cy = 0; cy < rows; cy++) {
+            for (int cx = 0; cx < cols; cx++) {
+                float v = Math.min(1f, Math.max(0f, b[cy * cols + cx]));
+                if (v < SKIP_BELOW) continue;
+                out[n++] = (cx + 0.5f) * stepPx;
+                out[n++] = (cy + 0.5f) * stepPx;
+                out[n++] = diameter(v, stepPx);
             }
         }
         return Arrays.copyOf(out, n);

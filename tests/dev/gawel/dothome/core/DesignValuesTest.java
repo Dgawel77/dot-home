@@ -226,4 +226,33 @@ public final class DesignValuesTest {
         T.check(farKept > nearKept, "kept share rises with distance: far " + farKept + " near " + nearKept);
         T.check(nearKept < n, "near thinned");
     }
+
+    public static void testAbsoluteLoneCell() {
+        float[] b = new float[16 * 16];
+        b[5 * 16 + 7] = 0.25f;
+        float[] d = Halftone.dotsAbsolute(b, 16, 16, 4f);
+        T.eq(3, d.length, "one dot");
+        T.near(7.5f * 4, d[0], 1e-4, "cx");
+        T.near(5.5f * 4, d[1], 1e-4, "cy");
+        T.near(Math.sqrt(0.25) * 0.85 * 4, d[2], 1e-4, "diameter");
+    }
+
+    public static void testAbsoluteIndependentOfNeighbours() {
+        float[] a = new float[64], c = new float[64];
+        a[10] = 0.6f;
+        java.util.Arrays.fill(c, 1f);
+        c[10] = 0.6f;
+        float[] da = Halftone.dotsAbsolute(a, 8, 8, 4f);
+        float[] dc = Halftone.dotsAbsolute(c, 8, 8, 4f);
+        T.near(da[2], dc[10 * 3 + 2], 1e-6, "same value same diameter");
+        T.near(Halftone.diameter(0.6f, 4f), da[2], 1e-6, "shared helper");
+    }
+
+    public static void testAbsoluteThreshold() {
+        float[] b = new float[4];
+        b[0] = 0.09f;
+        T.eq(0, Halftone.dotsAbsolute(b, 2, 2, 4f).length, "0.09 skipped");
+        b[0] = 0.10f;
+        T.eq(3, Halftone.dotsAbsolute(b, 2, 2, 4f).length, "0.10 kept");
+    }
 }

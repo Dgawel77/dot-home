@@ -73,6 +73,7 @@ public class RadarActivity extends Activity {
         titles.setOrientation(LinearLayout.VERTICAL);
         TextView title = text("Radar", 20, DotStyle.L100, Fonts.interMedium(this));
         subtitle = text("", 13, DotStyle.L65, Fonts.inter(this));
+        titles.setClickable(true); // taps on the header text must not toggle the map
         titles.addView(title);
         titles.addView(subtitle);
         header.addView(titles, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -90,6 +91,7 @@ public class RadarActivity extends Activity {
 
         credits = text(CREDITS, 13, DotStyle.L46, Fonts.inter(this));
         credits.setPadding(px(16), px(8), px(16), px(8));
+        credits.setClickable(true);
         root.addView(credits, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
         setContentView(root);
@@ -193,7 +195,7 @@ public class RadarActivity extends Activity {
     }
 
     private void stylePill(TextView t, boolean on) {
-        float r = px(19);
+        float r = px(20);
         ShapeDrawable bg = new ShapeDrawable(new RoundRectShape(new float[] {r, r, r, r, r, r, r, r}, null, null));
         bg.getPaint().setColor(on ? DotStyle.L10 : Color.TRANSPARENT);
         t.setBackground(bg);
@@ -203,8 +205,8 @@ public class RadarActivity extends Activity {
     private TextView pill(String label) {
         TextView t = text(label, 13, DotStyle.L46, Fonts.interMedium(this));
         t.setGravity(Gravity.CENTER);
-        t.setMinWidth(px(78));
-        t.setMinHeight(px(38));
+        t.setMinWidth(px(80));
+        t.setMinHeight(px(40));
         t.setPadding(px(16), 0, px(16), 0);
         t.setClickable(true);
         return t;
