@@ -3,11 +3,13 @@ package dev.gawel.dothome;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.RectF;
+import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.text.format.DateFormat;
 
@@ -26,7 +28,7 @@ import dev.gawel.dothome.core.Weather;
 import dev.gawel.dothome.core.WeatherCodes;
 
 /**
- * Draws the clock, weather and music widgets as bitmaps (a solid GROUND panel when backdrops are on) on the 4 dp lattice. Every function takes the
+ * Draws the clock, weather and music widgets as bitmaps (a dark glass card when backdrops are on) on the 4 dp lattice. Every function takes the
  * effective density (display density times the shrink applied to the bitmap), so sizes come out as true dp once
  * the launcher stretches the bitmap back. Content offsets snap to multiples of the step; no containers, glows or
  * gradients.
@@ -36,7 +38,13 @@ final class WidgetArt {
     private static final int WORST_TEMP_COLS = 23;
     private static final float ART_RADIUS_DP = 12f;
     private static final float ICON_STROKE_DP = 1.6f;
-    private static final float PANEL_RADIUS_DP = 24f;
+    /** Dark glass card: fill, 1 dp inner hairline, top sheen (peak at centre, 0 at the corners), inset map shade. */
+    static final int GLASS_FILL = 0xF0121212;
+    static final int GLASS_EDGE = 0x1FFFFFFF;
+    static final int GLASS_SHEEN = 0x14FFFFFF;
+    static final int GLASS_SHADE = 0x66000000;
+    static final float GLASS_RADIUS_DP = 24f;
+    static final float GLASS_SHADE_DP = 6f;
 
     private WidgetArt() {}
 
@@ -71,10 +79,10 @@ final class WidgetArt {
         return p;
     }
 
-    static Bitmap clock(Context ctx, int wPx, int hPx, long nowMs, Lattice.Step step, float dens) {
+    static Bitmap clock(Context ctx, int wPx, int hPx, long nowMs, Lattice.Step step, float dens, int xOff, int totalW) {
         Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
-        backdrop(ctx, c, bmp.getWidth(), bmp.getHeight(), dens, true, false);
+        backdrop(ctx, c, bmp.getHeight(), dens, xOff, totalW);
 
         Calendar cal = Calendar.getInstance();
         cal.setTimeInMillis(nowMs);
@@ -106,10 +114,10 @@ final class WidgetArt {
         return bmp;
     }
 
-    static Bitmap weather(Context ctx, int wPx, int hPx, Weather w, long nowMs, float dens) {
+    static Bitmap weather(Context ctx, int wPx, int hPx, Weather w, long nowMs, float dens, int xOff, int totalW) {
         Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
-        backdrop(ctx, c, bmp.getWidth(), bmp.getHeight(), dens, false, true);
+        backdrop(ctx, c, bmp.getHeight(), dens, xOff, totalW);
 
         String temp = w == null ? "\u2212\u2212\u00B0" : tempText(Math.round(w.tempF));
         byte[] cells = DotMatrixFont.cells(temp);
@@ -217,7 +225,7 @@ final class WidgetArt {
     static Bitmap music(Context ctx, int wPx, int hPx, NowPlaying np, float dens) {
         Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
-        backdrop(ctx, c, bmp.getWidth(), bmp.getHeight(), dens, true, true);
+        backdrop(ctx, c, bmp.getHeight(), dens, 0, bmp.getWidth());
         float s4 = Lattice.stepPx(Lattice.Step.S4, dens);
         float artS = 64f * dens;
         float artX = 16f * dens, artY = Lattice.snap((hPx - artS) / 2f, dens);
@@ -256,35 +264,70 @@ final class WidgetArt {
         return bmp;
     }
 
-    /** Pref "widget.backdrop" (default on): whether widgets draw their own solid black panel. */
+    /** Pref "widget.backdrop" (default on): whether widgets draw their own dark glass card. */
     static boolean backdropOn(Context ctx) {
         return !"false".equals(new PrefsStore(ctx).get("widget.backdrop", "true"));
     }
 
     /**
-     * Opaque GROUND rounded panel filling the bitmap, 24 dp corners. Only the flagged sides are rounded; an
-     * unflagged side runs square so adjacent widget halves read as one panel.
+     * Dark glass card for a bitmap that is the part of a totalW-wide widget starting at xOff: the whole card is
+     * drawn in widget coordinates and shifted, so a pair of halves share one outline, hairline and sheen, with no
+     * edge at the seam.
      */
-    private static void backdrop(Context ctx, Canvas c, int wPx, int hPx, float dens, boolean left, boolean right) {
+    private static void backdrop(Context ctx, Canvas c, int hPx, float dens, int xOff, int totalW) {
         if (!backdropOn(ctx)) return;
-        c.drawPath(panel(0, 0, wPx, hPx, PANEL_RADIUS_DP * dens, left, right), fill(DotStyle.GROUND));
+        c.save();
+        c.translate(-xOff, 0);
+        float rad = GLASS_RADIUS_DP * dens;
+        c.drawPath(panel(0, 0, totalW, hPx, rad), fill(GLASS_FILL));
+        float sw = Math.max(1f, dens);
+        Paint sheen = new Paint(Paint.ANTI_ALIAS_FLAG);
+        sheen.setShader(new LinearGradient(0, 0, totalW, 0, new int[] {GLASS_SHEEN & 0xFFFFFF, GLASS_SHEEN, GLASS_SHEEN & 0xFFFFFF},
+            new float[] {0f, 0.5f, 1f}, Shader.TileMode.CLAMP));
+        c.drawRect(rad, sw, totalW - rad, 2f * sw, sheen);
+        c.drawPath(panel(sw / 2f, sw / 2f, totalW - sw / 2f, hPx - sw / 2f, Math.max(0f, rad - sw / 2f)), edge(sw));
+        c.restore();
     }
 
-    private static Path panel(float l, float t, float r, float b, float rad, boolean roundLeft, boolean roundRight) {
-        float lr = roundLeft ? rad : 0f, rr = roundRight ? rad : 0f;
+    private static Paint edge(float sw) {
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        p.setStyle(Paint.Style.STROKE);
+        p.setStrokeWidth(sw);
+        p.setColor(GLASS_EDGE);
+        return p;
+    }
+
+    private static Path panel(float l, float t, float r, float b, float rad) {
         Path path = new Path();
-        path.addRoundRect(new RectF(l, t, r, b), new float[] {lr, lr, rr, rr, rr, rr, lr, lr}, Path.Direction.CW);
+        path.addRoundRect(new RectF(l, t, r, b), rad, rad, Path.Direction.CW);
         return path;
     }
 
-    /** Makes the corners of an opaque bitmap transparent (24 dp radius) when backdrops are on; else untouched. */
-    static void roundCorners(Context ctx, Bitmap bmp, float dens) {
+    /**
+     * Glass finish for an opaque map bitmap when the switch is on: a 6 dp inner shade (GLASS_SHADE fading to 0
+     * inward), transparent rounded corners, then the 1 dp hairline over the rounded edge. No fill over the map.
+     */
+    static void glassMap(Context ctx, Bitmap bmp, float dens) {
         if (!backdropOn(ctx)) return;
-        Path outside = panel(0, 0, bmp.getWidth(), bmp.getHeight(), PANEL_RADIUS_DP * dens, true, true);
+        Canvas cv = new Canvas(bmp);
+        int w = bmp.getWidth(), h = bmp.getHeight();
+        float band = Math.min(GLASS_SHADE_DP * dens, Math.min(w, h) / 2f);
+        int clear = GLASS_SHADE & 0xFFFFFF;
+        float[][] g = {{0, 0, 0, band}, {0, h, 0, h - band}, {0, 0, band, 0}, {w, 0, w - band, 0}};
+        RectF[] r = {new RectF(0, 0, w, band), new RectF(0, h - band, w, h), new RectF(0, 0, band, h), new RectF(w - band, 0, w, h)};
+        for (int i = 0; i < 4; i++) {
+            Paint p = new Paint();
+            p.setShader(new LinearGradient(g[i][0], g[i][1], g[i][2], g[i][3], GLASS_SHADE, clear, Shader.TileMode.CLAMP));
+            cv.drawRect(r[i], p);
+        }
+        float rad = GLASS_RADIUS_DP * dens;
+        Path outside = panel(0, 0, w, h, rad);
         outside.setFillType(Path.FillType.INVERSE_WINDING);
-        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        p.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
-        new Canvas(bmp).drawPath(outside, p);
+        Paint clr = new Paint(Paint.ANTI_ALIAS_FLAG);
+        clr.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
+        cv.drawPath(outside, clr);
+        float sw = Math.max(1f, dens);
+        cv.drawPath(panel(sw / 2f, sw / 2f, w - sw / 2f, h - sw / 2f, Math.max(0f, rad - sw / 2f)), edge(sw));
     }
 
     /** " 2h ago"-style text once the data is older than 90 minutes; null while fresh. Hours, then days. */

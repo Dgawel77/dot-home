@@ -67,8 +67,8 @@ final class WidgetUpdater {
         int h = Math.max(1, Math.round(hPx));
 
         RemoteViews rv = new RemoteViews(ctx.getPackageName(), R.layout.widget_clock);
-        Bitmap clock = safe(h, clockW, () -> WidgetArt.clock(ctx, clockW, h, now, step, eff));
-        Bitmap weather = safe(h, weatherW, () -> WidgetArt.weather(ctx, weatherW, h, wx, now, eff));
+        Bitmap clock = safe(h, clockW, () -> WidgetArt.clock(ctx, clockW, h, now, step, eff, 0, clockW + weatherW));
+        Bitmap weather = safe(h, weatherW, () -> WidgetArt.weather(ctx, weatherW, h, wx, now, eff, clockW, clockW + weatherW));
         if (android.os.Build.VERSION.SDK_INT >= 31) {
             rv.setViewLayoutWidth(R.id.clock_img, clockDp, android.util.TypedValue.COMPLEX_UNIT_DIP);
         } // before 31 the layout's fixed 216 dp stands

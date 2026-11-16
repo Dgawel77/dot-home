@@ -100,7 +100,7 @@ public class SetupActivity extends Activity {
         });
 
         Switch backdrop = new Switch(this);
-        backdrop.setText("Solid widget backgrounds");
+        backdrop.setText("Glass widget backgrounds");
         backdrop.setTextColor(0xFFFFFFFF);
         backdrop.setChecked(WidgetArt.backdropOn(this));
         backdrop.setOnCheckedChangeListener((b, on) -> {

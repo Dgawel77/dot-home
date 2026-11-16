@@ -96,7 +96,7 @@ public class RadarWidget extends AppWidgetProvider {
         Bitmap bmp;
         try {
             bmp = render(ctx, w, h, eff, place, cancelled);
-            WidgetArt.roundCorners(ctx, bmp, eff);
+            WidgetArt.glassMap(ctx, bmp, eff);
         } catch (RuntimeException | OutOfMemoryError e) {
             Log.w(TAG, "radar widget art failed: " + e);
             bmp = Bitmap.createBitmap(Math.max(1, Math.min(w, 64)), Math.max(1, Math.min(h, 64)), Bitmap.Config.ARGB_8888);
