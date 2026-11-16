@@ -726,7 +726,7 @@ TILE_RADIUS = 0.30  # of the tile side
 TILE_RGB = 0x0E
 TILE_ALPHA = 0.55
 SHEEN = 0.14
-GLYPH_SCALE = 0.70
+GLYPH_SCALE = 1.0  # glyph at its original size, exactly as the tile-less icons (the user: 0.70 looked small and squished)
 
 
 def _rounded_mask(size, inset, radius):
