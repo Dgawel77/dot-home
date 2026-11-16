@@ -117,10 +117,10 @@ final class RadarView extends View {
                 rp.setZones(zones);
                 if (g != gen || zg != zgen) return;
                 Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-                rp.drawBase(new Canvas(b), p, bm, w, h);
+                rp.drawBase(new Canvas(b), p, bm, w, h, la, lo);
                 if (g != gen || zg != zgen) return;
                 Bitmap o = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-                rp.drawPlaces(new Canvas(o), p, bm, w, h, la, lo);
+                rp.drawPlaces(new Canvas(o));
                 float[][] f = null;
                 if (rawNow != null) {
                     f = new float[rawNow.length][];
@@ -225,10 +225,10 @@ final class RadarView extends View {
             Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
             rp.setZones(zones);
             if (g != gen) return;
-            rp.drawBase(new Canvas(b), p, bm, w, h);
+            rp.drawBase(new Canvas(b), p, bm, w, h, la, lo);
             if (g != gen) return;
             Bitmap o = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-            rp.drawPlaces(new Canvas(o), p, bm, w, h, la, lo);
+            rp.drawPlaces(new Canvas(o));
             post(() -> {
                 if (g != gen) return;
                 proj = p;

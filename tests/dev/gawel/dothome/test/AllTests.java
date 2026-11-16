@@ -34,6 +34,7 @@ public final class AllTests {
         dev.gawel.dothome.core.LatticeRasterTest.class,
         dev.gawel.dothome.core.IntroGateTest.class,
         dev.gawel.dothome.core.LabelPickerTest.class,
+        dev.gawel.dothome.core.LabelClearTest.class,
     };
 
     public static void main(String[] args) throws Exception {

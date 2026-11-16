@@ -16,6 +16,7 @@ import dev.gawel.dothome.core.DotMatrixFont;
 import dev.gawel.dothome.core.DotStyle;
 import dev.gawel.dothome.core.GeoProjection;
 import dev.gawel.dothome.core.Halftone;
+import dev.gawel.dothome.core.LabelClear;
 import dev.gawel.dothome.core.LabelPicker;
 import dev.gawel.dothome.core.Lattice;
 import dev.gawel.dothome.core.RadarScale;
@@ -36,6 +37,12 @@ final class RadarPainter {
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final BitSet seen = new BitSet();
     private ClearZones zones;
+    private LabelClear labelClear; // padded text rects of this view's labels: map dots never draw under them
+    private final List<float[]> regionAt = new ArrayList<>(); // chosen region labels: x, y
+    private final List<String> regionName = new ArrayList<>();
+    private final List<float[]> placeAt = new ArrayList<>();  // chosen place labels: cx, cy, mine (0/1)
+    private final List<String> placeName = new ArrayList<>();
+    private static final float LABEL_PAD_DP = 4f;
     private BoxSet boxes = new BoxSet(); // region label boxes drawn so far this frame
 
     /** Region view: the basemap has no population, so these major cities (in priority order) are the only ones labelled. */
@@ -68,6 +75,11 @@ final class RadarPainter {
     void setZones(ClearZones z) { zones = z; }
 
     private boolean keep(float x, float y) { return zones == null || zones.keep(x, y) >= 0.5f; }
+
+    /** A map dot of radius r at (x, y): clear of the zones and not under a label. */
+    private boolean keep(float x, float y, float r) {
+        return keep(x, y) && (labelClear == null || !labelClear.hits(x, y, r));
+    }
 
     /** Centre of the lattice cell holding v. */
     private float cell(float v) { return ((float) Math.floor(v / step) + 0.5f) * step; }
@@ -113,12 +125,12 @@ final class RadarPainter {
     // ---- the full flat map: base, storm of one frame, labels, location, readout (the widget's render) -------
 
     private void paintMap(Canvas c, int w, int h, GeoProjection p, Basemap b, RadarTiles.Frame frame, double lat, double lon) {
-        drawBase(c, p, b, w, h);
+        drawBase(c, p, b, w, h, lat, lon);
         if (frame != null) {
             int cols = (int) Math.ceil(w / step), rows = (int) Math.ceil(h / step);
             drawStorm(c, filterStorm(storm(frame, lons(p, cols), lats(p, rows))));
         }
-        drawPlaces(c, p, b, w, h, lat, lon);
+        drawPlaces(c);
     }
 
     /** The widget's whole render. The location dot is static; readout may be null. */
@@ -195,7 +207,8 @@ final class RadarPainter {
 
     // ---- static layers -------------------------------------------------------------------------------------
 
-    void drawBase(Canvas c, GeoProjection p, Basemap bm, int w, int h) {
+    void drawBase(Canvas c, GeoProjection p, Basemap bm, int w, int h, double userLat, double userLon) {
+        layoutLabels(p, bm, w, h, userLat, userLon); // labels first; the map is drawn around them
         c.drawColor(DotStyle.GROUND);
         int cols = (int) Math.ceil(w / step), rows = (int) Math.ceil(h / step);
         // lake polygons in view pixels, with bounding boxes for a cheap reject
@@ -220,28 +233,43 @@ final class RadarPainter {
         int speckles = (int) Math.min(6000, cols * (long) rows / 20);
         for (int i = 0; i < speckles; i++) {
             float x = (rnd.nextInt(cols) + 0.5f) * step, y = (rnd.nextInt(rows) + 0.5f) * step;
-            if (keep(x, y) && !inLake(px, py, bb, x, y)) c.drawCircle(x, y, rLight, dot);
+            if (keep(x, y, rLight) && !inLake(px, py, bb, x, y)) c.drawCircle(x, y, rLight, dot);
         }
         // lake texture: light dots on alternate lattice cells
         for (int j = 0; j < rows; j++) {
             float y = (j + 0.5f) * step;
             for (int i = j & 1; i < cols; i += 2) {
                 float x = (i + 0.5f) * step;
-                if (inLake(px, py, bb, x, y) && keep(x, y)) c.drawCircle(x, y, rLight, dot);
+                if (inLake(px, py, bb, x, y) && keep(x, y, rLight)) c.drawCircle(x, y, rLight, dot);
             }
         }
-        // dot rows at regular weight: borders L46, roads and shore L65
+        // dot rows at regular weight: roads L46, borders and shore L65
         dot.setColor(DotStyle.L46);
         seen.clear();
-        for (double[][] s : bm.states) row(c, p, s, cols, rows);
+        for (Basemap.Road r : bm.roads) row(c, p, r.pts, cols, rows);
         dot.setColor(DotStyle.L65);
         seen.clear();
-        for (Basemap.Road r : bm.roads) row(c, p, r.pts, cols, rows);
+        for (double[][] s : bm.states) row(c, p, s, cols, rows);
         seen.clear();
         for (double[][] s : bm.shore) row(c, p, s, cols, rows);
 
         text.setTextAlign(Paint.Align.CENTER);
         text.setColor(DotStyle.L46);
+        for (int i = 0; i < regionAt.size(); i++) {
+            float[] at = regionAt.get(i);
+            c.drawText(regionName.get(i), at[0], at[1], text);
+        }
+    }
+
+    /**
+     * Chooses every label of this view (region/state names, then places) and builds the padded rects the map
+     * dots avoid. Runs on the worker before the base is drawn; the draws below only replay the choice.
+     */
+    private void layoutLabels(GeoProjection p, Basemap bm, int w, int h, double userLat, double userLon) {
+        List<float[]> text = new ArrayList<>();
+        regionAt.clear(); regionName.clear(); placeAt.clear(); placeName.clear();
+        labelClear = null; // choose against the zones only
+        Paint.FontMetrics m = this.text.getFontMetrics();
         boxes = new BoxSet();
         for (Basemap.Label l : bm.regions) {
             if (!region && !l.name.startsWith("LAKE")) continue;
@@ -251,11 +279,16 @@ final class RadarPainter {
             float hw = labelWidth(name) / 2f;
             if (!keepRect(x - hw, y - 9 * u, x + hw, y + 3 * u)) continue;
             if (!boxes.tryAdd(x - hw, y - 9 * u, x + hw, y + 3 * u)) continue;
-            c.drawText(name, x, y, text);
+            regionAt.add(new float[] {x, y});
+            regionName.add(name);
+            text.add(new float[] {x - hw, y + m.ascent, x + hw, y + m.descent});
         }
+        layoutPlaces(p, bm, w, h, userLat, userLon, text, m);
+        labelClear = LabelClear.of(text, LABEL_PAD_DP * u);
     }
 
-    void drawPlaces(Canvas c, GeoProjection p, Basemap bm, int w, int h, double userLat, double userLon) {
+    private void layoutPlaces(GeoProjection p, Basemap bm, int w, int h, double userLat, double userLon,
+                              List<float[]> text, Paint.FontMetrics m) {
         boolean haveUser = !Double.isNaN(userLat) && !Double.isNaN(userLon);
         float ux = haveUser ? p.x(userLon) : -1e9f, uy = haveUser ? p.y(userLat) : -1e9f;
         List<Basemap.Label> cand = new ArrayList<>();
@@ -302,9 +335,20 @@ final class RadarPainter {
             float cx = cell(x), cy = cell(y);
             // in Region view a city label never lands on a state name (the user's own place always shows)
             if (region && !boxes.tryAdd(cx - step, cy - 8 * u, cx + 2 * step + labelWidth(name), cy + 8 * u) && !mine) continue;
-            int color = mine ? DotStyle.L100 : DotStyle.L65;
-            dotAt(c, cx, cy, rReg, color);
-            label(c, name, cx + 2 * step, capBase(cy), Paint.Align.LEFT, color);
+            placeAt.add(new float[] {cx, cy, mine ? 1f : 0f});
+            placeName.add(name);
+            float base = capBase(cy), x1 = cx + 2 * step + labelWidth(name);
+            text.add(new float[] {cx - rReg, Math.min(cy - rReg, base + m.ascent), x1, Math.max(cy + rReg, base + m.descent)});
+        }
+    }
+
+    /** The place labels chosen by the last {@link #drawBase}: city dot and name, the user's own place in L100. */
+    void drawPlaces(Canvas c) {
+        for (int i = 0; i < placeAt.size(); i++) {
+            float[] at = placeAt.get(i);
+            int color = at[2] > 0f ? DotStyle.L100 : DotStyle.L65;
+            dotAt(c, at[0], at[1], rReg, color);
+            label(c, placeName.get(i), at[0] + 2 * step, capBase(at[1]), Paint.Align.LEFT, color);
         }
     }
 
@@ -343,7 +387,7 @@ final class RadarPainter {
         float[] out = new float[dots.length];
         int n = 0;
         for (int i = 0; i + 2 < dots.length; i += 3) {
-            if (!keep(dots[i] * step, dots[i + 1] * step)) continue;
+            if (!keep(dots[i] * step, dots[i + 1] * step, dots[i + 2] * step / 2f)) continue;
             out[n++] = dots[i];
             out[n++] = dots[i + 1];
             out[n++] = dots[i + 2];
@@ -393,7 +437,7 @@ final class RadarPainter {
                 if (seen.get(k)) continue;
                 seen.set(k);
                 float cx = (ci + 0.5f) * step, cy = (cj + 0.5f) * step;
-                if (keep(cx, cy)) c.drawCircle(cx, cy, rReg, dot);
+                if (keep(cx, cy, rReg)) c.drawCircle(cx, cy, rReg, dot);
             }
         }
     }
