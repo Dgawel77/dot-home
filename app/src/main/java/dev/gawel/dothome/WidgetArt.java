@@ -213,9 +213,9 @@ final class WidgetArt {
         return bmp;
     }
 
-    /** Pref "widget.backdrop" (default on): whether widgets draw their own dark backing. */
+    /** Pref "widget.backdrop" (default off): whether widgets draw their own dark backing. */
     static boolean backdropOn(Context ctx) {
-        return !"false".equals(new PrefsStore(ctx).get("widget.backdrop", "true"));
+        return "true".equals(new PrefsStore(ctx).get("widget.backdrop", "false"));
     }
 
     /**

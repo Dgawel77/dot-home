@@ -21,6 +21,7 @@ import java.util.function.BooleanSupplier;
 
 import dev.gawel.dothome.core.DotStyle;
 import dev.gawel.dothome.core.GeoProjection;
+import dev.gawel.dothome.core.LocationChooser;
 import dev.gawel.dothome.core.Place;
 
 /**
@@ -37,6 +38,11 @@ public class RadarWidget extends AppWidgetProvider {
     @Override
     public void onEnabled(Context context) {
         WeatherJob.schedule(context); // the periodic job also refreshes this widget
+    }
+
+    @Override
+    public void onDisabled(Context context) {
+        WeatherJob.schedule(context); // last radar widget gone: back to the slow period
     }
 
     @Override
@@ -58,6 +64,7 @@ public class RadarWidget extends AppWidgetProvider {
             if (ids == null || ids.length == 0) return; // no widgets: no network work
             try {
                 Place place = LocationSource.cached(ctx);
+                if (place == null) place = new Place(LocationChooser.DEFAULT_LAT, LocationChooser.DEFAULT_LON, Place.Source.DEFAULT);
                 for (int id : ids) {
                     try {
                         RemoteViews rv = views(ctx, mgr, id, place, cancelled);

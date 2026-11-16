@@ -1,5 +1,6 @@
 package dev.gawel.dothome;
 
+import android.appwidget.AppWidgetManager;
 import android.app.job.JobInfo;
 import android.app.job.JobParameters;
 import android.app.job.JobScheduler;
@@ -15,7 +16,17 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class WeatherJob extends JobService {
     static final int ID_PERIODIC = 801;
     static final int ID_ONESHOT = 802;
-    private static final long PERIOD_MS = 15L * 60 * 1000; // JobScheduler's minimum; the radar widget refreshes on it
+    private static final long PERIOD_FAST_MS = 15L * 60 * 1000; // JobScheduler's minimum; used while a radar widget exists
+    private static final long PERIOD_SLOW_MS = 30L * 60 * 1000;
+
+    private static long periodMs(Context ctx) {
+        try {
+            int[] ids = AppWidgetManager.getInstance(ctx).getAppWidgetIds(new ComponentName(ctx, RadarWidget.class));
+            return ids != null && ids.length > 0 ? PERIOD_FAST_MS : PERIOD_SLOW_MS;
+        } catch (RuntimeException e) {
+            return PERIOD_SLOW_MS;
+        }
+    }
 
     /** At most one fetch at a time in this process; a second job that starts meanwhile just ends. */
     private static final AtomicBoolean RUNNING = new AtomicBoolean(false);
@@ -31,10 +42,11 @@ public class WeatherJob extends JobService {
         try {
             JobScheduler js = (JobScheduler) ctx.getSystemService(Context.JOB_SCHEDULER_SERVICE);
             if (js == null) return;
+            long period = periodMs(ctx);
             JobInfo existing = js.getPendingJob(ID_PERIODIC);
-            if (existing != null && existing.isPeriodic() && existing.getIntervalMillis() == PERIOD_MS) return;
+            if (existing != null && existing.isPeriodic() && existing.getIntervalMillis() == period) return;
             js.schedule(new JobInfo.Builder(ID_PERIODIC, new ComponentName(ctx, WeatherJob.class))
-                .setPeriodic(PERIOD_MS)
+                .setPeriodic(period)
                 .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
                 .setPersisted(false)
                 .build());
