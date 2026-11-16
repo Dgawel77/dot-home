@@ -19,6 +19,10 @@ public final class AllTests {
         WeatherTest.class,
         ZonesTest.class,
         dev.gawel.dothome.core.GameWorldTest.class,
+        dev.gawel.dothome.core.GeoProjectionTest.class,
+        dev.gawel.dothome.core.TileMathTest.class,
+        dev.gawel.dothome.core.RadarScaleTest.class,
+        dev.gawel.dothome.core.HalftoneTest.class,
     };
 
     public static void main(String[] args) throws Exception {

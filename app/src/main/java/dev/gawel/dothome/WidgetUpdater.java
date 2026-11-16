@@ -18,8 +18,8 @@ import dev.gawel.dothome.core.Weather;
 final class WidgetUpdater {
     private static final String TAG = "DotHome";
     private static final String CLOCK_PKG = "com.sec.android.app.clockpackage";
-    /** What a tap on the weather half opens. Task 12 swaps this for RadarActivity. */
-    private static final Class<?> WEATHER_TARGET = SetupActivity.class;
+    /** What a tap on the weather half opens. The live radar screen. */
+    private static final Class<?> WEATHER_TARGET = RadarActivity.class;
 
     private static final int DEFAULT_W_DP = 250, DEFAULT_H_DP = 110;
     private static final int MAX_SIDE_PX = 1200; // keeps each RemoteViews bitmap far below the binder/memory limit
