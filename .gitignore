@@ -1,0 +1,16 @@
+# Build output
+build/
+*.apk
+*.idsig
+*.aab
+
+# Signing keys
+*.jks
+*.keystore
+
+# Phone snapshots (personal screen content)
+notes/snapshot/*.png
+
+# Generated
+tools/cache/
+iconpack/res/

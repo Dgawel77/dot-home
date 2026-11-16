@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Mirror this working tree to the NAS and run a command there.
+# Builds and JVM tests need the NAS's JDK and Android SDK (~/androidtools); the laptop has neither.
+# Usage: tools/nas ./test.sh      tools/nas ./build.sh
+set -euo pipefail
+root=$(git -C "$(dirname "$0")/.." rev-parse --show-toplevel)
+rsync -a --delete --exclude .git --exclude .superpowers --exclude build/ \
+  --exclude '*.apk' --exclude '*.idsig' --exclude tools/cache/ "$root/" nas:programs/dothome/
+ssh nas "cd ~/programs/dothome && $*"
