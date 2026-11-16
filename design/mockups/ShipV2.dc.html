@@ -32,12 +32,12 @@ sc-for,sc-if{display:contents}
 <button class="shk" aria-label="Shake" onClick="{{ shake }}">{{ shakeText }}</button>
 <div style="display: flex; flex-direction: column; gap: 4px">
 <div style="font-size: 13px; line-height: 20px; color: #A6A6A6">The ship flies itself in zero-g: side thrusters turn it, the main engine pushes it, it flips to brake. Tap to fire red lasers. Move the pointer to tilt.</div>
-<div style="font-size: 13px; line-height: 20px; color: #757575">Tweaks: shipShape (seven designs, see the lineup board to the right), aimMode (turret fires at once, rotate turns to face first), laserColor, thrust, rcsTorque, drag. Shake: shockwave, 8 s cooldown.</div>
+<div style="font-size: 13px; line-height: 20px; color: #757575">Tweaks: shipShape (nine designs incl. three needles, see the lineup board to the right), aimMode (turret fires at once, rotate turns to face first), laserColor, thrust, rcsTorque, drag. Shake: shockwave, 8 s cooldown.</div>
 </div>
 </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"shipShape":{"editor":"enum","default":"needle","options":["arrow","needle","wedge","ring","pod","pixel","orbit"],"section":"Ship"},"aimMode":{"editor":"enum","default":"turret","options":["turret","rotate"],"section":"Ship"},"laserColor":{"editor":"color","default":"#FF3B30","options":["#FF3B30","#E8141A","#FF5A4E"],"section":"Ship"},"thrust":{"editor":"range","default":160,"min":40,"max":400,"step":10,"unit":"px/s²","section":"Flight"},"rcsTorque":{"editor":"range","default":540,"min":90,"max":1440,"step":30,"unit":"°/s²","section":"Flight"},"drag":{"editor":"range","default":0.02,"min":0,"max":0.5,"step":0.01,"unit":"/s","section":"Flight"},"$preview":{"width":700,"height":900}}'>
+<script type="text/x-dc" data-dc-script data-props='{"shipShape":{"editor":"enum","default":"needle-dart","options":["arrow","needle-dart","needle-forked","needle-blade","wedge","ring","pod","pixel","orbit"],"section":"Ship"},"aimMode":{"editor":"enum","default":"turret","options":["turret","rotate"],"section":"Ship"},"laserColor":{"editor":"color","default":"#FF3B30","options":["#FF3B30","#E8141A","#FF5A4E"],"section":"Ship"},"thrust":{"editor":"range","default":160,"min":40,"max":400,"step":10,"unit":"px/s²","section":"Flight"},"rcsTorque":{"editor":"range","default":540,"min":90,"max":1440,"step":30,"unit":"°/s²","section":"Flight"},"drag":{"editor":"range","default":0.02,"min":0,"max":0.5,"step":0.01,"unit":"/s","section":"Flight"},"$preview":{"width":700,"height":900}}'>
 class Component extends DCLogic {
   _dims() {
     return { W: 620, H: 722, ROCKS: 7, R: 34, CID: 'dh-ship-cv', WID: 'dh-ship-wg',
@@ -239,15 +239,22 @@ class Component extends DCLogic {
     return [lo, hi];
   }
   // Ship designs. Local axes: nose along +x, +y to starboard. pts: [x, y, dot, alpha]; nose: muzzle point;
-  // noz: engine nozzles [x, y, plume spread, dot]; rcsN / rcsT: nose and tail side-jet ports [x, |y|]. The two jets fire
-  // on opposite sides as a couple, so they only turn the ship. rad: hit radius. "pixel" adds bm: 16 pre-rotated lattice bitmaps.
+  // noz: engine nozzles [x, y, plume spread, dot, flat half-width]; with the last one set, the nozzle is a bar of small dots
+  // across a recessed engine face. rcsN / rcsT: nose and tail side-jet ports, [x, |y|] mirrored, or [xS, yS, xP, yP] for an
+  // asymmetric hull. The two jets fire on opposite sides as a couple, so they only turn the ship. rad: hit radius.
+  // "pixel" adds bm: 16 pre-rotated lattice bitmaps. mk (filled in below): the nozzle marks [x, y, dot, scale].
   _shapes() {
     if (this._shp) return this._shp;
-    const poly = (out, v, d, a) => {
-      for (let i = 0; i < v.length; i++) {
+    // Dots every ~4 px along a closed outline, or an open one (open tail). A vertex [x, y, dot] overrides the dot size
+    // there and it blends along both edges, so noses and fin tips taper to a point instead of ending in a round dot.
+    const poly = (out, v, d, a, open) => {
+      const m = open ? v.length - 1 : v.length;
+      for (let i = 0; i < m; i++) {
         const p = v[i], q = v[(i + 1) % v.length], n = Math.max(1, Math.round(Math.hypot(q[0] - p[0], q[1] - p[1]) / 4));
-        for (let j = 0; j < n; j++) { const t = j / n; out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, d, a]); }
+        const dp = p.length > 2 ? p[2] : d, dq = q.length > 2 ? q[2] : d;
+        for (let j = 0; j < n; j++) { const t = j / n; out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, dp + (dq - dp) * t, a]); }
       }
+      if (open) { const p = v[v.length - 1]; out.push([p[0], p[1], p.length > 2 ? p[2] : d, a]); }
       return out;
     };
     const loop = (out, path, step, d, a) => {
@@ -300,18 +307,40 @@ class Component extends DCLogic {
       for (let j = 1; j < n; j++) orb.push([p[0] + ((q[0] - p[0]) * j) / n, p[1] + ((q[1] - p[1]) * j) / n, 1.2, 0.53]);
     }
     for (const p of ov) orb.push([p[0], p[1], 4, 1]);
+    // The three needles: long and slim, straight edges and hard corners only. Noses taper from 3.4 to 1.4 px dots.
+    // dart: straight hull, swept-back delta fins; the open tail between the fins is a flat notch holding the nozzle.
+    const dart = poly([], [[-13.5, 3], [-17, 11.5, 2.6], [0, 3], [8, 3], [22, 0, 1.4], [8, -3], [0, -3], [-17, -11.5, 2.6], [-13.5, -3]], 3.4, 1, true);
+    // forked: the hull splits into two parallel tail booms with an engine each; the cockpit sits forward of centre
+    const fork = poly(poly([], [[-17, 3.5], [-6, 3.5], [-2.5, 0], [-6, -3.5], [-17, -3.5]], 3.4, 1, true), [[-17, -7.5], [-6, -7.5], [10, -3], [22, 0, 1.4], [10, 3], [-6, 7.5], [-17, 7.5]], 3.4, 1, true);
+    fork.push([8.5, 0, 2.2, 0.75], [5, 0, 2.2, 0.75]);
+    // blade: asymmetric knife hull (straight spine to port, edge to starboard), one swept fin aft, one canard near the nose
+    const blade = poly([], [[-14, 4], [-17, 12, 2.6], [-3, 4], [12, -0.2], [22, -3, 1.4], [13, -3], [7.5, -7.5, 2.4], [9, -3], [-14, -3]], 3.4, 1, true);
     this._shp = {
       arrow: { pts: poly([], [[15, 0], [-10, -9.5], [-5, 0], [-10, 9.5]], 3.4, 1), nose: [15, 0], noz: [[-7, 0, 1.5, 1.6]], rcsN: [9, 2.3], rcsT: [-10, 9.5], rad: 10 },
-      needle: { pts: poly([], [[20, 0], [11, -3.6], [-8, -3.6], [-14, -8.5], [-14, -3.6], [-11.5, 0], [-14, 3.6], [-14, 8.5], [-8, 3.6], [11, 3.6]], 3.4, 1), nose: [20, 0], noz: [[-13.5, 0, 1.2, 1.6]], rcsN: [14, 2.4], rcsT: [-13, 7], rad: 10 },
+      'needle-dart': { pts: dart, nose: [22, 0], noz: [[-12.5, 0, 1.2, 1.6, 1.6]], rcsN: [13, 1.9], rcsT: [-17, 11.5], rad: 11 },
+      'needle-forked': { pts: fork, nose: [22, 0], noz: [[-16, -5.5, 0.8, 1.6, 1], [-16, 5.5, 0.8, 1.6, 1]], rcsN: [14, 2], rcsT: [-17, 7.5], rad: 11 },
+      'needle-blade': { pts: blade, nose: [22, -3], noz: [[-13, 0.5, 1.2, 1.6, 2]], rcsN: [15, -1.04, 7.5, -7.5], rcsT: [-17, 12, -14, -3], rad: 11 },
       wedge: { pts: poly([], [[14, 0], [-11, -14], [-11, -5], [-5.5, -5], [-5.5, 5], [-11, 5], [-11, 14]], 3.4, 1), nose: [14, 0], noz: [[-8, 0, 3, 1.6]], rcsN: [8, 3.4], rcsT: [-11, 13], rad: 12 },
       ring: { pts: ring, nose: [18, 0], noz: [[-17, 0, 1, 1.6]], rcsN: [7.1, 7.1], rcsT: [-7.1, 7.1], rad: 11 },
       pod: { pts: pod, nose: [13, 0], noz: [[-15.5, -3.5, 0.6, 2.4], [-15.5, 3.5, 0.6, 2.4]], rcsN: [5, 11.5], rcsT: [1, 11.5], rad: 11 },
       pixel: { pts: pix, bm: bm, nose: [12, 0], noz: [[-15, 0, 1, 1.6]], rcsN: [10, 2], rcsT: [-12, 12], rad: 12 },
       orbit: { pts: orb, nose: [14, 0], noz: [[-11.5, 0, 1.5, 1.6]], rcsN: [14, 1.7], rcsT: [-9, 9.5], rad: 10 }
     };
+    // Nozzle marks: one dot per nozzle, or for a flat nozzle a bar of 3/4-size dots across ±half-width
+    for (const nm in this._shp) {
+      const s = this._shp[nm];
+      s.mk = [];
+      for (const nz of s.noz) {
+        const w = nz[4] || 0, n = w > 0 ? Math.max(2, Math.ceil((2 * w) / 1.2)) : 0;
+        if (!n) s.mk.push([nz[0], nz[1], nz[3], 1]);
+        for (let j = 0; n && j <= n; j++) s.mk.push([nz[0], nz[1] - w + (2 * w * j) / n, nz[3], 0.75]);
+      }
+    }
     return this._shp;
   }
-  _shape() { const S = this._shapes(), n = this.props && this.props.shipShape; return (typeof n === 'string' && S.hasOwnProperty(n) && S[n]) || S.needle; }
+  // An RCS port on one side (+1 starboard, -1 port): [x, |y|] is mirrored, [xS, yS, xP, yP] gives each side its own port
+  _port(p, side) { return p.length > 3 ? (side > 0 ? [p[0], p[1]] : [p[2], p[3]]) : [p[0], side * p[1]]; }
+  _shape() { const S = this._shapes(), n = this.props && this.props.shipShape; return (typeof n === 'string' && S.hasOwnProperty(n) && S[n]) || S['needle-dart']; }
   _aim() { return this.props && this.props.aimMode === 'rotate' ? 'rotate' : 'turret'; }
   _laser() { const c = this.props && this.props.laserColor; return typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c) ? c : '#FF3B30'; }
   // Flight constants from the Tweaks. flip = time for a 180° turn with this torque under the 180°/s rate cap.
@@ -517,8 +546,8 @@ class Component extends DCLogic {
     while (s.rAcc >= 1) {
       s.rAcc -= 1;
       for (const port of [[sh.rcsN, -dir], [sh.rcsT, dir]]) {
-        const n = 2 + Math.floor(Math.random() * 3);
-        for (let i = 0; i < n; i++) add(port[0][0] + (Math.random() - 0.5) * 2, port[1] * (port[0][1] + 1.5), (Math.random() - 0.5) * 26 * k, port[1] * (60 + Math.random() * 60) * k, 0.15 + Math.random() * 0.08, 2.2, 0.9, 5);
+        const pp = this._port(port[0], port[1]), n = 2 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < n; i++) add(pp[0] + (Math.random() - 0.5) * 2, pp[1] + port[1] * 1.5, (Math.random() - 0.5) * 26 * k, port[1] * (60 + Math.random() * 60) * k, 0.15 + Math.random() * 0.08, 2.2, 0.9, 5);
       }
     }
   }
@@ -662,7 +691,7 @@ class Component extends DCLogic {
       const blink = s.cool > 0 ? 0.55 + 0.45 * Math.cos(s.cool * 40) : 1, al = sa * blink;
       if (sh.bm) { for (const q of sh.bm[po.k]) put(po.x + q[0], po.y + q[1], 3, al); }
       else { for (const p of sh.pts) put(po.x + p[0] * c - p[1] * sn, po.y + p[0] * sn + p[1] * c, p[2], p[3] * al); }
-      for (const nz of sh.noz) put(po.x + nz[0] * c - nz[1] * sn, po.y + nz[0] * sn + nz[1] * c, nz[3] + 1.4 * s.thr, (L.L46 + (L.L100 - L.L46) * s.thr) * sa);
+      for (const m of sh.mk) put(po.x + m[0] * c - m[1] * sn, po.y + m[0] * sn + m[1] * c, (m[2] + 1.4 * s.thr) * m[3], (L.L46 + (L.L100 - L.L46) * s.thr) * sa);
     }
     if (s.aimT) {
       const q = L.L65 * (0.6 + 0.4 * Math.sin(g.t * 12)), x = s.aimT.x, y = s.aimT.y;
