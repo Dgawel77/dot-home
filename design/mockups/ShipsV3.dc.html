@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dart &amp; forked · iterations</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.rw{display:flex;align-items:center}
+.rh{width:96px;flex-shrink:0;display:flex;flex-direction:column;gap:4px}
+.cs{flex:1;display:flex;justify-content:space-between}
+.it{display:flex;flex-direction:column;align-items:center;gap:8px}
+.lb{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;line-height:16px;letter-spacing:1px;text-transform:uppercase;color:#757575;white-space:nowrap}
+</style>
+</helmet>
+<div style="width: 1360px; height: 640px; box-sizing: border-box; padding: 24px 32px; background: #000000; display: flex; flex-direction: column; justify-content: center; gap: 12px; font-family: Inter, system-ui, sans-serif; color: #DDDDDD">
+<div style="display: flex; justify-content: space-between">
+<div class="lb" style="color: #A6A6A6">Dart &amp; forked · iterations</div>
+<div class="lb">2.8× game size · mid-turn: every engine firing, the nose jet, a laser · pick one with the shipShape Tweak on Ship v2</div>
+</div>
+<div class="rw">
+<div class="rh"><div class="lb" style="color: #A6A6A6">Dart</div><div class="lb">1 – 5</div></div>
+<div class="cs">
+<div class="it"><canvas id="dh-shv3-dart-1" ref="{{ setShip }}" width="232" height="248" role="img" aria-label="Dart-1, the current needle-dart: sharp nose, straight slim hull, swept delta fins and a flat engine notch, mid-turn with plume, a nose-jet puff and a red laser" style="width: 232px; height: 248px; display: block"></canvas><div class="lb">Dart-1 · needle</div></div>
+<div class="it"><canvas id="dh-shv3-dart-2" ref="{{ setShip }}" width="232" height="248" role="img" aria-label="Dart-2: longer fins swept back past the tail and a deep tail notch with the nozzle at its floor, mid-turn with plume, a nose-jet puff and a red laser" style="width: 232px; height: 248px; display: block"></canvas><div class="lb">Dart-2 · swept</div></div>
+<div class="it"><canvas id="dh-shv3-dart-3" ref="{{ setShip }}" width="232" height="248" role="img" aria-label="Dart-3: dart-1 with a faint dotted spine and one bright cockpit dot set off-centre, mid-turn with plume, a nose-jet puff and a red laser" style="width: 232px; height: 248px; display: block"></canvas><div class="lb">Dart-3 · detail</div></div>
+<div class="it"><canvas id="dh-shv3-dart-4" ref="{{ setShip }}" width="232" height="248" role="img" aria-label="Dart-4: a short, wide fighter with small forward canards and clipped fin tips, mid-turn with plume, a nose-jet puff and a red laser" style="width: 232px; height: 248px; display: block"></canvas><div class="lb">Dart-4 · fighter</div></div>
+<div class="it"><canvas id="dh-shv3-dart-5" ref="{{ setShip }}" width="232" height="248" role="img" aria-label="Dart-5: an ultra-slim interceptor with a very long nose and tiny fins, mid-turn with plume, a nose-jet puff and a red laser" style="width: 232px; height: 248px; display: block"></canvas><div class="lb">Dart-5 · interceptor</div></div>
+</div>
+</div>
+<div class="rw">
+<div class="rh"><div class="lb" style="color: #A6A6A6">Forked</div><div class="lb">1 – 5</div></div>
+<div class="cs">
+<div class="it"><canvas id="dh-shv3-forked-1" ref="{{ setShip }}" width="232" height="248" role="img" aria-label="Forked-1, the current needle-forked: pointed nose, hull splitting into two parallel booms with an engine each, mid-turn with two plumes, a nose-jet puff and a red laser" style="width: 232px; height: 248px; display: block"></canvas><div class="lb">Forked-1 · needle</div></div>
+<div class="it"><canvas id="dh-shv3-forked-2" ref="{{ setShip }}" width="232" height="248" role="img" aria-label="Forked-2: booms set wider apart and tied by a dotted crossbar near the back, mid-turn with two plumes, a nose-jet puff and a red laser" style="width: 232px; height: 248px; display: block"></canvas><div class="lb">Forked-2 · crossbar</div></div>
+<div class="it"><canvas id="dh-shv3-forked-3" ref="{{ setShip }}" width="232" height="248" role="img" aria-label="Forked-3: booms splaying outward toward the tail in a V, twin nozzles, mid-turn with two plumes, a nose-jet puff and a red laser" style="width: 232px; height: 248px; display: block"></canvas><div class="lb">Forked-3 · V-tail</div></div>
+<div class="it"><canvas id="dh-shv3-forked-4" ref="{{ setShip }}" width="232" height="248" role="img" aria-label="Forked-4: a short centre spine between the booms ending in its own small nozzle, three engines, mid-turn with three plumes, a nose-jet puff and a red laser" style="width: 232px; height: 248px; display: block"></canvas><div class="lb">Forked-4 · three engines</div></div>
+<div class="it"><canvas id="dh-shv3-forked-5" ref="{{ setShip }}" width="232" height="248" role="img" aria-label="Forked-5: compact twin booms with an angular wingtip fin on each boom's outer side, mid-turn with two plumes, a nose-jet puff and a red laser" style="width: 232px; height: 248px; display: block"></canvas><div class="lb">Forked-5 · wingtips</div></div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":640}}'>
+class Component extends DCLogic {
+  componentDidMount() { this._alive = true; this._find(0); }
+  componentWillUnmount() { this._alive = false; }
+  _names() { return ['dart-1', 'dart-2', 'dart-3', 'dart-4', 'dart-5', 'forked-1', 'forked-2', 'forked-3', 'forked-4', 'forked-5']; }
+  _find(n) {
+    if (!this._alive) return;
+    let left = 0;
+    for (const nm of this._names()) { const el = document.getElementById('dh-shv3-' + nm); if (el) this._paint(el); else left++; }
+    if (left && n < 40) setTimeout(() => this._find(n + 1), 100);
+  }
+  // Seeded random, so the still frame is the same every time
+  _rng(seed) {
+    let a = seed >>> 0;
+    return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  // Collects round dots (centre, diameter, alpha on #DDDDDD) and fills them in one pass per alpha level
+  _batch() {
+    const bk = [];
+    for (let i = 0; i <= 100; i++) bk.push([]);
+    const put = (x, y, d, a) => {
+      if (!(d > 0.3) || !(a > 0.005)) return;
+      let q = Math.round(a * 100);
+      if (q > 100) q = 100;
+      if (q < 1) return;
+      bk[q].push(x, y, d * 0.5);
+    };
+    put.flush = (ctx) => {
+      ctx.fillStyle = '#DDDDDD';
+      for (let q = 1; q <= 100; q++) {
+        const L = bk[q];
+        if (!L.length) continue;
+        ctx.globalAlpha = q / 100;
+        ctx.beginPath();
+        for (let i = 0; i < L.length; i += 3) { ctx.moveTo(L[i] + L[i + 2], L[i + 1]); ctx.arc(L[i], L[i + 1], L[i + 2], 0, 6.2832); }
+        ctx.fill();
+        L.length = 0;
+      }
+      ctx.globalAlpha = 1;
+    };
+    return put;
+  }
+  // Ship designs. Local axes: nose along +x, +y to starboard. pts: [x, y, dot, alpha]; nose: muzzle point;
+  // noz: engine nozzles [x, y, plume spread, dot, flat half-width]; with the last one set, the nozzle is a bar of small dots
+  // across a recessed engine face. A nozzle dot under 1.6 marks a smaller engine with a finer plume.
+  // rcsN / rcsT: nose and tail side-jet ports, [x, |y|] mirrored, or [xS, yS, xP, yP] for an
+  // asymmetric hull. The two jets fire on opposite sides as a couple, so they only turn the ship. rad: hit radius.
+  // "pixel" adds bm: 16 pre-rotated lattice bitmaps. mk (filled in below): the nozzle marks [x, y, dot, scale].
+  _shapes() {
+    if (this._shp) return this._shp;
+    // Dots every ~4 px along a closed outline, or an open one (open tail). A vertex [x, y, dot] overrides the dot size
+    // there and it blends along both edges, so noses and fin tips taper to a point instead of ending in a round dot.
+    const poly = (out, v, d, a, open) => {
+      const m = open ? v.length - 1 : v.length;
+      for (let i = 0; i < m; i++) {
+        const p = v[i], q = v[(i + 1) % v.length], n = Math.max(1, Math.round(Math.hypot(q[0] - p[0], q[1] - p[1]) / 4));
+        const dp = p.length > 2 ? p[2] : d, dq = q.length > 2 ? q[2] : d;
+        for (let j = 0; j < n; j++) { const t = j / n; out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, dp + (dq - dp) * t, a]); }
+      }
+      if (open) { const p = v[v.length - 1]; out.push([p[0], p[1], p.length > 2 ? p[2] : d, a]); }
+      return out;
+    };
+    // A starboard half outline, tail to nose, mirrored into the full open outline: starboard side, nose, port side
+    const sym = (v) => v.concat(v.slice(0, -1).reverse().map((p) => [p[0], -p[1]].concat(p.slice(2))));
+    // n + 1 evenly spaced dots on a straight line from (x0, y0) to (x1, y1): spines, crossbars, stubs
+    const row = (out, x0, y0, x1, y1, n, d, a) => { for (let j = 0; j <= n; j++) out.push([x0 + ((x1 - x0) * j) / n, y0 + ((y1 - y0) * j) / n, d, a]); return out; };
+    const loop = (out, path, step, d, a) => {
+      const seg = [];
+      let tot = 0;
+      for (let i = 0; i < path.length; i++) { const p = path[i], q = path[(i + 1) % path.length], L = Math.hypot(q[0] - p[0], q[1] - p[1]); seg.push(L); tot += L; }
+      const n = Math.max(3, Math.round(tot / step)), h = tot / n;
+      let i = 0, acc = 0;
+      for (let j = 0; j < n; j++) {
+        const s = j * h;
+        while (i < seg.length - 1 && acc + seg[i] < s) { acc += seg[i]; i++; }
+        const p = path[i], q = path[(i + 1) % path.length], t = seg[i] > 0 ? (s - acc) / seg[i] : 0;
+        out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, d, a]);
+      }
+      return out;
+    };
+    const arc = (cx, cy, r, a0, a1, m) => { const o = []; for (let i = 0; i < m; i++) { const t = a0 + ((a1 - a0) * i) / m; o.push([cx + Math.cos(t) * r, cy + Math.sin(t) * r]); } return o; };
+    // ring: a dotted circle with a short spine through it, a glyph
+    const ring = [];
+    for (let i = 0; i < 16; i++) { const t = (i * Math.PI) / 8; ring.push([Math.cos(t) * 10, Math.sin(t) * 10, 3.4, 1]); }
+    ring.push([18, 0, 3.4, 1], [14, 0, 3.4, 1], [-14, 0, 3.4, 1], [-5, 0, 2.4, 0.75], [0, 0, 2.4, 0.75], [5, 0, 2.4, 0.75]);
+    // pod: a capsule with two side nubs that hold the jets
+    const pod = loop([], arc(6, 0, 7, -Math.PI / 2, Math.PI / 2, 24).concat(arc(-6, 0, 7, Math.PI / 2, 1.5 * Math.PI, 24)), 4, 3.4, 1);
+    pod.push([5, -11.5, 2.4, 0.75], [1, -11.5, 2.4, 0.75], [5, 11.5, 2.4, 0.75], [1, 11.5, 2.4, 0.75]);
+    // pixel: a 7x7 LED sprite on the 4 px lattice, pre-rotated to 16 headings (nearest-orientation redraw)
+    const PX = ['1100000', '0110000', '0111100', '1110111', '0111100', '0110000', '1100000'];
+    const lit = (c, r) => c >= 0 && c < 7 && r >= 0 && r < 7 && PX[r].charAt(c) === '1';
+    const bm = [], pix = [];
+    for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) if (lit(c, r)) pix.push([(c - 3) * 4, (r - 3) * 4, 3, 1]);
+    for (let k = 0; k < 16; k++) {
+      const th = (k * Math.PI) / 8, c = Math.cos(th), s = Math.sin(th), cells = [];
+      for (let j = -5; j <= 5; j++) {
+        for (let i = -5; i <= 5; i++) {
+          let hit = 0;
+          for (let a = 0; a < 4; a++) {
+            for (let b = 0; b < 4; b++) {
+              const x = i + (a - 1.5) / 4, y = j + (b - 1.5) / 4;
+              if (lit(Math.round(x * c + y * s) + 3, Math.round(-x * s + y * c) + 3)) hit++;
+            }
+          }
+          if (hit >= 6) cells.push([i * 4, j * 4]);
+        }
+      }
+      bm.push(cells);
+    }
+    // orbit: three heavy dots and a faint dotted hull between them
+    const ov = [[14, 0], [-9, -9.5], [-9, 9.5]], orb = [];
+    for (let i = 0; i < 3; i++) {
+      const p = ov[i], q = ov[(i + 1) % 3], n = Math.max(2, Math.round(Math.hypot(q[0] - p[0], q[1] - p[1]) / 3));
+      for (let j = 1; j < n; j++) orb.push([p[0] + ((q[0] - p[0]) * j) / n, p[1] + ((q[1] - p[1]) * j) / n, 1.2, 0.53]);
+    }
+    for (const p of ov) orb.push([p[0], p[1], 4, 1]);
+    // The needles: long and slim, straight edges and hard corners only. Noses taper from 3.4 to 1.4 px dots.
+    // Darts: a straight hull and swept-back delta fins; the open tail between the fins is a flat notch holding the nozzle.
+    // dart-1 (was needle-dart): the base dart
+    const dart1 = poly([], [[-13.5, 3], [-17, 11.5, 2.6], [0, 3], [8, 3], [22, 0, 1.4], [8, -3], [0, -3], [-17, -11.5, 2.6], [-13.5, -3]], 3.4, 1, true);
+    // dart-2: longer fins swept back past the tail; the tail is cut into a deep notch with the nozzle at its floor
+    const dart2 = poly([], sym([[-9, 2.2, 2.4], [-16, 4.5, 2.6], [-26, 12.5, 2.4], [1, 3.5], [9, 3.5], [22, 0, 1.4]]), 3.4, 1, true);
+    // dart-3: dart-1 with a wider mid-hull, a faint dotted spine and one bright cockpit dot set off-centre to port
+    const dart3 = row(poly([], sym([[-13.5, 3.5], [-17, 12, 2.6], [-1, 4.5], [10, 4.5], [22, 0, 1.4]]), 3.4, 1, true), -10, 0, 3, 0, 5, 1.2, 0.53);
+    dart3.push([7, -1.2, 2.2, 1]);
+    // dart-4: a short, wide fighter; small swept canards behind the nose, main fins with clipped (flat) tips
+    const dart4 = poly([], sym([[-11, 3.5], [-13, 13, 2.6], [-9, 13, 2.6], [0, 4.5], [4.5, 4.5], [6.5, 9.5, 2.2], [11, 4.5], [19, 0, 1.4]]), 3.4, 1, true);
+    // dart-5: an ultra-slim interceptor, a long tapering nose and tiny tail fins
+    const dart5 = poly([], sym([[-14.5, 2.5], [-18, 7, 2.2], [-9, 2.5], [-2, 2.5], [25, 0, 1.2]]), 3.4, 1, true);
+    // Forks: the hull splits into tail booms (inner outline, then outer outline) with an engine each; the cockpit sits forward
+    // forked-1 (was needle-forked): two parallel booms
+    const fork1 = poly(poly([], [[-17, 3.5], [-6, 3.5], [-2.5, 0], [-6, -3.5], [-17, -3.5]], 3.4, 1, true), [[-17, -7.5], [-6, -7.5], [10, -3], [22, 0, 1.4], [10, 3], [-6, 7.5], [-17, 7.5]], 3.4, 1, true);
+    fork1.push([8.5, 0, 2.2, 0.75], [5, 0, 2.2, 0.75]);
+    // forked-2: booms set wider apart, tied by a dotted crossbar near the back
+    const fork2 = poly(poly([], [[-18, 5], [-6, 5], [-1, 0], [-6, -5], [-18, -5]], 3.4, 1, true), [[-18, -10], [-6, -10], [10, -3.5], [22, 0, 1.4], [10, 3.5], [-6, 10], [-18, 10]], 3.4, 1, true);
+    row(fork2, -14, -2.2, -14, 2.2, 2, 1.8, 0.75).push([8.5, 0, 2.2, 0.75], [5, 0, 2.2, 0.75]);
+    // forked-3: booms splay outward toward the tail, a V-tail
+    const fork3 = poly(poly([], [[-19, 8], [-5, 3.2], [-1.5, 0], [-5, -3.2], [-19, -8]], 3.4, 1, true), [[-19, -12], [-6, -7.5], [10, -3], [22, 0, 1.4], [10, 3], [-6, 7.5], [-19, 12]], 3.4, 1, true);
+    fork3.push([8.5, 0, 2.2, 0.75], [5, 0, 2.2, 0.75]);
+    // forked-4: a short centre spine between wider booms carries a third, smaller engine
+    const fork4 = poly(poly([], [[-18, 6], [-6, 6], [-1, 0], [-6, -6], [-18, -6]], 3.4, 1, true), [[-18, -10], [-6, -10], [10, -3.5], [22, 0, 1.4], [10, 3.5], [-6, 10], [-18, 10]], 3.4, 1, true);
+    row(fork4, -5, 0, -11, 0, 2, 3, 1).push([8.5, 0, 2.2, 0.75], [5, 0, 2.2, 0.75]);
+    // forked-5: compact, short booms, each with an angular wingtip fin on its outer side
+    const fork5 = poly(poly([], [[-13, 3.5], [-5, 3.5], [-2, 0], [-5, -3.5], [-13, -3.5]], 3.4, 1, true), sym([[-13, 7.5], [-11.5, 12.5, 2.4], [-7, 7.5], [-2, 7.5], [8, 3], [19, 0, 1.4]]), 3.4, 1, true);
+    fork5.push([7, 0, 2.2, 0.75], [3.5, 0, 2.2, 0.75]);
+    // blade: asymmetric knife hull (straight spine to port, edge to starboard), one swept fin aft, one canard near the nose
+    const blade = poly([], [[-14, 4], [-17, 12, 2.6], [-3, 4], [12, -0.2], [22, -3, 1.4], [13, -3], [7.5, -7.5, 2.4], [9, -3], [-14, -3]], 3.4, 1, true);
+    this._shp = {
+      arrow: { pts: poly([], [[15, 0], [-10, -9.5], [-5, 0], [-10, 9.5]], 3.4, 1), nose: [15, 0], noz: [[-7, 0, 1.5, 1.6]], rcsN: [9, 2.3], rcsT: [-10, 9.5], rad: 10 },
+      'dart-1': { pts: dart1, nose: [22, 0], noz: [[-12.5, 0, 1.2, 1.6, 1.6]], rcsN: [13, 1.9], rcsT: [-17, 11.5], rad: 11 },
+      'dart-2': { pts: dart2, nose: [22, 0], noz: [[-10, 0, 1.2, 1.6, 1]], rcsN: [14, 2.15], rcsT: [-26, 12.5], rad: 12 },
+      'dart-3': { pts: dart3, nose: [22, 0], noz: [[-12.5, 0, 1.2, 1.6, 1.6]], rcsN: [14, 3], rcsT: [-17, 12], rad: 11 },
+      'dart-4': { pts: dart4, nose: [19, 0], noz: [[-10, 0, 1.5, 1.6, 1.8]], rcsN: [14, 2.8], rcsT: [-13, 13], rad: 12 },
+      'dart-5': { pts: dart5, nose: [25, 0], noz: [[-13.5, 0, 0.9, 1.6, 0.9]], rcsN: [10, 1.4], rcsT: [-18, 7], rad: 10 },
+      'forked-1': { pts: fork1, nose: [22, 0], noz: [[-16, -5.5, 0.8, 1.6, 1], [-16, 5.5, 0.8, 1.6, 1]], rcsN: [14, 2], rcsT: [-17, 7.5], rad: 11 },
+      'forked-2': { pts: fork2, nose: [22, 0], noz: [[-17, -7.5, 0.8, 1.6, 1.2], [-17, 7.5, 0.8, 1.6, 1.2]], rcsN: [14, 2.33], rcsT: [-18, 10], rad: 12 },
+      'forked-3': { pts: fork3, nose: [22, 0], noz: [[-18, -9.7, 0.8, 1.6, 1], [-18, 9.7, 0.8, 1.6, 1]], rcsN: [14, 2], rcsT: [-19, 12], rad: 12 },
+      'forked-4': { pts: fork4, nose: [22, 0], noz: [[-17, -8, 0.8, 1.6, 1], [-12.5, 0, 0.6, 1.3, 0.8], [-17, 8, 0.8, 1.6, 1]], rcsN: [14, 2.33], rcsT: [-18, 10], rad: 12 },
+      'forked-5': { pts: fork5, nose: [19, 0], noz: [[-12, -5.5, 0.8, 1.6, 1], [-12, 5.5, 0.8, 1.6, 1]], rcsN: [12, 1.9], rcsT: [-11.5, 12.5], rad: 11 },
+      'needle-blade': { pts: blade, nose: [22, -3], noz: [[-13, 0.5, 1.2, 1.6, 2]], rcsN: [15, -1.04, 7.5, -7.5], rcsT: [-17, 12, -14, -3], rad: 11 },
+      wedge: { pts: poly([], [[14, 0], [-11, -14], [-11, -5], [-5.5, -5], [-5.5, 5], [-11, 5], [-11, 14]], 3.4, 1), nose: [14, 0], noz: [[-8, 0, 3, 1.6]], rcsN: [8, 3.4], rcsT: [-11, 13], rad: 12 },
+      ring: { pts: ring, nose: [18, 0], noz: [[-17, 0, 1, 1.6]], rcsN: [7.1, 7.1], rcsT: [-7.1, 7.1], rad: 11 },
+      pod: { pts: pod, nose: [13, 0], noz: [[-15.5, -3.5, 0.6, 2.4], [-15.5, 3.5, 0.6, 2.4]], rcsN: [5, 11.5], rcsT: [1, 11.5], rad: 11 },
+      pixel: { pts: pix, bm: bm, nose: [12, 0], noz: [[-15, 0, 1, 1.6]], rcsN: [10, 2], rcsT: [-12, 12], rad: 12 },
+      orbit: { pts: orb, nose: [14, 0], noz: [[-11.5, 0, 1.5, 1.6]], rcsN: [14, 1.7], rcsT: [-9, 9.5], rad: 10 }
+    };
+    // Nozzle marks: one dot per nozzle, or for a flat nozzle a bar of 3/4-size dots across ±half-width
+    for (const nm in this._shp) {
+      const s = this._shp[nm];
+      s.mk = [];
+      for (const nz of s.noz) {
+        const w = nz[4] || 0, n = w > 0 ? Math.max(2, Math.ceil((2 * w) / 1.2)) : 0;
+        if (!n) s.mk.push([nz[0], nz[1], nz[3], 1]);
+        for (let j = 0; n && j <= n; j++) s.mk.push([nz[0], nz[1] - w + (2 * w * j) / n, nz[3], 0.75]);
+      }
+    }
+    return this._shp;
+  }
+  // An RCS port on one side (+1 starboard, -1 port): [x, |y|] is mirrored, [xS, yS, xP, yP] gives each side its own port
+  _port(p, side) { return p.length > 3 ? (side > 0 ? [p[0], p[1]] : [p[2], p[3]]) : [p[0], side * p[1]]; }
+  _paint(el) {
+    const names = this._names(), name = el.id.slice('dh-shv3-'.length), idx = names.indexOf(name);
+    if (idx < 0) return;
+    const sh = this._shapes()[name];
+    const W = 232, H = 248, dpr = Math.min(3, Math.max(1, window.devicePixelRatio || 1)), px = Math.round(W * dpr);
+    if (el._dhPx === px) return;
+    const ctx = el.getContext('2d'); if (!ctx) return;
+    el._dhPx = px;
+    el.width = px; el.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalAlpha = 1; ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, W, H);
+    // One scale for all ten (dart-1 is ~110 px long), nose up and turned 8° clockwise mid-manoeuvre
+    const S = 2.8, a = -Math.PI / 2 + 0.14, c = Math.cos(a), sn = Math.sin(a), rnd = this._rng(211 + idx * 7919), put = this._batch();
+    // Centre the whole act, from the plume's end to the bolt's tip, in the canvas
+    let x0 = 1e9;
+    for (const p of sh.pts) if (p[0] < x0) x0 = p[0];
+    for (const nz of sh.noz) if (nz[0] - 17.5 < x0) x0 = nz[0] - 17.5;
+    const mid = (x0 + sh.nose[0] + 22.25) / 2, cx = W / 2, cy = H / 2;
+    const T = (lx, ly) => [cx + ((lx - mid) * c - ly * sn) * S, cy + ((lx - mid) * sn + ly * c) * S];
+    // Main-engine plume from every nozzle: dots stream back, shrinking and fading with a slight spread.
+    // A smaller engine (nozzle dot under 1.6, the forked-4 spine) gets a shorter, finer plume.
+    for (const nz of sh.noz) {
+      const ns = Math.min(1, nz[3] / 1.6), m = Math.round((sh.noz.length > 1 ? 7 : 12) * ns);
+      for (let i = 0; i < m; i++) {
+        const t = (i + 0.2 + rnd() * 0.6) / m, q = T(nz[0] - 1.5 - t * 20 * ns, nz[1] + (rnd() * 2 - 1) * (nz[2] + t * 3));
+        put(q[0], q[1], (0.7 + 1.9 * (1 - t)) * S * ns, 1 - 0.85 * t);
+      }
+    }
+    // One RCS puff for the clockwise turn: the nose jet on the port side blows to port
+    const pp = this._port(sh.rcsN, -1);
+    for (let i = 0; i < 3; i++) {
+      const q = T(pp[0] + (rnd() - 0.5) * 1.4, pp[1] - (1.8 + i * 2.4));
+      put(q[0], q[1], (2.2 - i * 0.45) * S, 0.9 - i * 0.22);
+    }
+    // The hull, then the nozzle marks at mid thrust
+    for (const p of sh.pts) { const q = T(p[0], p[1]); put(q[0], q[1], p[2] * S, p[3]); }
+    for (const m of sh.mk) { const q = T(m[0], m[1]); put(q[0], q[1], (m[2] + 1) * m[3] * S, 0.85); }
+    put.flush(ctx);
+    // Red, for the laser only: the bolt as a glowing pill (3x at 18% + 2x at 22% around the core) and the muzzle flash
+    ctx.save();
+    ctx.lineCap = 'round'; ctx.strokeStyle = '#FF3B30'; ctx.fillStyle = '#FF3B30';
+    const b0 = T(sh.nose[0] + 5, sh.nose[1]), b1 = T(sh.nose[0] + 5 + 15 * 1.15, sh.nose[1]), th = (3 / Math.sqrt(1.15)) * S;
+    for (const pass of [[3, 0.18], [2, 0.22], [1, 1]]) {
+      ctx.globalAlpha = pass[1]; ctx.lineWidth = th * pass[0];
+      ctx.beginPath(); ctx.moveTo(b0[0], b0[1]); ctx.lineTo(b1[0], b1[1]); ctx.stroke();
+    }
+    const mf = T(sh.nose[0] + 1.5, sh.nose[1]), r = 1.5 * S;
+    ctx.globalAlpha = 0.35; ctx.beginPath(); ctx.arc(mf[0], mf[1], r * 2.5, 0, 6.2832); ctx.fill();
+    ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(mf[0], mf[1], r, 0, 6.2832); ctx.fill();
+    ctx.restore();
+  }
+  renderVals() {
+    if (!this._h) this._h = { setShip: (el) => { if (el && this._alive) this._paint(el); } };
+    return { setShip: this._h.setShip };
+  }
+}
+</script>
+</body>
+</html>
