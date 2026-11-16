@@ -30,12 +30,10 @@ final class DotRenderer {
     }
 
     private final Paint dotPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
-    private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Bitmap sprite;
     private final Rect spriteSrc = new Rect(0, 0, 32, 32);
     private final RectF dst = new RectF();
-    private final RectF zoneRect = new RectF();
     private final WeakHashMap<GameWorld.Rock, RockDots> rockCache = new WeakHashMap<>();
     private long rockSeed = 1;
     private float[] shipPts = new float[0];
@@ -91,24 +89,11 @@ final class DotRenderer {
         }
     }
 
-    void draw(Canvas c, GameWorld w, List<float[]> zonesPx, ScoreBook sb) {
+    void draw(Canvas c, GameWorld w, ScoreBook sb) {
         c.drawColor(Color.BLACK);
         if (w.width() <= 0) return;
         drawScene(c, w, true);
-        fillPaint.setColor(0x99000000);
         float k = scaleK(w);
-        float topZoneBottom = -1, topZoneRight = 0;
-        if (zonesPx != null) {
-            for (int i = 0; i < zonesPx.size(); i++) {
-                float[] z = zonesPx.get(i);
-                zoneRect.set(z[0], z[1], z[0] + z[2], z[1] + z[3]);
-                c.drawRoundRect(zoneRect, 26f * k, 26f * k, fillPaint);
-                if (i == 0) {
-                    topZoneBottom = z[1] + z[3];
-                    topZoneRight = z[0] + z[2];
-                }
-            }
-        }
         if (sb != null) {
             int today = sb.today(), best = sb.best();
             if (today != lastToday || best != lastBest) {
@@ -117,9 +102,7 @@ final class DotRenderer {
                 scoreText = "TODAY " + today + " · BEST " + best;
             }
             textPaint.setTextSize(16f * k);
-            float right = topZoneBottom >= 0 ? topZoneRight : w.width() - 16f * k;
-            float top = topZoneBottom >= 0 ? topZoneBottom : 0;
-            c.drawText(scoreText, right, top + 8f * k + 16f * k, textPaint);
+            c.drawText(scoreText, w.width() - 16f * k, 8f * k + 16f * k, textPaint);
         }
     }
 

@@ -19,7 +19,6 @@ import android.view.SurfaceHolder;
 import android.view.ViewConfiguration;
 import android.view.WindowManager;
 
-import java.util.List;
 
 import dev.gawel.dothome.core.FireMode;
 import dev.gawel.dothome.core.GameWorld;
@@ -134,7 +133,6 @@ public class DotWallpaperService extends WallpaperService {
         private boolean visible, surfaceValid, rendering;
         private int width, height;
         private long lastNanos;
-        private List<float[]> zones;
         private long lastRefreshNanos, lastErrLogMs;
         private float downX, downY;
         private long downMs;
@@ -151,7 +149,6 @@ public class DotWallpaperService extends WallpaperService {
         public void onSurfaceChanged(SurfaceHolder holder, int format, int w, int h) {
             width = w;
             height = h;
-            zones = hub.zonesPx(w, h);
             boolean wasRendering = rendering;
             surfaceValid = true;
             maybeStart();
@@ -173,8 +170,8 @@ public class DotWallpaperService extends WallpaperService {
             visible = isVisible;
             if (isVisible) {
                 hub.onVisible(this);
+                Log.i(TAG, "fire mode=" + hub.fireMode());
                 setTouchEventsEnabled(hub.fireMode() == FireMode.TAP_TOUCH);
-                if (width > 0 && height > 0) zones = hub.zonesPx(width, height);
                 maybeStart();
                 fitWorld();
             } else {
@@ -215,10 +212,13 @@ public class DotWallpaperService extends WallpaperService {
 
         @Override
         public Bundle onCommand(String action, int x, int y, int z, Bundle extras, boolean resultRequested) {
+            boolean fired = false;
             if (WallpaperManager.COMMAND_TAP.equals(action) && hub.fireMode() == FireMode.TAP_COMMAND
                     && visible && hub.isActive(this)) {
                 hub.world().fire(x, y);
+                fired = true;
             }
+            Log.i(TAG, "onCommand action=" + action + " x=" + x + " y=" + y + " fired=" + fired);
             return null;
         }
 
@@ -227,6 +227,7 @@ public class DotWallpaperService extends WallpaperService {
             if (hub.fireMode() != FireMode.TAP_TOUCH || !hub.isActive(this)) return;
             switch (ev.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
+                    Log.i(TAG, "touch DOWN x=" + ev.getX() + " y=" + ev.getY());
                     touchValid = true;
                     downX = ev.getX();
                     downY = ev.getY();
@@ -244,10 +245,13 @@ public class DotWallpaperService extends WallpaperService {
                 case MotionEvent.ACTION_UP: {
                     float slop = ViewConfiguration.get(DotWallpaperService.this).getScaledTouchSlop();
                     float dx = ev.getX() - downX, dy = ev.getY() - downY;
+                    boolean fired = false;
                     if (touchValid && ev.getPointerCount() == 1 && dx * dx + dy * dy < slop * slop
                             && ev.getEventTime() - downMs < 250) {
                         hub.world().fire(ev.getX(), ev.getY());
+                        fired = true;
                     }
+                    Log.i(TAG, "touch UP x=" + ev.getX() + " y=" + ev.getY() + " fired=" + fired);
                     touchValid = false;
                     break;
                 }
@@ -262,7 +266,6 @@ public class DotWallpaperService extends WallpaperService {
             if (width > 0 && height > 0 && hub.isActive(this)
                     && (world.width() != width || world.height() != height)) {
                 world.resize(width, height);
-                zones = hub.zonesPx(width, height);
             }
         }
 
@@ -312,7 +315,7 @@ public class DotWallpaperService extends WallpaperService {
             }
             if (c == null) return;
             try {
-                renderer.draw(c, world, zones, hub.scoreBook());
+                renderer.draw(c, world, hub.scoreBook());
             } finally {
                 try {
                     holder.unlockCanvasAndPost(c);

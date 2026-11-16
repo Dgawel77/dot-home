@@ -14,6 +14,7 @@ import android.provider.Settings;
 import android.util.Log;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
+import android.widget.Switch;
 import android.widget.TextView;
 
 import dev.gawel.dothome.core.FireMode;
@@ -79,6 +80,17 @@ public class SetupActivity extends Activity {
         group.setOnCheckedChangeListener((g, id) -> {
             if (id >= 1 && id <= modes.length) prefs.put("fire.mode", modes[id - 1].name());
         });
+
+        Switch backdrop = new Switch(this);
+        backdrop.setText("Dark backing behind widgets");
+        backdrop.setTextColor(0xFFFFFFFF);
+        backdrop.setChecked(WidgetArt.backdropOn(this));
+        backdrop.setOnCheckedChangeListener((b, on) -> {
+            prefs.put("widget.backdrop", on ? "true" : "false");
+            WidgetUpdater.updateAll(this);
+        });
+        android.view.ViewGroup parent = (android.view.ViewGroup) group.getParent();
+        parent.addView(backdrop, parent.indexOfChild(group) + 1);
 
         WeatherJob.schedule(this);
         WeatherJob.refreshSoon(this);

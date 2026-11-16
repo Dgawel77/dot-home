@@ -6,6 +6,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.RectF;
 
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
@@ -34,6 +35,7 @@ final class WidgetArt {
         Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
         float k = Math.min(wPx / CLOCK_REF_W, hPx / REF_H);
+        backdrop(ctx, c, wPx, hPx, k, true, false);
 
         Calendar cal = Calendar.getInstance();
         cal.setTimeInMillis(nowMs);
@@ -78,6 +80,7 @@ final class WidgetArt {
         Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
         float k = Math.min(wPx / WEATHER_REF_W, hPx / REF_H);
+        backdrop(ctx, c, wPx, hPx, k, false, true);
         float right = wPx - 4f * k, maxW = wPx - 8f * k;
 
         Paint doto = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -146,6 +149,7 @@ final class WidgetArt {
         Canvas c = new Canvas(bmp);
         float density = ctx.getResources().getDisplayMetrics().density;
         float k = Math.max(0.1f, Math.min(density, hPx / 72f));
+        backdrop(ctx, c, wPx, hPx, k, true, true);
         float artS = 64f * k, artY = (hPx - artS) / 2f, artX = 4f * k;
 
         // art square: black, dots on a staggered 4k grid brightest toward a "sun" and a lower band
@@ -199,6 +203,34 @@ final class WidgetArt {
             c.drawRect(textX, y, textX + maxW * frac, y + 2f * k, bar);
         }
         return bmp;
+    }
+
+    /** Pref "widget.backdrop" (default on): whether widgets draw their own dark backing. */
+    static boolean backdropOn(Context ctx) {
+        return !"false".equals(new PrefsStore(ctx).get("widget.backdrop", "true"));
+    }
+
+    /**
+     * Soft dark rounded backing: a faint larger rounded rect under a 55% black one. Rounds only the outer
+     * corners on the sides flagged (left/right); an unflagged side runs square to the bitmap edge so adjacent
+     * widget halves read as one continuous panel.
+     */
+    private static void backdrop(Context ctx, Canvas c, int wPx, int hPx, float k, boolean left, boolean right) {
+        if (!backdropOn(ctx)) return;
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        float inset = 4f * k, r = 24f * k;
+        p.setColor(0x40000000);
+        c.drawPath(panel(0, 0, wPx, hPx, r + inset, left, right), p);
+        p.setColor(0x8C000000);
+        float l = left ? inset : 0f, rt = right ? wPx - inset : wPx;
+        c.drawPath(panel(l, inset, rt, hPx - inset, r, left, right), p);
+    }
+
+    private static Path panel(float l, float t, float r, float b, float rad, boolean roundLeft, boolean roundRight) {
+        float lr = roundLeft ? rad : 0f, rr = roundRight ? rad : 0f;
+        Path path = new Path();
+        path.addRoundRect(new RectF(l, t, r, b), new float[] {lr, lr, rr, rr, rr, rr, lr, lr}, Path.Direction.CW);
+        return path;
     }
 
     /** " 2h ago"-style text once the data is older than 90 minutes; null while fresh. Hours, then days. */
