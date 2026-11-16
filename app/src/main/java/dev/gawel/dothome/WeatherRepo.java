@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.function.BooleanSupplier;
 
 import dev.gawel.dothome.core.NwsParser;
 import dev.gawel.dothome.core.OpenMeteoParser;
@@ -43,11 +44,15 @@ final class WeatherRepo {
     }
 
     /** Blocking. Returns fresh weather, or the existing cache (possibly null) when the fetch fails. */
-    static Weather refresh(Context ctx) {
+    static Weather refresh(Context ctx) { return refresh(ctx, () -> false); }
+
+    /** As {@link #refresh(Context)}; once {@code cancelled} is true nothing is written to the cache. */
+    static Weather refresh(Context ctx, BooleanSupplier cancelled) {
         try {
             PrefsStore prefs = new PrefsStore(ctx);
             Place place = LocationSource.current(ctx);
             String name = LocationSource.placeName(ctx, place);
+            if (name.isEmpty()) name = prefs.get(K_PLACE, ""); // geocoder failed: keep the last known name
             long now = System.currentTimeMillis();
             String om = null;
             Weather w = null;
@@ -65,6 +70,7 @@ final class WeatherRepo {
             } catch (IOException | RuntimeException e) {
                 Log.w(TAG, "nws failed, dropping alert: " + e);
             }
+            if (cancelled.getAsBoolean()) return cached(ctx);
             prefs.put(K_OM, om);
             prefs.put(K_ALERT, alert == null ? "" : alert);
             prefs.put(K_PLACE, name);
