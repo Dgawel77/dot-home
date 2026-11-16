@@ -18,7 +18,7 @@ import android.widget.TextView;
 
 import dev.gawel.dothome.core.FireMode;
 
-/** Setup checklist: permissions, wallpaper, fire mode. Done states refresh in onResume. */
+/** Setup checklist: permissions, wallpaper, fire mode, rock style. Done states refresh in onResume. */
 public class SetupActivity extends Activity {
     private static final int REQ_LOCATION = 1;
 
@@ -78,6 +78,24 @@ public class SetupActivity extends Activity {
         }
         group.setOnCheckedChangeListener((g, id) -> {
             if (id >= 1 && id <= modes.length) prefs.put("fire.mode", modes[id - 1].name());
+        });
+
+        // rock style: the wallpaper reads it when it next becomes visible
+        String[] styles = {PrefsStore.ROCK_LATTICE, PrefsStore.ROCK_OUTLINE};
+        String[] styleNames = {"Dots on grid", "Outline"};
+        int styleId0 = 11;
+        String style = prefs.outlineRocks() ? PrefsStore.ROCK_OUTLINE : PrefsStore.ROCK_LATTICE;
+        RadioGroup rocks = findViewById(R.id.rock_group);
+        for (int i = 0; i < styles.length; i++) {
+            RadioButton rb = new RadioButton(this);
+            rb.setId(styleId0 + i);
+            rb.setText(styleNames[i]);
+            rb.setTextColor(0xFFFFFFFF);
+            rocks.addView(rb);
+            if (styles[i].equals(style)) rocks.check(rb.getId());
+        }
+        rocks.setOnCheckedChangeListener((g, id) -> {
+            if (id >= styleId0 && id < styleId0 + styles.length) prefs.put(PrefsStore.KEY_ROCK_STYLE, styles[id - styleId0]);
         });
 
         WeatherJob.schedule(this);

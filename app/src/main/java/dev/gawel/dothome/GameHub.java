@@ -1,5 +1,6 @@
 package dev.gawel.dothome;
 
+import android.app.KeyguardManager;
 import android.content.Context;
 import android.os.SystemClock;
 
@@ -31,6 +32,12 @@ final class GameHub {
     private FireMode fireMode;
     private DotRenderer renderer;
     private long hiddenAtMs = -1;
+    private final KeyguardManager keyguard;
+    /**
+     * The next unlocked show plays the opening dot. Set for the process's first show and on every screen-off;
+     * any other show (a fold, a return from an app, a visibility flip) skips the intro instead of replaying it.
+     */
+    private boolean introArmed = true;
 
     static synchronized GameHub get(Context context) {
         if (instance == null) instance = new GameHub(context.getApplicationContext());
@@ -40,6 +47,7 @@ final class GameHub {
     private GameHub(Context appContext) {
         this.appContext = appContext;
         prefs = new PrefsStore(appContext);
+        keyguard = (KeyguardManager) appContext.getSystemService(Context.KEYGUARD_SERVICE);
         scoreBook = new ScoreBook(prefs, System::currentTimeMillis, TimeZone.getDefault());
         fireMode = readFireMode();
         tilt = new SensorTilt(appContext, new TiltInput(), new SensorTilt.Listener() {
@@ -88,6 +96,13 @@ final class GameHub {
         }
         visible.remove(e);
         visible.add(e);
+        if (introArmed && !keyguardLocked()) {
+            introArmed = false;
+            world.restartIntro();
+        } else {
+            world.skipIntro(); // no screen-off since the last intro, or still behind the keyguard (waits for unlock)
+        }
+        if (renderer != null) renderer.setOutlineRocks(prefs.outlineRocks());
         fireMode = readFireMode();
         // the zone may have changed since the last visible period; keep the persisted keys/values
         scoreBook = new ScoreBook(prefs, System::currentTimeMillis, TimeZone.getDefault());
@@ -128,6 +143,25 @@ final class GameHub {
             world.setAutoFire(false);
         } else {
             restartTiltForActive(); // another engine took over: its rotation may differ
+        }
+    }
+
+    /** The screen went off: the first show after it comes back on and unlocks plays the opening dot. */
+    void onScreenOff() { introArmed = true; }
+
+    /** The keyguard was dismissed: an engine already showing behind it plays the armed intro now. */
+    void onUserPresent() {
+        if (introArmed && !visible.isEmpty()) {
+            introArmed = false;
+            world.restartIntro();
+        }
+    }
+
+    private boolean keyguardLocked() {
+        try {
+            return keyguard != null && keyguard.isKeyguardLocked();
+        } catch (RuntimeException ex) {
+            return false;
         }
     }
 

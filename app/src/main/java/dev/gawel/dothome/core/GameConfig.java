@@ -13,10 +13,12 @@ public final class GameConfig {
     public final float hitCooldown = 0.4f;
     public final float ringLife = 0.8f;
     public final int particleCap = 2000;
-    public final float introSeconds = 1.2f;
+    /** The opening dot (the intro) lasts at most this long. */
+    public static final float INTRO_SECONDS = 1.2f;
+    public final float introSeconds = INTRO_SECONDS;
     public final float autoFireEvery = 0.45f;
     public final float autopilotWanderMin = 2f, autopilotWanderMax = 4f;
-    public final float shockCooldown = 60f, shockDuration = 0.9f;
+    public final float shockCooldown = 60f, shockDuration = 0.8f; // event tempo (0.6-0.8 s)
     public final float gravityAccel;
 
     /**

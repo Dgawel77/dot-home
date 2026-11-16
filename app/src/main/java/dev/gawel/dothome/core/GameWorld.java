@@ -28,6 +28,8 @@ public final class GameWorld {
     private final Rng rng;
     private GameConfig cfg;
     private float w, h, time;
+    /** Seconds since the intro (the opening dot) started; the world is live once it reaches cfg.introSeconds. */
+    private float introT;
     private final Ship ship = new Ship();
     private final List<Rock> rocks = new ArrayList<Rock>();
     private final List<Shot> shots = new ArrayList<Shot>();
@@ -53,7 +55,7 @@ public final class GameWorld {
 
     /** Starts a shockwave at the ship; false during the intro or while the cooldown is running. */
     public boolean shockwave() {
-        if (cfg == null || time < cfg.introSeconds || shockCool > 0) return false;
+        if (cfg == null || introT < cfg.introSeconds || shockCool > 0) return false;
         shockCool = cfg.shockCooldown;
         Shockwave sw = new Shockwave();
         sw.x = ship.x;
@@ -81,6 +83,16 @@ public final class GameWorld {
     public List<Star> stars() { return stars; }
     public GameConfig config() { return cfg; }
     public float time() { return time; }
+    /** Seconds since the intro started; at or past GameConfig.INTRO_SECONDS the intro is over. */
+    public float introTime() { return introT; }
+
+    /** Ends the intro now (a fold, page swipe or visibility flip must not replay it); world time is untouched. */
+    public void skipIntro() {
+        if (introT < GameConfig.INTRO_SECONDS) introT = GameConfig.INTRO_SECONDS;
+    }
+
+    /** Plays the intro again (the first show after unlock): the ship holds still and the shockwave waits until it ends. */
+    public void restartIntro() { introT = 0f; }
     public float width() { return w; }
     public float height() { return h; }
 
@@ -196,8 +208,9 @@ public final class GameWorld {
         if (dt > 0.05f) dt = 0.05f;
         if (dt < 0) dt = 0;
         time += dt;
+        introT += dt;
         if (shockCool > 0) shockCool -= dt;
-        boolean live = time > cfg.introSeconds;
+        boolean live = introT >= cfg.introSeconds;
         Ship s = ship;
         if (live && autopilot) steer(dt);
         float damp = (float) Math.exp(-cfg.damping * dt);

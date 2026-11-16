@@ -28,6 +28,7 @@ public final class AllTests {
         dev.gawel.dothome.core.BoxSetTest.class,
         dev.gawel.dothome.core.DesignValuesTest.class,
         dev.gawel.dothome.core.ClockLayoutTest.class,
+        dev.gawel.dothome.core.LatticeRasterTest.class,
     };
 
     public static void main(String[] args) throws Exception {

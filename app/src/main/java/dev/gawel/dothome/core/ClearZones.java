@@ -1,6 +1,5 @@
 package dev.gawel.dothome.core;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -15,12 +14,12 @@ public final class ClearZones {
         {15, 7, 13, 5},
     };
 
-    private final List<float[]> rects; // x, y, w, h
+    private final float[][] rects; // x, y, w, h; an array so keep() and inside() allocate no iterator per call
     private final float edge;
     private final float cell;
 
     private ClearZones(List<float[]> rects, float edgePx, float cellPx) {
-        this.rects = new ArrayList<float[]>(rects);
+        this.rects = rects.toArray(new float[0][]);
         this.edge = Math.max(edgePx, 0f);
         this.cell = Math.max(cellPx, 1f);
     }

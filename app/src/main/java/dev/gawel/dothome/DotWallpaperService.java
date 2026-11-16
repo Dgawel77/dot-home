@@ -42,11 +42,16 @@ public class DotWallpaperService extends WallpaperService {
     private final BroadcastReceiver screenState = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (Intent.ACTION_SCREEN_ON.equals(intent.getAction())) {
+            String action = intent.getAction();
+            if (Intent.ACTION_SCREEN_ON.equals(action)) {
                 setTick(true);
                 WidgetUpdater.updateAll(getApplicationContext());
-            } else if (Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) {
+            } else if (Intent.ACTION_SCREEN_OFF.equals(action)) {
                 setTick(false);
+                // arm on screen-off, not screen-on: an engine can turn visible before SCREEN_ON arrives
+                GameHub.get(DotWallpaperService.this).onScreenOff();
+            } else if (Intent.ACTION_USER_PRESENT.equals(action)) {
+                GameHub.get(DotWallpaperService.this).onUserPresent();
             }
         }
     };
@@ -58,6 +63,7 @@ public class DotWallpaperService extends WallpaperService {
             IntentFilter f = new IntentFilter();
             f.addAction(Intent.ACTION_SCREEN_ON);
             f.addAction(Intent.ACTION_SCREEN_OFF);
+            f.addAction(Intent.ACTION_USER_PRESENT);
             register(screenState, f);
             PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
             if (pm == null || pm.isInteractive()) setTick(true);

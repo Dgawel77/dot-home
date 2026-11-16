@@ -339,8 +339,8 @@ public final class GameWorldTest {
         float d = g.ship().y - 90;
         g.addRock(3, g.ship().x, 90, 0, 0);
         T.eq(true, g.shockwave(), "shockwave");
-        // radius = 1057 * t: the edge (d - 33.5) is reached at about 0.25 s, the centre (d) at about 0.28 s
-        for (int i = 0; i < 16; i++) g.step(0.016f);
+        // radius = 1190 * t (0.8 s to the far corner): the edge (d - 33.5) is reached at about 0.224 s, the centre (d) at about 0.252 s
+        for (int i = 0; i < 15; i++) g.step(0.016f);
         T.check(g.wave().radius < d, "ring has not reached the centre " + g.wave().radius + " < " + d);
         T.check(c.destroyed >= 1, "burst when the ring touches the edge, destroyed " + c.destroyed);
     }
@@ -390,5 +390,68 @@ public final class GameWorldTest {
         GameWorld g = sized(1856, 2160);
         T.check(g.stars().size() > 0, "stars");
         for (GameWorld.Star s : g.stars()) T.check(s.depth >= 0.2f && s.depth <= 1.0f, "depth " + s.depth);
+    }
+
+    public static void testShockwaveIsEventTempo() {
+        GameConfig cfg = GameConfig.forSize(620, 722);
+        T.near(0.8, cfg.shockDuration, 1e-6, "shockwave duration");
+        T.check(cfg.ringLife >= 0.6f && cfg.ringLife <= 0.8f, "hit ring at event tempo " + cfg.ringLife);
+        GameWorld g = pastIntro(new Count());
+        T.eq(true, g.shockwave(), "shockwave");
+        int n = 0;
+        while (g.wave() != null && n < 200) { g.step(0.016f); n++; }
+        T.near(0.8, n * 0.016, 0.02, "the wave lasts 0.8 s");
+    }
+
+    public static void testIntroIsAtMostOnePointTwoSeconds() {
+        T.check(GameConfig.forSize(620, 722).introSeconds <= 1.2f, "intro cap");
+        T.near(GameConfig.INTRO_SECONDS, GameConfig.forSize(968, 2376).introSeconds, 1e-6, "one intro length");
+    }
+
+    public static void testSkipIntroGoesLiveAtOnce() {
+        GameWorld g = world(new Count());
+        g.skipIntro();
+        T.check(g.introTime() >= g.config().introSeconds, "intro over " + g.introTime());
+        T.eq(true, g.shockwave(), "shockwave allowed at once");
+    }
+
+    public static void testSkipIntroLetsTheShipSteerAtOnce() {
+        GameWorld g = world(new Count());
+        g.skipIntro();
+        float x0 = g.ship().x, y0 = g.ship().y;
+        stepClear(g, 0.5f);
+        float dx = g.ship().x - x0, dy = g.ship().y - y0;
+        T.check(Math.sqrt(dx * dx + dy * dy) > 1, "the autopilot steers during what was the intro");
+    }
+
+    public static void testSkipIntroBeforeFirstResize() {
+        GameWorld g = new GameWorld(new Rng(1));
+        g.skipIntro();
+        g.resize(620, 722);
+        T.eq(true, g.shockwave(), "no intro after the first resize");
+    }
+
+    public static void testSkipIntroKeepsTimeAndIsIdempotent() {
+        GameWorld g = pastIntro(new Count());
+        float it = g.introTime(), t = g.time();
+        g.skipIntro();
+        T.near(it, g.introTime(), 1e-6, "an ended intro is left alone");
+        T.near(t, g.time(), 1e-6, "world time untouched");
+    }
+
+    public static void testRestartIntroReplaysIt() {
+        GameWorld g = pastIntro(new Count());
+        float t = g.time();
+        g.restartIntro();
+        T.near(0, g.introTime(), 1e-6, "intro clock reset");
+        T.eq(false, g.shockwave(), "no shockwave during the replayed intro");
+        float x0 = g.ship().x, y0 = g.ship().y;
+        g.setAutopilot(true);
+        stepClear(g, 1.0f);
+        T.near(x0, g.ship().x, 0.01, "the ship holds still during the intro (x)");
+        T.near(y0, g.ship().y, 0.01, "the ship holds still during the intro (y)");
+        T.check(g.time() > t + 0.9f, "world time keeps running");
+        stepClear(g, 0.3f);
+        T.eq(true, g.shockwave(), "live again after 1.2 s");
     }
 }

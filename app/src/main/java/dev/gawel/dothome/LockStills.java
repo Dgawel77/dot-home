@@ -25,7 +25,10 @@ import java.util.List;
 
 import dev.gawel.dothome.core.GameWorld;
 
-/** Exports black-and-white stills of the current world, one per built-in display, for use as lock wallpapers. */
+/**
+ * Exports black-and-white stills of the current world, one per built-in display, for use as lock wallpapers.
+ * The renderer caps every level at L65 for stills (the ship and shots too) and draws the scene with its intro over.
+ */
 final class LockStills {
     private static final String TAG = "DotHome";
     private static final float DIM = 0.62f;
@@ -55,6 +58,7 @@ final class LockStills {
                 for (int i = 0; i < 150; i++) world.step(1f / 60f);
             }
             DotRenderer renderer = new DotRenderer(app);
+            renderer.setOutlineRocks(new PrefsStore(app).outlineRocks()); // the same rock style as the wallpaper
             for (Display d : displays) {
                 if ((d.getFlags() & Display.FLAG_PRESENTATION) != 0) continue; // not a built-in screen
                 Point p = realSize(d);
