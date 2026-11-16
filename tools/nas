@@ -5,5 +5,5 @@
 set -euo pipefail
 root=$(git -C "$(dirname "$0")/.." rev-parse --show-toplevel)
 rsync -a --delete --exclude .git --exclude .superpowers --exclude build/ \
-  --exclude '*.apk' --exclude '*.idsig' --exclude tools/cache/ --exclude tools/.venv/ "$root/" nas:programs/dothome/
+  --exclude '*.apk' --exclude '*.idsig' --exclude tools/cache/ --exclude tools/.venv/ --exclude tools/.fontvenv/ "$root/" nas:programs/dothome/
 ssh nas "cd ~/programs/dothome && $*"
