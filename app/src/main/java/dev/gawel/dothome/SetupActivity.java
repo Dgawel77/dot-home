@@ -14,6 +14,7 @@ import android.provider.Settings;
 import android.util.Log;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
+import android.widget.Switch;
 import android.widget.TextView;
 
 import dev.gawel.dothome.core.FireMode;
@@ -97,6 +98,18 @@ public class SetupActivity extends Activity {
         rocks.setOnCheckedChangeListener((g, id) -> {
             if (id >= styleId0 && id < styleId0 + styles.length) prefs.put(PrefsStore.KEY_ROCK_STYLE, styles[id - styleId0]);
         });
+
+        Switch backdrop = new Switch(this);
+        backdrop.setText("Solid widget backgrounds");
+        backdrop.setTextColor(0xFFFFFFFF);
+        backdrop.setChecked(WidgetArt.backdropOn(this));
+        backdrop.setOnCheckedChangeListener((b, on) -> {
+            prefs.put("widget.backdrop", on ? "true" : "false");
+            WidgetUpdater.updateAll(this);
+            WeatherJob.refreshSoon(this); // the radar widget re-renders in that job
+        });
+        android.view.ViewGroup parent = (android.view.ViewGroup) rocks.getParent();
+        parent.addView(backdrop, parent.indexOfChild(rocks) + 1);
 
         WeatherJob.schedule(this);
         WeatherJob.refreshSoon(this);

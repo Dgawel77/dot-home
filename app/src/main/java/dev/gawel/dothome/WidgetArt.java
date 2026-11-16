@@ -5,6 +5,9 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffXfermode;
+import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.text.format.DateFormat;
 
@@ -23,7 +26,7 @@ import dev.gawel.dothome.core.Weather;
 import dev.gawel.dothome.core.WeatherCodes;
 
 /**
- * Draws the clock, weather and music widgets as transparent bitmaps on the 4 dp lattice. Every function takes the
+ * Draws the clock, weather and music widgets as bitmaps (a solid GROUND panel when backdrops are on) on the 4 dp lattice. Every function takes the
  * effective density (display density times the shrink applied to the bitmap), so sizes come out as true dp once
  * the launcher stretches the bitmap back. Content offsets snap to multiples of the step; no containers, glows or
  * gradients.
@@ -33,6 +36,7 @@ final class WidgetArt {
     private static final int WORST_TEMP_COLS = 23;
     private static final float ART_RADIUS_DP = 12f;
     private static final float ICON_STROKE_DP = 1.6f;
+    private static final float PANEL_RADIUS_DP = 24f;
 
     private WidgetArt() {}
 
@@ -70,6 +74,7 @@ final class WidgetArt {
     static Bitmap clock(Context ctx, int wPx, int hPx, long nowMs, Lattice.Step step, float dens) {
         Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
+        backdrop(ctx, c, bmp.getWidth(), bmp.getHeight(), dens, true, false);
 
         Calendar cal = Calendar.getInstance();
         cal.setTimeInMillis(nowMs);
@@ -104,6 +109,7 @@ final class WidgetArt {
     static Bitmap weather(Context ctx, int wPx, int hPx, Weather w, long nowMs, float dens) {
         Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
+        backdrop(ctx, c, bmp.getWidth(), bmp.getHeight(), dens, false, true);
 
         String temp = w == null ? "\u2212\u2212\u00B0" : tempText(Math.round(w.tempF));
         byte[] cells = DotMatrixFont.cells(temp);
@@ -211,6 +217,7 @@ final class WidgetArt {
     static Bitmap music(Context ctx, int wPx, int hPx, NowPlaying np, float dens) {
         Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
+        backdrop(ctx, c, bmp.getWidth(), bmp.getHeight(), dens, true, true);
         float s4 = Lattice.stepPx(Lattice.Step.S4, dens);
         float artS = 64f * dens;
         float artX = 16f * dens, artY = Lattice.snap((hPx - artS) / 2f, dens);
@@ -247,6 +254,37 @@ final class WidgetArt {
         Paint on = fill(DotStyle.L100), off = fill(DotStyle.L10);
         for (int i = 0; i < total; i++) dot(c, textX, y, s4, i, 0, rr, i < done ? on : off);
         return bmp;
+    }
+
+    /** Pref "widget.backdrop" (default on): whether widgets draw their own solid black panel. */
+    static boolean backdropOn(Context ctx) {
+        return !"false".equals(new PrefsStore(ctx).get("widget.backdrop", "true"));
+    }
+
+    /**
+     * Opaque GROUND rounded panel filling the bitmap, 24 dp corners. Only the flagged sides are rounded; an
+     * unflagged side runs square so adjacent widget halves read as one panel.
+     */
+    private static void backdrop(Context ctx, Canvas c, int wPx, int hPx, float dens, boolean left, boolean right) {
+        if (!backdropOn(ctx)) return;
+        c.drawPath(panel(0, 0, wPx, hPx, PANEL_RADIUS_DP * dens, left, right), fill(DotStyle.GROUND));
+    }
+
+    private static Path panel(float l, float t, float r, float b, float rad, boolean roundLeft, boolean roundRight) {
+        float lr = roundLeft ? rad : 0f, rr = roundRight ? rad : 0f;
+        Path path = new Path();
+        path.addRoundRect(new RectF(l, t, r, b), new float[] {lr, lr, rr, rr, rr, rr, lr, lr}, Path.Direction.CW);
+        return path;
+    }
+
+    /** Makes the corners of an opaque bitmap transparent (24 dp radius) when backdrops are on; else untouched. */
+    static void roundCorners(Context ctx, Bitmap bmp, float dens) {
+        if (!backdropOn(ctx)) return;
+        Path outside = panel(0, 0, bmp.getWidth(), bmp.getHeight(), PANEL_RADIUS_DP * dens, true, true);
+        outside.setFillType(Path.FillType.INVERSE_WINDING);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        p.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
+        new Canvas(bmp).drawPath(outside, p);
     }
 
     /** " 2h ago"-style text once the data is older than 90 minutes; null while fresh. Hours, then days. */
