@@ -71,7 +71,7 @@ public class RadarActivity extends Activity {
         header.setPadding(px(16), px(12), px(16), px(12));
         titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
-        TextView title = text("Radar", 20, DotStyle.L100, Fonts.interMedium(this));
+        TextView title = text("Radar", 20, DotStyle.L65, Fonts.interMedium(this));
         subtitle = text("", 13, DotStyle.L65, Fonts.inter(this));
         titles.setClickable(true); // taps on the header text must not toggle the map
         titles.addView(title);

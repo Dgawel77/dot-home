@@ -191,12 +191,11 @@ final class DotRenderer {
     }
 
     /**
-     * Renders the current world into a new bitmap of the given size. dim (0..1) darkens the picture with black;
-     * rock, particle, shot, ship and ring dots (and the shockwave) above clearTopFraction of the height are skipped
+     * Renders the current world into a new bitmap of the given size. rock, particle, shot, ship and ring dots (and the shockwave) above clearTopFraction of the height are skipped
      * so that band stays clear. The world is scaled uniformly to cover the target and centred (excess is cropped);
      * the lattice and dot sizes are the target screen's, and every level is capped at L65.
      */
-    Bitmap renderStill(GameWorld w, int width, int height, float dim, float clearTopFraction) {
+    Bitmap renderStill(GameWorld w, int width, int height, float clearTopFraction) {
         Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
         c.drawColor(DotStyle.GROUND);
@@ -219,7 +218,6 @@ final class DotRenderer {
                 clearTopY = -1f;
             }
         }
-        if (dim > 0) c.drawColor((Math.round(Math.min(1f, dim) * 255) << 24) | (DotStyle.GROUND & 0x00FFFFFF));
         return bmp;
     }
 
@@ -293,7 +291,7 @@ final class DotRenderer {
         if (shipClear && sa > 0) {
             if (step != shipSpacing || k != shipK) buildShipDots(step, k);
             float cs = (float) Math.cos(s.angle), sn = (float) Math.sin(s.angle);
-            float blink = s.hitCooldown > 0 ? 0.55f + 0.45f * (float) Math.cos(s.hitCooldown * 40) : 1f;
+            float blink = s.hitCooldown > 0 ? 1f - 0.45f * (float) Math.sin(Math.PI * (0.4f - s.hitCooldown) / 0.4f) : 1f;
             for (int j = 0; j < shipPts.length; j += 2) {
                 float px = shipPts[j], py = shipPts[j + 1];
                 user.draw(c, sx(s.x + px * cs - py * sn), sy(s.y + px * sn + py * cs), rHeavy, sa * blink);

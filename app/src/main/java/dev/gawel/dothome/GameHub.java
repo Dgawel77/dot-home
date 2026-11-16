@@ -36,6 +36,9 @@ final class GameHub {
     private final KeyguardManager keyguard;
     /** When the opening dot plays: the first show after a screen-off and unlock; folds and flips skip it. */
     private final IntroGate introGate = new IntroGate();
+    /** True while the intro waits on its first dot for the unlock; the frame loop then polls the keyguard. */
+    private boolean holdingIntro;
+    private long lastKeyguardPollNanos;
 
     static synchronized GameHub get(Context context) {
         if (instance == null) instance = new GameHub(context.getApplicationContext());
@@ -95,8 +98,9 @@ final class GameHub {
         visible.remove(e);
         visible.add(e);
         IntroGate.Action intro = introGate.visible(keyguardLocked());
+        holdingIntro = intro == IntroGate.Action.HOLD;
         if (intro == IntroGate.Action.PLAY) world.restartIntro();
-        else if (intro == IntroGate.Action.HOLD) world.holdIntro(); // one dot until USER_PRESENT plays it
+        else if (holdingIntro) world.holdIntro(); // one dot until USER_PRESENT (or the keyguard poll) plays it
         else world.skipIntro();
         if (renderer != null) renderer.setOutlineRocks(prefs.outlineRocks());
         fireMode = readFireMode();
@@ -130,6 +134,7 @@ final class GameHub {
 
     void onHidden(DotWallpaperService.DotEngine e) {
         visible.remove(e);
+        if (visible.isEmpty()) holdingIntro = false; // onVisible re-decides on the next show
         scoreBook.refresh(); // score writes are already applied to prefs; this just rolls the day over
         if (visible.isEmpty()) {
             tilt.stop();
@@ -147,7 +152,21 @@ final class GameHub {
 
     /** The keyguard was dismissed: an engine already showing (holding on the first dot) plays the intro now. */
     void onUserPresent() {
-        if (introGate.userPresent(!visible.isEmpty()) == IntroGate.Action.PLAY) world.restartIntro();
+        if (introGate.userPresent(!visible.isEmpty()) == IntroGate.Action.PLAY) {
+            holdingIntro = false;
+            world.restartIntro();
+        }
+    }
+
+    /**
+     * Safety valve for a USER_PRESENT that never arrives: while holding the intro, checks the keyguard about
+     * every 0.5 s and plays the intro once it is gone. Called from the frame loop; allocates nothing.
+     */
+    void pollKeyguard(long frameTimeNanos) {
+        if (!holdingIntro) return;
+        if (frameTimeNanos - lastKeyguardPollNanos < 500_000_000L) return;
+        lastKeyguardPollNanos = frameTimeNanos;
+        if (!keyguardLocked()) onUserPresent();
     }
 
     private boolean keyguardLocked() {

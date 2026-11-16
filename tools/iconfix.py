@@ -58,10 +58,10 @@ SIMPLE_ICONS_SHA512 = (  # registry dist.integrity for 16.36.0 (base64)
     "+VNPPkqSOLidFeSgBKUWX4n50WPpDC09hav+BgS26anIF1oQOlGBb8LvwGR+6fYRjo+B6CiKzNBceMPkSVXANQ==")
 SIMPLE_ICONS_URL = "https://registry.npmjs.org/simple-icons/-/simple-icons-%s.tgz" % SIMPLE_ICONS_VERSION
 
-# core/DotStyle: FG 0xFFDDDDDD, BG 0xFF0B0B0B
-FG = (0xDD, 0xDD, 0xDD)
-BG = (0x0B, 0x0B, 0x0B)
-FG2 = (0x8E, 0x8E, 0x8E)
+# core/DotStyle: GROUND #000000, L100 #DDDDDD, L65 #A6A6A6, L46 #757575, L10 #1A1A1A
+FG = (0xDD, 0xDD, 0xDD)  # L100
+BG = (0x00, 0x00, 0x00)  # GROUND
+FG2 = (0xA6, 0xA6, 0xA6)  # L65 (contact-sheet labels)
 SIZE = 432
 MAX_FILL = 0.55
 MIN_FILL = 0.01
@@ -726,7 +726,7 @@ def contact_sheet(items, path, width=2400, cols=16):
         im = Image.open(p).convert("RGBA").resize((icon, icon), Image.LANCZOS)
         sheet.paste(Image.new("RGB", im.size, FG), (x + (cell - icon) // 2, y + 8), im.getchannel("A"))
         text = label if len(label) <= 17 else label[:16] + "~"
-        d.text((x + cell // 2, y + icon + 20), text, fill=FG, font=font, anchor="mm")
+        d.text((x + cell // 2, y + icon + 20), text, fill=FG2, font=font, anchor="mm")
         d.text((x + 6, y + 4), MARK.get(source, "?"), fill=FG2, font=small)
     sheet.save(path)
 

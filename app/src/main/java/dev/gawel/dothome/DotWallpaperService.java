@@ -64,7 +64,7 @@ public class DotWallpaperService extends WallpaperService {
             f.addAction(Intent.ACTION_SCREEN_ON);
             f.addAction(Intent.ACTION_SCREEN_OFF);
             f.addAction(Intent.ACTION_USER_PRESENT);
-            register(screenState, f);
+            register(screenState, f, true);
             PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
             if (pm == null || pm.isInteractive()) setTick(true);
         } catch (RuntimeException e) {
@@ -98,8 +98,13 @@ public class DotWallpaperService extends WallpaperService {
     }
 
     private void register(BroadcastReceiver r, IntentFilter f) {
+        register(r, f, false);
+    }
+
+    /** exported: USER_PRESENT is sent by SystemUI, so a not-exported receiver may never see it (all three actions are protected). */
+    private void register(BroadcastReceiver r, IntentFilter f, boolean exported) {
         if (Build.VERSION.SDK_INT >= 33) {
-            Api33.register(this, r, f);
+            Api33.register(this, r, f, exported);
         } else {
             registerReceiver(r, f);
         }
@@ -107,8 +112,8 @@ public class DotWallpaperService extends WallpaperService {
 
     /** Guarded so the RECEIVER_NOT_EXPORTED overload is only touched on API 33+. */
     private static final class Api33 {
-        static void register(Context c, BroadcastReceiver r, IntentFilter f) {
-            c.registerReceiver(r, f, Context.RECEIVER_NOT_EXPORTED);
+        static void register(Context c, BroadcastReceiver r, IntentFilter f, boolean exported) {
+            c.registerReceiver(r, f, exported ? Context.RECEIVER_EXPORTED : Context.RECEIVER_NOT_EXPORTED);
         }
     }
 
@@ -310,6 +315,7 @@ public class DotWallpaperService extends WallpaperService {
             fitWorld(); // covers control passing back to this engine when another one hides
             if (world.width() > 0) {
                 if (hub.isActive(this)) {
+                    hub.pollKeyguard(frameTimeNanos);
                     if (frameTimeNanos - lastRefreshNanos >= 1_000_000_000L) {
                         lastRefreshNanos = frameTimeNanos;
                         hub.scoreBook().refresh(); // rolls the day over at midnight while visible

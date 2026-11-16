@@ -31,7 +31,6 @@ import dev.gawel.dothome.core.GameWorld;
  */
 final class LockStills {
     private static final String TAG = "DotHome";
-    private static final float DIM = 0f; // the renderer's L65 cap is the stills' dimming; an overlay would leave the palette
     private static final float CLEAR_TOP = 0.42f;
     private static final String REL_DIR = "Pictures/DotHome";
 
@@ -66,7 +65,7 @@ final class LockStills {
                 String name = (float) p.x / p.y < 0.6f ? "lock-cover.png" : "lock-main.png";
                 if (names.contains(name)) continue; // e.g. a virtual display with the same shape
                 names.add(name);
-                bitmaps.add(renderer.renderStill(world, p.x, p.y, DIM, CLEAR_TOP));
+                bitmaps.add(renderer.renderStill(world, p.x, p.y, CLEAR_TOP));
             }
         } catch (RuntimeException | OutOfMemoryError e) {
             Log.w(TAG, "lock still render failed: " + e);
