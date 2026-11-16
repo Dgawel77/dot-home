@@ -28,6 +28,13 @@ final class LocationSource {
 
     private LocationSource() {}
 
+    /** The last saved place, with no location fix or network work (the weather's own cache); null before the first fix. */
+    static Place cached(Context ctx) {
+        PrefsStore prefs = new PrefsStore(ctx);
+        Double la = parse(prefs.get(KEY_LAT, null)), lo = parse(prefs.get(KEY_LON, null));
+        return la == null || lo == null ? null : new Place(la, lo, Place.Source.CACHED);
+    }
+
     static Place current(Context ctx) {
         PrefsStore prefs = new PrefsStore(ctx);
         Double cLat = parse(prefs.get(KEY_LAT, null)), cLon = parse(prefs.get(KEY_LON, null));

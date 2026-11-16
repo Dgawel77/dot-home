@@ -22,7 +22,7 @@ final class WidgetUpdater {
     private static final Class<?> WEATHER_TARGET = RadarActivity.class;
 
     private static final int DEFAULT_W_DP = 250, DEFAULT_H_DP = 110;
-    private static final int MAX_SIDE_PX = 1200; // keeps each RemoteViews bitmap far below the binder/memory limit
+    static final int MAX_SIDE_PX = 1200; // keeps each RemoteViews bitmap far below the binder/memory limit
     private static final float CLOCK_WEIGHT = 1.4f, WEATHER_WEIGHT = 1f;
 
     private WidgetUpdater() {}
@@ -130,6 +130,11 @@ final class WidgetUpdater {
         Intent i = ctx.getPackageManager().getLaunchIntentForPackage(CLOCK_PKG);
         if (i == null) i = new Intent(AlarmClock.ACTION_SHOW_ALARMS);
         return i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+    }
+
+    /** What a tap on the radar widget opens: RadarActivity (singleTask, so taps never stack copies). */
+    static PendingIntent radarTap(Context ctx) {
+        return PendingIntent.getActivity(ctx, 2, new Intent(ctx, WEATHER_TARGET).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), flags());
     }
 
     private static int flags() {

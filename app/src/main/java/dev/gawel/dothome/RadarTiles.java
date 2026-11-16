@@ -104,6 +104,16 @@ final class RadarTiles {
      * an empty list) as soon as cancelled.getAsBoolean() is true.
      */
     static List<Frame> load(GeoProjection p, int zoom, BooleanSupplier cancelled) {
+        return load(p, zoom, FRAMES, cancelled);
+    }
+
+    /** Blocking: only the newest frame (minutesAgo 0), for the widget: about one frame's tiles. */
+    static List<Frame> loadLatest(GeoProjection p, int zoom) {
+        return load(p, zoom, 1, () -> false);
+    }
+
+    /** The newest {@code frameCount} frames, 5 minutes apart, oldest first. */
+    static List<Frame> load(GeoProjection p, int zoom, int frameCount, BooleanSupplier cancelled) {
         int n = 1 << zoom;
         double[] lons = {p.lon(0), p.lon(p.w)}, lats = {p.lat(0), p.lat(p.h)};
         int x0 = clamp(TileMath.tileX(lons[0], zoom), n), x1 = clamp(TileMath.tileX(lons[1], zoom), n);
@@ -118,9 +128,9 @@ final class RadarTiles {
         ExecutorService pool = Executors.newFixedThreadPool(6);
         try {
             List<Future<Bitmap[]>> futures = new ArrayList<>();
-            int[] minutes = new int[FRAMES];
-            for (int f = 0; f < FRAMES; f++) {
-                final int minutesAgo = 5 * (FRAMES - 1 - f);
+            int[] minutes = new int[frameCount];
+            for (int f = 0; f < frameCount; f++) {
+                final int minutesAgo = 5 * (frameCount - 1 - f);
                 minutes[f] = minutesAgo;
                 futures.add(pool.submit((Callable<Bitmap[]>) () -> {
                     Bitmap[] out = new Bitmap[tx.length];
@@ -129,7 +139,7 @@ final class RadarTiles {
                 }));
             }
             List<Frame> frames = new ArrayList<>();
-            for (int f = 0; f < FRAMES; f++) {
+            for (int f = 0; f < frameCount; f++) {
                 try {
                     Bitmap[] tiles = null;
                     while (tiles == null) {

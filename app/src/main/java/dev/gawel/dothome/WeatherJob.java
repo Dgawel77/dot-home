@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class WeatherJob extends JobService {
     static final int ID_PERIODIC = 801;
     static final int ID_ONESHOT = 802;
-    private static final long PERIOD_MS = 30L * 60 * 1000;
+    private static final long PERIOD_MS = 15L * 60 * 1000; // JobScheduler's minimum; the radar widget refreshes on it
 
     /** At most one fetch at a time in this process; a second job that starts meanwhile just ends. */
     private static final AtomicBoolean RUNNING = new AtomicBoolean(false);
@@ -69,6 +69,13 @@ public class WeatherJob extends JobService {
             try {
                 WeatherRepo.refresh(app, () -> w.stopped);
                 if (!w.stopped) WidgetUpdater.updateAll(app);
+                if (!w.stopped) {
+                    try {
+                        RadarWidget.updateAll(app); // network on this worker thread; a radar failure never fails the job
+                    } catch (Throwable e) {
+                        Log.w("DotHome", "radar widget error: " + e);
+                    }
+                }
             } catch (Throwable e) { // an Error here would otherwise kill the shared wallpaper process
                 Log.w("DotHome", "weather job error: " + e);
             } finally {

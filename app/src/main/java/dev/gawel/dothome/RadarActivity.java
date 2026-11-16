@@ -18,6 +18,7 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import dev.gawel.dothome.core.DotStyle;
 import dev.gawel.dothome.core.Place;
 
 /** Full-screen radar: header (title, place, Area/Region pills), the dotted map, and the credits line. */
@@ -40,7 +41,7 @@ public class RadarActivity extends Activity {
         dp = getResources().getDisplayMetrics().density;
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.BLACK);
+        root.setBackgroundColor(DotStyle.BG);
         if (Build.VERSION.SDK_INT >= 28) {
             getWindow().getAttributes().layoutInDisplayCutoutMode =
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
@@ -63,8 +64,8 @@ public class RadarActivity extends Activity {
         header.setPadding(px(20), px(14), px(16), px(10));
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
-        TextView title = text("Radar", 20, Color.WHITE, Fonts.interMedium(this));
-        subtitle = text("", 13, 0xFFA6A6A6, Fonts.inter(this));
+        TextView title = text("Radar", 20, DotStyle.FG, Fonts.interMedium(this));
+        subtitle = text("", 13, DotStyle.FG2, Fonts.inter(this));
         titles.addView(title);
         titles.addView(subtitle);
         header.addView(titles, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -191,9 +192,9 @@ public class RadarActivity extends Activity {
     private void stylePill(TextView t, boolean on) {
         GradientDrawable bg = new GradientDrawable();
         bg.setCornerRadius(px(19));
-        bg.setColor(on ? Color.WHITE : Color.TRANSPARENT);
+        bg.setColor(on ? DotStyle.FG : Color.TRANSPARENT);
         t.setBackground(bg);
-        t.setTextColor(on ? Color.BLACK : 0xFFBDBDBD);
+        t.setTextColor(on ? DotStyle.BG : 0xFFBDBDBD);
     }
 
     private TextView pill(String label) {
