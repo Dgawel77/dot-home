@@ -23,6 +23,7 @@ final class DotRenderer {
     /** Cached dots of one rock: x, y, alpha triples (alpha 1 marks an outline dot), valid for one spacing. */
     private static final class RockDots {
         float spacing;
+        float radius; // r.r the cache was built for; world.resize rescales rocks in place
         long seed;
         float[] pts = new float[0];
         int n;
@@ -30,11 +31,12 @@ final class DotRenderer {
 
     private final SoftDot softDot = new SoftDot(DotStyle.FG);
     private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final float density;
+    private final android.content.res.Resources res;
+    private float density;
     private final WeakHashMap<GameWorld.Rock, RockDots> rockCache = new WeakHashMap<>();
     private long rockSeed = 1;
     private float[] shipPts = new float[0];
-    private float shipSpacing = -1;
+    private float shipSpacing = -1, shipK = -1;
 
     private final float[] trailX = new float[TRAIL_MAX];
     private final float[] trailY = new float[TRAIL_MAX];
@@ -51,7 +53,8 @@ final class DotRenderer {
     private float clearTopY = -1;
 
     DotRenderer(Context context) {
-        density = context.getResources().getDisplayMetrics().density;
+        res = context.getResources();
+        density = res.getDisplayMetrics().density;
         softDot.prewarm(DotScale.radiusPx(density));
         textPaint.setTypeface(Fonts.inter(context));
         textPaint.setColor(DotStyle.FG2);
@@ -137,6 +140,7 @@ final class DotRenderer {
 
     private void drawScene(Canvas c, GameWorld w, boolean withTrail) {
         float k = scaleK(w);
+        density = res.getDisplayMetrics().density; // can change with display size; caches are keyed on it
         float ds = DotScale.radiusPx(density), spacing = DotScale.pitchPx(density);
         float t = w.time();
         float f = clamp((t - 0.5f) / 1.1f, 0, 1);
@@ -163,7 +167,7 @@ final class DotRenderer {
                 d.seed = rockSeed++;
                 rockCache.put(r, d);
             }
-            if (d.spacing != spacing) buildRockDots(r, d, spacing);
+            if (d.spacing != spacing || d.radius != r.r) buildRockDots(r, d, spacing);
             float cs = (float) Math.cos(r.rot), sn = (float) Math.sin(r.rot);
             for (int j = 0; j < d.n; j++) {
                 float px = d.pts[3 * j], py = d.pts[3 * j + 1], a = d.pts[3 * j + 2];
@@ -208,7 +212,7 @@ final class DotRenderer {
         float sa = clamp((t - 0.9f) / 0.5f, 0, 1);
         if (shipClear && sa > 0) {
             float sp = spacing * 0.55f;
-            if (sp != shipSpacing) buildShipDots(sp, k);
+            if (sp != shipSpacing || k != shipK) buildShipDots(sp, k);
             float cs = (float) Math.cos(s.angle), sn = (float) Math.sin(s.angle);
             float blink = s.hitCooldown > 0 ? 0.55f + 0.45f * (float) Math.cos(s.hitCooldown * 40) : 1f;
             for (int j = 0; j < shipPts.length; j += 2) {
@@ -286,6 +290,7 @@ final class DotRenderer {
         d.pts = pts;
         d.n = n;
         d.spacing = spacing;
+        d.radius = rock.r;
     }
 
     private void buildShipDots(float sp, float k) {
@@ -305,6 +310,7 @@ final class DotRenderer {
         }
         shipPts = java.util.Arrays.copyOf(tmp, 2 * n);
         shipSpacing = sp;
+        shipK = k;
     }
 
     private static float scaleK(GameWorld w) { return (float) Math.sqrt((double) w.width() * w.height()) / 669f; }
