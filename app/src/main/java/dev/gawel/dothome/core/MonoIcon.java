@@ -29,6 +29,28 @@ public final class MonoIcon {
         return out;
     }
 
+    /** Share of pixels with alpha >= 128. */
+    public static float fillRatio(int[] argb) {
+        if (argb.length == 0) return 0f;
+        int n = 0;
+        for (int p : argb) if ((p >>> 24) >= 128) n++;
+        return n / (float) argb.length;
+    }
+
+    /**
+     * Recolours every pixel to fg and hardens alpha: below 90 gone, above 165 solid, linear between.
+     * Removes the grey shading that soft alpha gradients leave on a flat glyph.
+     */
+    public static int[] flatten(int[] argb, int fg) {
+        int[] out = new int[argb.length];
+        for (int i = 0; i < argb.length; i++) {
+            int a = argb[i] >>> 24;
+            int na = a < 90 ? 0 : a > 165 ? 255 : (a - 90) * 255 / 75;
+            out[i] = (na << 24) | (fg & 0x00FFFFFF);
+        }
+        return out;
+    }
+
     static int lum(int p) {
         int r = (p >> 16) & 0xFF, g = (p >> 8) & 0xFF, b = p & 0xFF;
         return (299 * r + 587 * g + 114 * b) / 1000;

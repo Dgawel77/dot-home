@@ -14,3 +14,5 @@ notes/snapshot/*.png
 # Generated
 tools/cache/
 iconpack/res/
+tools/.venv/
+__pycache__/

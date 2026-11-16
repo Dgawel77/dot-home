@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 # Builds iconpack.apk from exported icons. Run on the NAS: tools/nas tools/make_iconpack.sh
-# Input: $ICONS_DIR (default build/icons) holding <drawable>.png files and index.tsv
+# Input: $ICONS_DIR (default build/icons) is run through tools/iconfix.py into build/icons-final/,
+#        which is what gets packaged. It holds <drawable>.png files and index.tsv
 #        (component<TAB>drawable<TAB>mono|auto). Hand-made iconpack/overrides/<drawable>.png win.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 TOOLS=${TOOLS:-$HOME/androidtools}
 export JAVA_HOME=${JAVA_HOME:-$TOOLS/jdk}
 export PATH=$JAVA_HOME/bin:$PATH
-IN=${ICONS_DIR:-build/icons}
-[ -f "$IN/index.tsv" ] || { echo "missing $IN/index.tsv" >&2; exit 1; }
+SRC=${ICONS_DIR:-build/icons}
+[ -f "$SRC/index.tsv" ] || { echo "missing $SRC/index.tsv" >&2; exit 1; }
+IN=build/icons-final
+python3 tools/iconfix.py "$SRC" "$IN"
 
 RES=iconpack/res
 rm -rf $RES && mkdir -p $RES/drawable-nodpi $RES/xml

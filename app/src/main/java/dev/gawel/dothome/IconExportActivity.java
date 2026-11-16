@@ -14,6 +14,7 @@ import android.os.Bundle;
 import android.util.Log;
 import android.widget.TextView;
 import dev.gawel.dothome.core.AppFilter;
+import dev.gawel.dothome.core.DotStyle;
 import dev.gawel.dothome.core.MonoIcon;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -23,11 +24,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Exports every launcher app's icon as a white glyph PNG (192px) for the icon pack.
+ * Exports every launcher app's icon as a white glyph PNG (432px, soft white) for the icon pack.
  * Reads icons through PackageManager only; it never starts, binds to, or queries any other app.
  */
 public class IconExportActivity extends Activity {
-    private static final int SIZE = 192;
+    private static final int SIZE = 432;
     private TextView status;
 
     @Override protected void onCreate(Bundle b) {
@@ -87,14 +88,22 @@ public class IconExportActivity extends Activity {
                         } else {
                             px = MonoIcon.fromFullIcon(render(new Drawable[] {icon}, true, false), SIZE, SIZE);
                         }
+                        px = MonoIcon.flatten(px, DotStyle.FG);
                         Bitmap bmp = Bitmap.createBitmap(px, SIZE, SIZE, Bitmap.Config.ARGB_8888);
-                        FileOutputStream out = new FileOutputStream(new File(dir, names.get(i) + ".png"));
                         try {
-                            bmp.compress(Bitmap.CompressFormat.PNG, 100, out);
+                            FileOutputStream out = new FileOutputStream(new File(dir, names.get(i) + ".png"));
+                            try {
+                                bmp.compress(Bitmap.CompressFormat.PNG, 100, out);
+                            } finally {
+                                out.close();
+                            }
                         } finally {
-                            out.close();
+                            bmp.recycle();
                         }
-                        index.write(components.get(i) + "\t" + names.get(i) + "\t" + (mono ? "mono" : "auto") + "\n");
+                        CharSequence lab = apps.get(i).loadLabel(pm);
+                        String label = (lab == null ? "" : lab.toString()).replaceAll("[\\t\\r\\n]+", " ").trim();
+                        index.write(components.get(i) + "\t" + names.get(i) + "\t" + (mono ? "mono" : "auto")
+                            + "\t" + label + "\n");
                         count++;
                         if (!mono) auto++;
                     } catch (Exception e) {
@@ -117,7 +126,7 @@ public class IconExportActivity extends Activity {
     }
 
     /**
-     * Renders to 192x192. Raw adaptive layers live on a 108dp canvas with a 72dp safe zone, so they
+     * Renders to 432x432. Raw adaptive layers live on a 108dp canvas with a 72dp safe zone, so they
      * are drawn oversize (~1.25x) to fill the tile; legacy icons are drawn 1:1. Opaque mode puts a
      * black backing under the layers; the monochrome layer keeps its alpha.
      */
@@ -133,6 +142,7 @@ public class IconExportActivity extends Activity {
         }
         int[] px = new int[SIZE * SIZE];
         bmp.getPixels(px, 0, SIZE, 0, 0, SIZE, SIZE);
+        bmp.recycle();
         return px;
     }
 }

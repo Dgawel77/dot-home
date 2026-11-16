@@ -44,4 +44,20 @@ public final class MonoIconTest {
         int[] out = MonoIcon.fromFullIcon(px, 4, 4);
         T.eq(0, out[5] >>> 24, "below threshold");
     }
+
+    public static void testFillRatio() {
+        int[] px = {0xFF000000, 0x80000000, 0x7F000000, 0x00FFFFFF};
+        T.near(0.5, MonoIcon.fillRatio(px), 1e-9, "alpha >= 128 counts");
+        T.near(0, MonoIcon.fillRatio(new int[0]), 1e-9, "empty");
+    }
+
+    public static void testFlattenRemovesShading() {
+        int fg = 0xFFDDDDDD;
+        int[] out = MonoIcon.flatten(new int[] {0x3C808080, 0x80123456, 0xC8FFFFFF, 0x5A000000, 0xA5000000}, fg);
+        T.eq(0x00DDDDDD, out[0], "alpha 60 vanishes");
+        T.eq(0x81DDDDDD, out[1], "alpha 128 ramps to 129");
+        T.eq(0xFFDDDDDD, out[2], "alpha 200 solid");
+        T.eq(0x00DDDDDD, out[3], "alpha 90 is 0");
+        T.eq(0xFFDDDDDD, out[4], "alpha 165 is solid");
+    }
 }
