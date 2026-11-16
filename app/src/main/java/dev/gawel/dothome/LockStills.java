@@ -54,6 +54,7 @@ final class LockStills {
             }
             DotRenderer renderer = new DotRenderer(app);
             for (Display d : displays) {
+                if ((d.getFlags() & Display.FLAG_PRESENTATION) != 0) continue; // not a built-in screen
                 Point p = realSize(d);
                 if (p.x <= 0 || p.y <= 0) continue;
                 String name = (float) p.x / p.y < 0.6f ? "lock-cover.png" : "lock-main.png";
@@ -91,7 +92,9 @@ final class LockStills {
     /** Native (unrotated) pixel size from the display mode; getRealSize is deprecated from API 31. */
     private static Point realSize(Display d) {
         Display.Mode m = d.getMode();
-        return new Point(m.getPhysicalWidth(), m.getPhysicalHeight());
+        int w = m.getPhysicalWidth(), h = m.getPhysicalHeight();
+        // lock screens are portrait: a landscape-native panel (e.g. 2316x904) is swapped to 904x2316
+        return w > h ? new Point(h, w) : new Point(w, h);
     }
 
     /** Returns a human-readable location. */
@@ -142,7 +145,17 @@ final class LockStills {
             }
             ContentValues done = new ContentValues();
             done.put(MediaStore.MediaColumns.IS_PENDING, 0);
-            cr.update(uri, done, null, null);
+            int updated;
+            try {
+                updated = cr.update(uri, done, null, null);
+            } catch (RuntimeException e) {
+                cr.delete(uri, null, null);
+                throw new IOException("publish failed for " + name + ": " + e);
+            }
+            if (updated < 1) {
+                cr.delete(uri, null, null); // would stay pending and invisible
+                throw new IOException("could not publish " + name);
+            }
             return REL_DIR;
         }
     }
