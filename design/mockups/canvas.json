@@ -76,6 +76,29 @@
       "w": 960,
       "x": 0,
       "y": 3160
+    },
+    "ShipV2.dc.html": {
+      "h": 900,
+      "is_interactive": true,
+      "title": "Ship v2 · space flight · interactive",
+      "w": 700,
+      "x": 3490,
+      "y": 0
+    },
+    "Ships.dc.html": {
+      "h": 520,
+      "title": "Ship lineup · pick one",
+      "w": 960,
+      "x": 4270,
+      "y": 0
+    },
+    "TiltGlass.dc.html": {
+      "h": 900,
+      "is_interactive": true,
+      "title": "Tilt glass · wallpaper-drawn widgets",
+      "w": 700,
+      "x": 1950,
+      "y": 1060
     }
   },
   "createdOnFiles": {
@@ -118,7 +141,10 @@
     "Widgets.dc.html",
     "AOD.dc.html",
     "Unfold.dc.html",
-    "HomeWidgets.dc.html"
+    "HomeWidgets.dc.html",
+    "ShipV2.dc.html",
+    "Ships.dc.html",
+    "TiltGlass.dc.html"
   ],
   "pages": [],
   "title": "Fold6 Dot Home Mockups"

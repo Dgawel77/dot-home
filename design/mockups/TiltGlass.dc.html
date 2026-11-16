@@ -1,0 +1,807 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tilt glass widgets</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#A6A6A6}a:hover{color:#DDDDDD}
+.lb{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;line-height:16px;letter-spacing:1px;text-transform:uppercase;color:#A6A6A6;white-space:nowrap}
+.ic{width:56px;height:56px;display:flex;align-items:center;justify-content:center;border:0;border-radius:0;background:transparent;padding:0;cursor:pointer;pointer-events:auto}
+.tt{position:absolute;display:block;margin:0;padding:0;border:0;border-radius:20px;background:transparent;cursor:pointer;pointer-events:auto}
+.tt:hover,.tt:focus-visible{outline:1px dashed rgba(255,255,255,0.22);outline-offset:-1px}
+.mb{width:44px;height:44px;border-radius:22px;display:block;background:transparent;border:0;padding:0;cursor:pointer;pointer-events:auto}
+.mb:hover,.mb:focus-visible{background:rgba(255,255,255,0.06);outline:0}
+.shk{width:96px;height:32px;flex-shrink:0;border-radius:16px;border:0;background:#1A1A1A;color:#DDDDDD;font:500 13px Inter,system-ui,sans-serif;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 700px; height: 900px; box-sizing: border-box; padding: 40px 40px 0; background: #111111; display: flex; flex-direction: column; align-items: center; gap: 16px; font-family: Inter, system-ui, sans-serif; color: #DDDDDD">
+<div style="position: relative; width: 620px; height: 722px; flex-shrink: 0; border-radius: 36px; overflow: hidden; background: #000000; color: #DDDDDD; box-shadow: 0 0 0 1px #2c2c2c" onPointerMove="{{ onMove }}" onPointerLeave="{{ onLeave }}">
+<canvas id="dh-tg-cv" ref="{{ setCanvas }}" role="img" aria-label="Live wallpaper drawing its own glass widget cards: a dot-matrix clock with seconds, the date and weather, and a music card" style="position: absolute; left: 0; top: 0; width: 620px; height: 722px; display: block; touch-action: none"></canvas>
+<div style="position: absolute; left: 0; top: 0; width: 620px; height: 722px; pointer-events: none">
+<button class="tt" aria-label="{{ clockLabel }}" style="left: 24px; top: 28px; width: 404px; height: 160px"></button>
+<button class="tt" aria-label="Weather: 48 degrees, cloudy, Chicago" style="left: 432px; top: 28px; width: 164px; height: 160px"></button>
+<div class="lb" style="position: absolute; left: 24px; top: 208px">TODAY {{ score }} · BEST {{ best }}</div>
+<button class="tt" aria-label="Open music: Track name by Artist" style="left: 24px; top: 504px; width: 424px; height: 88px"></button>
+<div style="position: absolute; left: 456px; top: 526px; display: flex">
+<button class="mb" aria-label="Previous track"></button>
+<button class="mb" aria-label="{{ playLabel }}" onClick="{{ togglePlay }}"></button>
+<button class="mb" aria-label="Next track"></button>
+</div>
+<div style="position: absolute; left: 24px; top: 632px; display: flex; gap: 72px">
+<button class="ic" aria-label="Messages"><canvas id="dh-tg-ic-messages" ref="{{ setIcon }}" width="56" height="56" aria-hidden="true" style="width: 56px; height: 56px; display: block"></canvas></button>
+<button class="ic" aria-label="Phone"><canvas id="dh-tg-ic-phone" ref="{{ setIcon }}" width="56" height="56" aria-hidden="true" style="width: 56px; height: 56px; display: block"></canvas></button>
+<button class="ic" aria-label="Mail"><canvas id="dh-tg-ic-mail" ref="{{ setIcon }}" width="56" height="56" aria-hidden="true" style="width: 56px; height: 56px; display: block"></canvas></button>
+<button class="ic" aria-label="Browser"><canvas id="dh-tg-ic-browser" ref="{{ setIcon }}" width="56" height="56" aria-hidden="true" style="width: 56px; height: 56px; display: block"></canvas></button>
+<button class="ic" aria-label="Music"><canvas id="dh-tg-ic-music" ref="{{ setIcon }}" width="56" height="56" aria-hidden="true" style="width: 56px; height: 56px; display: block"></canvas></button>
+</div>
+</div>
+</div>
+<div style="width: 620px; display: flex; align-items: flex-start; gap: 16px">
+<button class="shk" aria-label="Shake" onClick="{{ shake }}">{{ shakeText }}</button>
+<div style="font-size: 13px; line-height: 20px; color: #A6A6A6">Wallpaper-drawn widgets: the reflection follows tilt (move the pointer) and the seconds tick. Real widgets would be invisible tap targets on top.</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"glassMode":{"editor":"enum","default":"tilt","options":["tilt","static"],"section":"Glass"},"reflectStrength":{"editor":"range","default":0.16,"min":0,"max":0.3,"step":0.01,"section":"Glass"},"$preview":{"width":700,"height":900}}'>
+class Component extends DCLogic {
+  _dims() {
+    return { W: 620, H: 722, ROCKS: 7, R: 34, CID: 'dh-tg-cv', IP: 'dh-tg-ic-', IC: 56,
+      ICONS: ['messages', 'phone', 'mail', 'browser', 'music'],
+      // Lattice clear zones (score line, dock). The cards are NOT zones: rocks pass under the glass.
+      zones: [[24, 208, 156, 16], [24, 632, 568, 56]],
+      cards: [{ x: 20, y: 24, w: 580, h: 168, r: 24 }, { x: 20, y: 500, w: 580, h: 96, r: 24 }],
+      CK: { x0: 47, y0: 62, s: 10 } };
+  }
+  componentDidMount() {
+    this.D = this._dims();
+    this._alive = true;
+    this._clock = setInterval(() => { this.setState({ now: Date.now() }); }, 10000);
+    this._onOri = (e) => {
+      const g = this._g;
+      if (!g || e.gamma == null || e.beta == null) return;
+      if (!g.ori) g.ori = { g0: e.gamma, b0: e.beta };
+      g.oriOn = true;
+      g.tilt.x = this._cl((e.gamma - g.ori.g0) / 22, -1, 1);
+      g.tilt.y = this._cl((e.beta - g.ori.b0) / 22, -1, 1);
+    };
+    try { window.addEventListener('deviceorientation', this._onOri); } catch (err) {}
+    try {
+      if (document.fonts && document.fonts.load) {
+        for (const f of ['400 13px Inter', '400 15px Inter', '500 15px Inter']) { const p = document.fonts.load(f); if (p && p.catch) p.catch(() => {}); }
+      }
+    } catch (err) {}
+    this._findCanvas(0);
+    this._findIcons(0);
+  }
+  componentWillUnmount() {
+    this._alive = false;
+    if (this._raf) cancelAnimationFrame(this._raf);
+    clearInterval(this._clock);
+    try { window.removeEventListener('deviceorientation', this._onOri); } catch (err) {}
+  }
+  _cl(v, a, b) { return v < a ? a : v > b ? b : v; }
+  // The four greys as alpha on #DDDDDD over the #000000 ground: 100% #DDDDDD, 65% #A6A6A6, 46% #757575, 10% #1A1A1A
+  _L() { return this._lv || (this._lv = { L100: 1, L65: 0.75, L46: 0.53, L10: 0.12 }); }
+  // Collects round dots (centre, diameter, alpha) and fills them in one pass per alpha level
+  _batch() {
+    const bk = [];
+    for (let i = 0; i <= 100; i++) bk.push([]);
+    const put = (x, y, d, a) => {
+      if (!(d > 0.3) || !(a > 0.005)) return;
+      let q = Math.round(a * 100);
+      if (q > 100) q = 100;
+      if (q < 1) return;
+      bk[q].push(x, y, d * 0.5);
+    };
+    put.flush = (ctx) => {
+      ctx.fillStyle = '#DDDDDD';
+      for (let q = 1; q <= 100; q++) {
+        const L = bk[q];
+        if (!L.length) continue;
+        ctx.globalAlpha = q / 100;
+        ctx.beginPath();
+        for (let i = 0; i < L.length; i += 3) { ctx.moveTo(L[i] + L[i + 2], L[i + 1]); ctx.arc(L[i], L[i + 1], L[i + 2], 0, 6.2832); }
+        ctx.fill();
+        L.length = 0;
+      }
+      ctx.globalAlpha = 1;
+    };
+    return put;
+  }
+  // The app's 5x7 matrix font (DotMatrixFont): digits share one 5-column advance, the colon is one column
+  _mxF() {
+    if (this._F) return this._F;
+    this._F = { '0': ['01110', '10001', '10011', '10101', '11001', '10001', '01110'], '1': ['00100', '01100', '00100', '00100', '00100', '00100', '01110'], '2': ['01110', '10001', '00001', '00010', '00100', '01000', '11111'], '3': ['11111', '00010', '00100', '00010', '00001', '10001', '01110'], '4': ['00010', '00110', '01010', '10010', '11111', '00010', '00010'], '5': ['11111', '10000', '11110', '00001', '00001', '10001', '01110'], '6': ['00110', '01000', '10000', '11110', '10001', '10001', '01110'], '7': ['11111', '00001', '00010', '00100', '01000', '01000', '01000'], '8': ['01110', '10001', '10001', '01110', '10001', '10001', '01110'], '9': ['01110', '10001', '10001', '01111', '00001', '00010', '01100'], ':': ['0', '0', '1', '0', '1', '0', '0'] };
+    return this._F;
+  }
+  _hhmm(d) { let h = d.getHours() % 12; if (h === 0) h = 12; return String(h).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+  _hms(d) { return this._hhmm(d) + ':' + String(d.getSeconds()).padStart(2, '0'); }
+  _dateStr(d) {
+    const key = d.getFullYear() * 400 + d.getMonth() * 32 + d.getDate();
+    if (this._dsK !== key) { this._dsK = key; this._ds = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }); }
+    return this._ds;
+  }
+  // Clear zones: lattice cells inside a zone stay off; within 16 px of its edge they thin out in a fixed 4x4 ordered dither
+  _zoneSet(W, H, zones) {
+    const S = 4, NI = Math.floor(W / S), NJ = Math.floor(H / S), N1 = NI + 1, n = N1 * (NJ + 1);
+    const mask = new Uint8Array(n), ramp = new Float32Array(n);
+    const BY = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+    for (let j = 0; j <= NJ; j++) {
+      for (let i = 0; i <= NI; i++) {
+        const x = i * S, y = j * S;
+        let t = 0;
+        for (const z of zones) {
+          const dx = Math.max(z[0] - x, 0, x - z[0] - z[2]), dy = Math.max(z[1] - y, 0, y - z[1] - z[3]);
+          const v = 1 - Math.sqrt(dx * dx + dy * dy) / 16;
+          if (v > t) t = v;
+        }
+        const q = j * N1 + i;
+        ramp[q] = t;
+        if (t > 0 && (BY[(j & 3) * 4 + (i & 3)] + 0.5) / 16 < t) mask[q] = 1;
+      }
+    }
+    return { mask: mask, ramp: ramp, N1: N1, NI: NI, NJ: NJ };
+  }
+  // Free dots crossing a zone drop to 10%
+  _zf(Z, x, y, a) {
+    const i = Math.round(x / 4), j = Math.round(y / 4);
+    if (i < 0 || j < 0 || i > Z.NI || j > Z.NJ) return a;
+    const t = Z.ramp[j * Z.N1 + i];
+    if (t <= 0) return a;
+    const lo = a < 0.12 ? a : 0.12;
+    return a + (lo - a) * t;
+  }
+  // Rasterises a polygon onto the fixed 4 px lattice. Rim cells: regular weight x coverage; interior: light weight.
+  _rast(put, poly, a, solid, Z, W, H) {
+    const S = 4, n = poly.length;
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    for (let k = 0; k < n; k++) { const p = poly[k]; if (p[0] < x0) x0 = p[0]; if (p[0] > x1) x1 = p[0]; if (p[1] < y0) y0 = p[1]; if (p[1] > y1) y1 = p[1]; }
+    const NI = Math.floor(W / S), NJ = Math.floor(H / S);
+    const i0 = Math.max(0, Math.ceil((x0 - 2) / S)), i1 = Math.min(NI, Math.floor((x1 + 2) / S));
+    const j0 = Math.max(0, Math.ceil((y0 - 2) / S)), j1 = Math.min(NJ, Math.floor((y1 + 2) / S));
+    for (let j = j0; j <= j1; j++) {
+      const cy = j * S;
+      for (let i = i0; i <= i1; i++) {
+        if (Z && Z.mask[j * Z.N1 + i]) continue;
+        const cx = i * S;
+        let ins = false, dm = 1e9;
+        for (let k = 0, l = n - 1; k < n; l = k++) {
+          const ax = poly[l][0], ay = poly[l][1], bx = poly[k][0], by = poly[k][1], ex = bx - ax, ey = by - ay;
+          if ((ay > cy) !== (by > cy) && cx < (ex * (cy - ay)) / ey + ax) ins = !ins;
+          const wx = cx - ax, wy = cy - ay, ee = ex * ex + ey * ey;
+          let u = ee > 0 ? (wx * ex + wy * ey) / ee : 0;
+          u = u < 0 ? 0 : u > 1 ? 1 : u;
+          const dx = wx - ex * u, dy = wy - ey * u, d2 = dx * dx + dy * dy;
+          if (d2 < dm) dm = d2;
+        }
+        const sd = ins ? -Math.sqrt(dm) : Math.sqrt(dm);
+        if (sd >= S / 2) continue;
+        if (solid || sd > -S) { const cov = 0.5 - sd / S; put(cx, cy, 0.6 * S * (cov > 1 ? 1 : cov), a); }
+        else put(cx, cy, 0.3 * S, a);
+      }
+    }
+  }
+  _findCanvas(n) {
+    if (!this._alive) return;
+    if (!this._cv) { const el = document.getElementById(this.D.CID); if (el) this._cv = el; }
+    if (this._cv) { this._start(); return; }
+    if (n < 40) setTimeout(() => this._findCanvas(n + 1), 100);
+  }
+  _findIcons(n) {
+    if (!this._alive) return;
+    const D = this.D || this._dims();
+    let left = 0;
+    for (const name of D.ICONS) {
+      const el = document.getElementById(D.IP + name);
+      if (el) this._paintIcon(el); else left++;
+    }
+    if (left && n < 40) setTimeout(() => this._findIcons(n + 1), 100);
+  }
+  _icShape(x, name) {
+    const grey = (L) => { const v = Math.round(L * 255); return 'rgb(' + v + ',' + v + ',' + v + ')'; };
+    const rr = (x0, y0, w, h, r) => { x.beginPath(); x.moveTo(x0 + r, y0); x.arcTo(x0 + w, y0, x0 + w, y0 + h, r); x.arcTo(x0 + w, y0 + h, x0, y0 + h, r); x.arcTo(x0, y0 + h, x0, y0, r); x.arcTo(x0, y0, x0 + w, y0, r); x.closePath(); };
+    if (name === 'messages') {
+      x.fillStyle = grey(0.45);
+      rr(98, 104, 236, 184, 60); x.fill();
+      x.beginPath(); x.moveTo(134, 262); x.lineTo(112, 336); x.lineTo(198, 280); x.closePath(); x.fill();
+    } else if (name === 'phone') {
+      x.save(); x.translate(64, 56); x.scale(14.2, 14.2); x.fillStyle = grey(0.6);
+      x.fill(new Path2D('M5 3.5h3l1.5 4-2 1.2a11 11 0 0 0 5.8 5.8l1.2-2 4 1.5v3a2 2 0 0 1-2 2A16 16 0 0 1 3 5.5a2 2 0 0 1 2-2z'));
+      x.restore();
+    } else if (name === 'mail') {
+      rr(96, 128, 240, 176, 22); x.fillStyle = grey(0.8); x.fill();
+      x.save(); rr(96, 128, 240, 176, 22); x.clip();
+      x.beginPath(); x.moveTo(96, 128); x.lineTo(336, 128); x.lineTo(216, 230); x.closePath(); x.fillStyle = grey(0.4); x.fill();
+      x.restore();
+    } else if (name === 'browser') {
+      const L = [0.35, 0.6, 0.85], step = (2 * Math.PI) / 3;
+      for (let i = 0; i < 3; i++) { const a0 = -Math.PI / 2 + i * step; x.beginPath(); x.moveTo(216, 216); x.arc(216, 216, 122, a0, a0 + step); x.closePath(); x.fillStyle = grey(L[i]); x.fill(); }
+      x.beginPath(); x.arc(216, 216, 62, 0, 2 * Math.PI); x.fillStyle = grey(0.95); x.fill();
+      x.beginPath(); x.arc(216, 216, 46, 0, 2 * Math.PI); x.fillStyle = grey(0.5); x.fill();
+    } else if (name === 'music') {
+      x.beginPath(); x.arc(216, 216, 122, 0, 2 * Math.PI); x.fillStyle = grey(0.3); x.fill();
+      x.beginPath(); x.moveTo(184, 150); x.lineTo(184, 282); x.lineTo(292, 216); x.closePath(); x.fillStyle = grey(0.95); x.fill();
+    }
+  }
+  _icDots(name) {
+    this._icCache = this._icCache || {};
+    if (this._icCache[name]) return this._icCache[name];
+    const S = 432, c = document.createElement('canvas');
+    c.width = S; c.height = S;
+    const x = c.getContext('2d', { willReadFrequently: true });
+    if (!x) return [];
+    this._icShape(x, name);
+    const px = x.getImageData(0, 0, S, S).data, W1 = S + 1;
+    const ia = new Float64Array(W1 * W1), il = new Float64Array(W1 * W1);
+    for (let yy = 0; yy < S; yy++) {
+      let ra = 0, rl = 0;
+      for (let xx = 0; xx < S; xx++) {
+        const o = (yy * S + xx) * 4, a = px[o + 3] / 255;
+        const L = (0.2126 * px[o] + 0.7152 * px[o + 1] + 0.0722 * px[o + 2]) / 255;
+        ra += a; rl += L * a;
+        const k = (yy + 1) * W1 + xx + 1;
+        ia[k] = ia[k - W1] + ra; il[k] = il[k - W1] + rl;
+      }
+    }
+    const P = S / 30, B = P / 4, row = (P * Math.sqrt(3)) / 2, c0 = S / 2;
+    const tot = ia[S * W1 + S], meanL = tot > 1e-9 ? il[S * W1 + S] / tot : 0.7;
+    const box = (ii, cx, cy) => {
+      const x0 = this._cl(Math.ceil(cx - B - 0.5), 0, S), x1 = this._cl(Math.floor(cx + B - 0.5) + 1, 0, S);
+      const y0 = this._cl(Math.ceil(cy - B - 0.5), 0, S), y1 = this._cl(Math.floor(cy + B - 0.5) + 1, 0, S);
+      return [ii[y1 * W1 + x1] - ii[y0 * W1 + x1] - ii[y1 * W1 + x0] + ii[y0 * W1 + x0], Math.max(1, (x1 - x0) * (y1 - y0))];
+    };
+    const half = Math.floor((c0 - P / 2) / row + 1e-9), lo = P / 2, hi = S - P / 2, dots = [];
+    for (let j = -half; j <= half; j++) {
+      const x0 = c0 + (j % 2 ? P / 2 : 0);
+      const i0 = Math.ceil((lo - x0) / P - 1e-9), i1 = Math.floor((hi - x0) / P + 1e-9);
+      for (let i = i0; i <= i1; i++) {
+        const cx = x0 + i * P, cy = c0 + j * row;
+        const cov = box(ia, cx, cy);
+        if (cov[0] / cov[1] < 0.5) continue;
+        const L = cov[0] > 0.01 * cov[1] ? box(il, cx, cy)[0] / cov[0] : meanL;
+        const t = (0.38 + 0.57 * L) * (1 - (0.12 * (cx + cy)) / (2 * S));
+        dots.push([cx, cy, Math.max(0.28 * P, 0.47 * P * Math.sqrt(Math.max(t, 0)))]);
+      }
+    }
+    this._icCache[name] = dots;
+    return dots;
+  }
+  _paintIcon(el) {
+    if (!el || !el.id) return;
+    const D = this.D || this._dims();
+    const name = el.id.slice(D.IP.length);
+    if (D.ICONS.indexOf(name) < 0) return;
+    const dpr = this._cl(window.devicePixelRatio || 1, 1, 4), px = Math.round(D.IC * dpr);
+    if (el._dhPx === px) return;
+    const dots = this._icDots(name);
+    el.width = px; el.height = px;
+    const c = el.getContext('2d'); if (!c) return;
+    el._dhPx = px;
+    const sc = px / 432;
+    c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, px, px);
+    c.fillStyle = '#DDDDDD'; c.beginPath();
+    for (const d of dots) { c.moveTo((d[0] + d[2]) * sc, d[1] * sc); c.arc(d[0] * sc, d[1] * sc, d[2] * sc, 0, 2 * Math.PI); }
+    c.fill();
+  }
+  _start() {
+    if (this._running || !this._cv || !this._alive) return;
+    if (!this.D) this.D = this._dims();
+    const ctx = this._cv.getContext('2d');
+    if (!ctx) return;
+    this._running = true;
+    this._ctx = ctx;
+    const D = this.D;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    this._dpr = dpr;
+    this._cv.width = Math.round(D.W * dpr);
+    this._cv.height = Math.round(D.H * dpr);
+    this._Z = this._zoneSet(D.W, D.H, D.zones);
+    this._B = this._batch();
+    this._initGame();
+    let last = performance.now();
+    const step = (now) => {
+      if (!this._alive) { this._running = false; return; }
+      let dt = (now - last) / 1000; last = now;
+      if (dt > 0.05) dt = 0.05; if (dt < 0) dt = 0;
+      this._update(dt);
+      this._draw();
+      this._raf = requestAnimationFrame(step);
+    };
+    this._raf = requestAnimationFrame(step);
+  }
+  // The ship's open band: the widest vertical gap between the cards and zones
+  _band() {
+    const D = this.D, k = Math.sqrt(D.W * D.H) / 669;
+    const zs = D.zones.concat(D.cards.map((c) => [c.x, c.y, c.w, c.h])).sort((a, b) => a[1] - b[1]);
+    let cur = 0, lo = 0, hi = 0;
+    for (const z of zs) { if (z[1] - cur > hi - lo) { lo = cur; hi = z[1]; } cur = Math.max(cur, z[1] + z[3]); }
+    if (D.H - cur > hi - lo) { lo = cur; hi = D.H; }
+    lo += 15 * k; hi -= 15 * k;
+    if (hi - lo < 20 * k) { lo = 0.2 * D.H; hi = 0.8 * D.H; }
+    return [lo, hi];
+  }
+  _initGame() {
+    const D = this.D;
+    const g = { t: 0, k: Math.sqrt(D.W * D.H) / 669, tilt: { x: 0, y: 0 }, oriOn: false, ori: null,
+      ship: { x: D.W / 2, y: D.H * 0.54, vx: 0, vy: 0, a: -Math.PI / 2, cool: 0, aim: 0 },
+      band: this._band(), wander: { x: D.W / 2, y: D.H / 2, t: 0 }, wave: null, shockCool: 0,
+      rc: { bx: 0, by: 0, on: false }, parX: 0, parY: 0,
+      rocks: [], parts: [], rings: [], trail: [], trailT: 0, spawnT: 2, stars: [], egg: null };
+    this._g = g;
+    const n = Math.round((D.W * D.H) / 2300);
+    for (let i = 0; i < n; i++) g.stars.push({ x: Math.random() * D.W, y: Math.random() * D.H, p: Math.random() * 6.283, d: 0.2 + Math.random() * 0.8 });
+    for (let i = 0; i < D.ROCKS; i++) g.rocks.push(this._newRock(i % 3 === 2 ? 2 : 3, null, true));
+  }
+  _newRock(size, parent, anywhere) {
+    const D = this.D, g = this._g, k = g.k;
+    const r = D.R * (size === 3 ? 1 : size === 2 ? 0.62 : 0.38);
+    let x, y, vx, vy;
+    if (parent) {
+      x = parent.x; y = parent.y;
+      const ang = Math.random() * 6.283, sp = (18 + Math.random() * 26) * k;
+      vx = parent.vx * 0.6 + Math.cos(ang) * sp; vy = parent.vy * 0.6 + Math.sin(ang) * sp;
+    } else if (anywhere) {
+      let tries = 0;
+      do { x = Math.random() * D.W; y = Math.random() * D.H; tries++; } while (tries < 30 && Math.hypot(x - g.ship.x, y - g.ship.y) < 150 * k);
+      const ang = Math.random() * 6.283, sp = (10 + Math.random() * 18) * k;
+      vx = Math.cos(ang) * sp; vy = Math.sin(ang) * sp;
+    } else {
+      const side = Math.floor(Math.random() * 4);
+      if (side === 0) { x = -r; y = Math.random() * D.H; }
+      else if (side === 1) { x = D.W + r; y = Math.random() * D.H; }
+      else if (side === 2) { x = Math.random() * D.W; y = -r; }
+      else { x = Math.random() * D.W; y = D.H + r; }
+      const tx = D.W * (0.25 + Math.random() * 0.5), ty = D.H * (0.25 + Math.random() * 0.5);
+      const ang = Math.atan2(ty - y, tx - x), sp = (10 + Math.random() * 18) * k;
+      vx = Math.cos(ang) * sp; vy = Math.sin(ang) * sp;
+    }
+    const nv = 9 + Math.floor(Math.random() * 4);
+    const verts = [];
+    for (let i = 0; i < nv; i++) { const a = (i / nv) * 6.2832; const rr = r * (0.72 + Math.random() * 0.4); verts.push([Math.cos(a) * rr, Math.sin(a) * rr]); }
+    return { x: x, y: y, vx: vx, vy: vy, r: r, size: size, rot: Math.random() * 6.283, vr: (Math.random() - 0.5) * 0.5, verts: verts };
+  }
+  _rockPoly(r) {
+    const c = Math.cos(r.rot), s = Math.sin(r.rot);
+    return r.verts.map((v) => [r.x + v[0] * c - v[1] * s, r.y + v[0] * s + v[1] * c]);
+  }
+  // The ship: a free hero shape of heavy dots spaced 4 px
+  _shipDots() {
+    if (this._shipPts) return this._shipPts;
+    const v = [[15, 0], [-10, -9.5], [-5, 0], [-10, 9.5]], pts = [];
+    for (let i = 0; i < v.length; i++) {
+      const a = v[i], b = v[(i + 1) % v.length];
+      const L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.round(L / 4));
+      for (let k = 0; k < n; k++) { const t = k / n; pts.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]); }
+    }
+    this._shipPts = pts;
+    return pts;
+  }
+  _shock() {
+    const g = this._g, D = this.D;
+    if (!g || g.t < 1.2 || g.shockCool > 0) return;
+    g.shockCool = 8;
+    g.wave = { x: g.ship.x, y: g.ship.y, r: 0, max: Math.hypot(D.W, D.H), t: 0 };
+  }
+  // Departures: the rock's lit lattice cells release as free particles
+  _kill(i) {
+    const g = this._g, D = this.D, r = g.rocks[i];
+    g.rocks.splice(i, 1);
+    const src = [];
+    this._rast((x, y, d) => { if (d >= 0.6) src.push([x, y, d >= 1.8 ? 2.4 : 1.2]); }, this._rockPoly(r), 1, false, this._Z, D.W, D.H);
+    for (const p of src) {
+      if (g.parts.length > 2000) break;
+      const dx = p[0] - r.x, dy = p[1] - r.y, dd = Math.hypot(dx, dy) || 1, out = 18 + Math.random() * 75;
+      const l = 0.7 + Math.random() * 1.0;
+      g.parts.push({ x: p[0], y: p[1], vx: r.vx + (dx / dd) * out + (Math.random() - 0.5) * 24, vy: r.vy + (dy / dd) * out + (Math.random() - 0.5) * 24, life: l, l0: l, d: p[2] });
+    }
+    if (r.size > 1) { g.rocks.push(this._newRock(r.size - 1, r, false)); g.rocks.push(this._newRock(r.size - 1, r, false)); }
+    this._sc = (this._sc || 0) + 1;
+    this._best = Math.max(this._best || 0, this._sc);
+    this.setState({ score: this._sc, best: this._best });
+    if (this._sc % 25 === 0) g.egg = { t: 0 };
+  }
+  _steer(dt) {
+    const g = this._g, D = this.D, s = g.ship, k = g.k, ta = 280 * k, w = g.wander;
+    w.t -= dt;
+    if (w.t <= 0) { w.x = D.W * (0.2 + Math.random() * 0.6); w.y = g.band[0] + (g.band[1] - g.band[0]) * Math.random(); w.t = 2 + Math.random() * 2; }
+    const dx = w.x - s.x, dy = w.y - s.y, d = Math.hypot(dx, dy);
+    let ax = 0, ay = 0;
+    if (d > 1e-3) { const f = (0.5 * ta * Math.min(1, d / (40 * k))) / d; ax = dx * f; ay = dy * f; }
+    const max = 1.2 * ta;
+    for (const r of g.rocks) {
+      const range = r.r + 90 * k, nowD = Math.hypot(s.x - r.x, s.y - r.y);
+      if (nowD >= range) continue;
+      const fx = r.x + r.vx * 0.6, fy = r.y + r.vy * 0.6;
+      let awx = s.x - fx, awy = s.y - fy, fd = Math.hypot(awx, awy);
+      const prox = 1 - Math.min(nowD, fd) / range;
+      if (prox <= 0) continue;
+      if (fd < 1e-3) { awx = s.x - r.x; awy = s.y - r.y; fd = Math.hypot(awx, awy); if (fd < 1e-3) { awx = 1; awy = 0; fd = 1; } }
+      awx /= fd; awy /= fd;
+      const rv = Math.hypot(r.vx, r.vy);
+      let px = -awy, py = awx;
+      if (rv > 1e-3) { px = -r.vy / rv; py = r.vx / rv; }
+      const side = (s.x - r.x) * px + (s.y - r.y) * py >= 0 ? 1 : -1;
+      const wgt = prox * max;
+      ax += (awx * 0.6 + px * side) * wgt; ay += (awy * 0.6 + py * side) * wgt;
+    }
+    const am = Math.hypot(ax, ay);
+    if (am > max) { ax *= max / am; ay *= max / am; }
+    s.vx += ax * dt; s.vy += ay * dt;
+  }
+  _update(dt) {
+    const g = this._g, D = this.D, s = g.ship, k = g.k;
+    g.t += dt;
+    if (g.shockCool > 0) g.shockCool -= dt;
+    const live = g.t > 1.2;
+    if (live) this._steer(dt);
+    const damp = Math.exp(-1.5 * dt); s.vx *= damp; s.vy *= damp;
+    let sp = Math.hypot(s.vx, s.vy);
+    const cap = 0.7 * 210 * k;
+    if (sp > cap) { s.vx *= cap / sp; s.vy *= cap / sp; sp = cap; }
+    s.x += s.vx * dt; s.y += s.vy * dt;
+    const m = 18 * k;
+    if (s.x < m) { s.x = m; s.vx = Math.abs(s.vx) * 0.45; }
+    if (s.x > D.W - m) { s.x = D.W - m; s.vx = -Math.abs(s.vx) * 0.45; }
+    if (s.y < m) { s.y = m; s.vy = Math.abs(s.vy) * 0.45; }
+    if (s.y > D.H - m) { s.y = D.H - m; s.vy = -Math.abs(s.vy) * 0.45; }
+    if (s.aim > 0) s.aim -= dt;
+    else if (sp > 14 * k) {
+      const ta = Math.atan2(s.vy, s.vx);
+      let da = ta - s.a;
+      while (da > Math.PI) da -= 2 * Math.PI;
+      while (da < -Math.PI) da += 2 * Math.PI;
+      s.a += da * (1 - Math.exp(-5 * dt));
+    }
+    if (s.cool > 0) s.cool -= dt;
+    g.trailT += dt;
+    if (g.trailT > 0.04 && sp > 10 * k) { g.trailT = 0; g.trail.push({ x: s.x - Math.cos(s.a) * 9, y: s.y - Math.sin(s.a) * 9, life: 0.7 }); }
+    for (const tr of g.trail) tr.life -= dt;
+    g.trail = g.trail.filter((tr) => tr.life > 0);
+    for (const r of g.rocks) {
+      r.x += r.vx * dt; r.y += r.vy * dt; r.rot += r.vr * dt;
+      const e = r.r * 1.3;
+      if (r.x < -e) r.x = D.W + e; else if (r.x > D.W + e) r.x = -e;
+      if (r.y < -e) r.y = D.H + e; else if (r.y > D.H + e) r.y = -e;
+    }
+    if (live) {
+      for (const r of g.rocks) {
+        const dx = s.x - r.x, dy = s.y - r.y, d = Math.hypot(dx, dy) || 1, lim = r.r * 0.82 + 10 * k;
+        if (d < lim) {
+          const nx = dx / d, ny = dy / d;
+          s.x = r.x + nx * (lim + 1); s.y = r.y + ny * (lim + 1);
+          if (s.cool <= 0) {
+            s.vx += nx * 150 * k; s.vy += ny * 150 * k;
+            r.vx -= nx * 20 * k; r.vy -= ny * 20 * k;
+            s.cool = 0.4;
+            g.rings.push({ x: s.x - nx * 6 * k, y: s.y - ny * 6 * k, t: 0 });
+          }
+        }
+      }
+    }
+    if (g.wave) {
+      const wv = g.wave;
+      wv.t += dt; wv.r = wv.max * Math.min(1, wv.t / 0.8);
+      let again = true;
+      while (again) {
+        again = false;
+        for (let i = 0; i < g.rocks.length; i++) {
+          const r = g.rocks[i];
+          if (Math.hypot(r.x - wv.x, r.y - wv.y) - r.r < wv.r) { this._kill(i); again = true; break; }
+        }
+      }
+      if (wv.t >= 0.8) g.wave = null;
+    }
+    for (const rg of g.rings) rg.t += dt;
+    g.rings = g.rings.filter((rg) => rg.t < 0.8);
+    const fr = Math.exp(-0.8 * dt), gx = g.tilt.x * 160 * k * dt, gy = g.tilt.y * 160 * k * dt;
+    for (const p of g.parts) { p.vx += gx; p.vy += gy; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= fr; p.vy *= fr; p.life -= dt; }
+    g.parts = g.parts.filter((p) => p.life > 0);
+    let mass = 0;
+    for (const r of g.rocks) mass += r.size === 3 ? 1 : r.size === 2 ? 0.45 : 0.2;
+    g.spawnT -= dt;
+    if (g.spawnT <= 0 && mass < D.ROCKS * 0.85) { g.rocks.push(this._newRock(3, null, false)); g.spawnT = 1.6 + Math.random() * 1.4; }
+    // Tilt relative to a baseline that re-centres over ~4 s, smoothed with a 0.15 s time constant.
+    // The star parallax and the glass reflection both read parX / parY.
+    const rc = g.rc;
+    let tx = 0, ty = 0;
+    if (!rc.on) { rc.bx = g.tilt.x; rc.by = g.tilt.y; rc.on = true; }
+    else {
+      tx = this._cl(g.tilt.x - rc.bx, -1, 1); ty = this._cl(g.tilt.y - rc.by, -1, 1);
+      const b = 1 - Math.exp(-dt / 4);
+      rc.bx += (g.tilt.x - rc.bx) * b; rc.by += (g.tilt.y - rc.by) * b;
+    }
+    const pa = 1 - Math.exp(-dt / 0.15);
+    g.parX += (tx - g.parX) * pa; g.parY += (ty - g.parY) * pa;
+    const left = g.shockCool > 0 ? Math.ceil(g.shockCool) : 0;
+    if (left !== this._shLeft) { this._shLeft = left; this.setState({ shakeLeft: left }); }
+    if (g.egg) { g.egg.t += dt; if (g.egg.t > 3.4) g.egg = null; }
+    this._ckStep(dt);
+  }
+  // The moon through the halftone filter on the lattice (real phase), recomputed hourly
+  _moonCells() {
+    const hour = Math.floor(Date.now() / 3600000);
+    if (this._mc && this._mcK === hour) return this._mc;
+    const D = this.D, cx = D.W - 64, cy = 264, R = 16;
+    const days = (Date.now() - Date.UTC(2000, 0, 6, 18, 14)) / 86400000;
+    let p = (days / 29.530588853) % 1; if (p < 0) p += 1;
+    const kk = Math.cos(2 * Math.PI * p);
+    const lit = (x, y) => {
+      if (x * x + y * y > R * R) return 0;
+      const w = Math.sqrt(Math.max(0, 1 - (y * y) / (R * R))), nx = x / R;
+      return (p < 0.5 ? nx > kk * w : nx < -kk * w) ? 1 : 0;
+    };
+    const cells = [];
+    for (let j = -5; j <= 5; j++) {
+      for (let i = -5; i <= 5; i++) {
+        let s = 0;
+        for (let a = 0; a < 4; a++) for (let b = 0; b < 4; b++) s += lit(i * 4 - 1.5 + a, j * 4 - 1.5 + b);
+        const br = s / 16;
+        if (br < 0.1) continue;
+        cells.push([cx + i * 4, cy + j * 4, 3.4 * Math.sqrt(br)]);
+      }
+    }
+    this._mc = cells; this._mcK = hour;
+    return cells;
+  }
+  _moon(put, a) {
+    const Z = this._Z;
+    for (const c of this._moonCells()) { if (!Z.mask[(c[1] / 4) * Z.N1 + c[0] / 4]) put(c[0], c[1], c[2], a); }
+  }
+  // Milestone flag: four stars rasterised as filled silhouettes on the lattice
+  _flag(put, t) {
+    const D = this.D, L = this._L();
+    const a = t < 0.5 ? t / 0.5 : t > 2.8 ? Math.max(0, (3.4 - t) / 0.6) : 1;
+    const e = 1 - Math.pow(1 - Math.min(1, t / 0.6), 3);
+    const R = 24 * (D.W / 620) * (0.6 + 0.4 * e) + 4, cy = D.H * 0.43;
+    for (let k = 0; k < 4; k++) {
+      const cx = D.W * (0.2 + k * 0.2), v = [];
+      for (let i = 0; i < 12; i++) { const ang = (i / 12) * 6.2832 - Math.PI / 2, rr = i % 2 ? R * 0.5 : R; v.push([cx + Math.cos(ang) * rr, cy + Math.sin(ang) * rr]); }
+      this._rast(put, v, L.L65 * a, true, this._Z, D.W, D.H);
+    }
+  }
+  _wrap(v, size) { const m = v % size; return m < 0 ? m + size : m; }
+  _draw() {
+    const ctx = this._ctx, g = this._g, D = this.D, dpr = this._dpr, k = g.k, L = this._L(), Z = this._Z, put = this._B;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalAlpha = 1; ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, D.W, D.H);
+    const zf = (x, y, a) => this._zf(Z, x, y, a);
+    const f = this._cl((g.t - 0.2) / 1.0, 0, 1), fade = 1 - Math.pow(1 - f, 3);
+    const st0 = this.state || {};
+    const beat = st0.playing ? Math.pow(1 - ((g.t * 2) % 1), 3) : 0;
+    const sl = L.L65;
+    const ox = g.parX * 28 * k, oy = g.parY * 28 * k, br = (g.t * 6.2832) / 4;
+    for (const st of g.stars) {
+      const x = this._wrap(st.x + ox * st.d, D.W), y = this._wrap(st.y + oy * st.d, D.H);
+      const tw = 0.55 + 0.45 * Math.sin(br + st.p);
+      put(x, y, 1.2, zf(x, y, sl * (tw > beat ? tw : beat) * fade));
+    }
+    this._moon(put, L.L65 * fade);
+    for (const r of g.rocks) this._rast(put, this._rockPoly(r), L.L65 * fade, false, Z, D.W, D.H);
+    for (const p of g.parts) { const q = p.life / p.l0; put(p.x, p.y, p.d, zf(p.x, p.y, L.L65 * q)); }
+    for (const tr of g.trail) { const q = tr.life / 0.7; put(tr.x, tr.y, 1.2, zf(tr.x, tr.y, L.L65 * q * fade)); }
+    const s = g.ship;
+    if (g.t < 1.2) put(s.x, s.y, 3.4 * (1 + 0.9 * Math.abs(Math.sin(g.t * 3.2))), L.L100 * (1 - this._cl((g.t - 0.8) / 0.4, 0, 1)));
+    const sa = this._cl((g.t - 0.8) / 0.4, 0, 1);
+    if (sa > 0) {
+      const pts = this._shipDots(), c = Math.cos(s.a), sn = Math.sin(s.a);
+      const blink = s.cool > 0 ? 0.55 + 0.45 * Math.cos(s.cool * 40) : 1;
+      for (const p of pts) put(s.x + p[0] * c - p[1] * sn, s.y + p[0] * sn + p[1] * c, 3.4, L.L100 * sa * blink);
+    }
+    if (g.wave) {
+      const wv = g.wave, al = 1 - wv.t / 0.8, rad = wv.r;
+      if (al > 0 && rad > 1) {
+        const n = Math.max(12, Math.round((6.2832 * rad) / (6 * k)));
+        for (let j = 0; j < n; j++) {
+          const a = (j / n) * 6.2832, x = wv.x + Math.cos(a) * rad, y = wv.y + Math.sin(a) * rad;
+          if (x < -4 || y < -4 || x > D.W + 4 || y > D.H + 4) continue;
+          put(x, y, 2.4, L.L100 * al);
+        }
+      }
+    }
+    for (const rg of g.rings) {
+      const q = rg.t / 0.8, rad = 8 + q * 62, n = 30;
+      for (let i = 0; i < n; i++) { const a = (i / n) * 6.2832, x = rg.x + Math.cos(a) * rad, y = rg.y + Math.sin(a) * rad; put(x, y, 2.4, zf(x, y, L.L65 * (1 - q))); }
+    }
+    if (g.egg) this._flag(put, g.egg.t);
+    put.flush(ctx);
+    this._glass(ctx);
+  }
+  // ---- Wallpaper-drawn widgets ----
+  _peak() {
+    const v = (this.props || {}).reflectStrength;
+    const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN;
+    return isFinite(n) ? this._cl(n, 0, 0.3) : 0.16;
+  }
+  _rr(ctx, x, y, w, h, r) {
+    ctx.beginPath(); ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+  // One virtual light behind the viewer. Its reflection is a single long diagonal band across the whole screen glass,
+  // and each card shows the stretch of it that falls on that card, so both reflections always move together.
+  // Tilt right slides the band left; tilt down slides the bright part of the band up (toward the top card).
+  _light() {
+    const g = this._g, tilt = (this.props || {}).glassMode !== 'static';
+    const px = tilt ? g.parX : 0, py = tilt ? g.parY : 0;
+    const th = 0.52 + px * 0.16 - py * 0.08, dx = Math.sin(th), dy = Math.cos(th);
+    return { dx: dx, dy: dy, cx: 310 - px * 240 - dx * py * 200, cy: 340 - dy * py * 200 - py * 40 };
+  }
+  _glass(ctx) {
+    const D = this.D, cards = D.cards, Lt = this._light(), peak = this._peak(), sg = 58;
+    // Clear glass: #0E0E0E at 75% over the game
+    ctx.globalAlpha = 0.75; ctx.fillStyle = '#0E0E0E';
+    for (const c of cards) { this._rr(ctx, c.x, c.y, c.w, c.h, c.r); ctx.fill(); }
+    ctx.globalAlpha = 1;
+    this._ckDraw(ctx);
+    this._cardInk(ctx);
+    // The specular band: gaussian across its width (sigma 58 px), peak = reflectStrength
+    const nx = Lt.dy, ny = -Lt.dx;
+    let band = null;
+    if (peak > 0.001) {
+      band = ctx.createLinearGradient(Lt.cx - nx * 3 * sg, Lt.cy - ny * 3 * sg, Lt.cx + nx * 3 * sg, Lt.cy + ny * 3 * sg);
+      for (let i = 0; i <= 16; i++) { const u = i / 16, z = (u - 0.5) * 6; band.addColorStop(u, 'rgba(255,255,255,' + (peak * Math.exp(-0.5 * z * z)).toFixed(4) + ')'); }
+    }
+    ctx.lineWidth = 1.2;
+    for (const c of cards) {
+      const mx = c.x + c.w / 2, my = c.y + c.h / 2;
+      // Where the band crosses this card's middle row, and how far along the band that is from the light's centre
+      const s = (my - Lt.cy) / Lt.dy, bx = Lt.cx + Lt.dx * s;
+      const ex = Math.max(0, Math.abs(s) - 190) / 170, f = Math.exp(-0.5 * ex * ex);
+      if (band) {
+        ctx.save(); this._rr(ctx, c.x, c.y, c.w, c.h, c.r); ctx.clip();
+        ctx.globalAlpha = f; ctx.fillStyle = band; ctx.fillRect(c.x, c.y, c.w, c.h);
+        ctx.restore();
+      }
+      // Rim: 40% white on the lit side to 10% on the far side; the lit side leans toward the band
+      let ux = this._cl((bx - mx) / (c.w / 2), -1.5, 1.5), uy = -0.9;
+      const un = Math.hypot(ux, uy); ux /= un; uy /= un;
+      const e = (Math.abs(ux) * c.w) / 2 + (Math.abs(uy) * c.h) / 2;
+      const rg = ctx.createLinearGradient(mx + ux * e, my + uy * e, mx - ux * e, my - uy * e);
+      rg.addColorStop(0, 'rgba(255,255,255,0.4)'); rg.addColorStop(1, 'rgba(255,255,255,0.1)');
+      this._rr(ctx, c.x + 0.6, c.y + 0.6, c.w - 1.2, c.h - 1.2, c.r - 0.6);
+      ctx.globalAlpha = 1; ctx.strokeStyle = rg; ctx.stroke();
+      // Where the band crosses the rim the edge glints, so the brightest rim segment follows the light
+      if (band) { ctx.globalAlpha = 0.8 * f; ctx.strokeStyle = band; ctx.stroke(); }
+      ctx.globalAlpha = 1;
+    }
+  }
+  // Left edge x of each character of the clock string (all digits are 5 columns, the colon 1)
+  _ckXs(str) {
+    const F = this._mxF(), C = this.D.CK, xs = [];
+    let gx = C.x0;
+    for (let i = 0; i < str.length; i++) { xs.push(gx); const rows = F[str[i]]; gx += ((rows ? rows[0].length : 5) + 1) * C.s; }
+    return xs;
+  }
+  // Seconds tick: newly lit cells gather in (0.25 s, cubic ease-out); cells that go dark scatter as free dots (0.4 s fade)
+  _ckStep(dt) {
+    const ck = this._ck || (this._ck = { str: '', born: {}, free: [] });
+    const str = this._hms(new Date());
+    if (str !== ck.str) {
+      if (ck.str.length === str.length) {
+        const F = this._mxF(), C = this.D.CK, xs = this._ckXs(str);
+        for (let i = 0; i < str.length; i++) {
+          const A = F[ck.str[i]], B = F[str[i]];
+          if (ck.str[i] === str[i] || !A || !B) continue;
+          const w = B[0].length, cxm = xs[i] + ((w - 1) * C.s) / 2, cym = C.y0 + 3 * C.s;
+          for (let r = 0; r < 7; r++) {
+            for (let c = 0; c < w; c++) {
+              const on0 = A[r].charAt(c) === '1', on1 = B[r].charAt(c) === '1';
+              const x = xs[i] + c * C.s, y = C.y0 + r * C.s;
+              if (on1 && !on0) {
+                const ang = Math.random() * 6.2832;
+                ck.born[i + ':' + r + ':' + c] = { t: 0, ox: Math.cos(ang) * 4, oy: Math.sin(ang) * 4 };
+              } else if (on0 && !on1) {
+                const dx = x - cxm, dy = y - cym, dd = Math.hypot(dx, dy) || 1, sp = 10 + Math.random() * 22, ang = Math.random() * 6.2832;
+                ck.free.push({ x: x, y: y, vx: (dx / dd) * sp + Math.cos(ang) * 8, vy: (dy / dd) * sp + Math.sin(ang) * 8, life: 0.4 });
+              }
+            }
+          }
+        }
+      }
+      ck.str = str;
+    }
+    for (const key in ck.born) { const b = ck.born[key]; b.t += dt; if (b.t >= 0.25) delete ck.born[key]; }
+    for (const p of ck.free) { p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; }
+    ck.free = ck.free.filter((p) => p.life > 0);
+  }
+  _ckDraw(ctx) {
+    const ck = this._ck;
+    if (!ck || !ck.str) return;
+    const F = this._mxF(), C = this.D.CK, s = C.s, str = ck.str, xs = this._ckXs(str), rd = s * 0.3;
+    const lit = [], anim = [];
+    ctx.fillStyle = '#1A1A1A'; ctx.beginPath();
+    for (let i = 0; i < str.length; i++) {
+      const rows = F[str[i]];
+      if (!rows) continue;
+      const w = rows[0].length;
+      for (let r = 0; r < 7; r++) {
+        for (let c = 0; c < w; c++) {
+          const x = xs[i] + c * s, y = C.y0 + r * s, b = ck.born[i + ':' + r + ':' + c];
+          if (rows[r].charAt(c) === '1' && !b) { lit.push(x, y); continue; }
+          if (b) anim.push(x, y, b);
+          ctx.moveTo(x + rd, y); ctx.arc(x, y, rd, 0, 6.2832);
+        }
+      }
+    }
+    ctx.fill();
+    ctx.fillStyle = '#DDDDDD'; ctx.beginPath();
+    for (let q = 0; q < lit.length; q += 2) { ctx.moveTo(lit[q] + rd, lit[q + 1]); ctx.arc(lit[q], lit[q + 1], rd, 0, 6.2832); }
+    ctx.fill();
+    for (let q = 0; q < anim.length; q += 3) {
+      const b = anim[q + 2], u = Math.min(1, b.t / 0.25), e = 1 - Math.pow(1 - u, 3), r = rd * e;
+      if (r < 0.05) continue;
+      ctx.globalAlpha = e; ctx.beginPath(); ctx.arc(anim[q] + b.ox * (1 - e), anim[q + 1] + b.oy * (1 - e), r, 0, 6.2832); ctx.fill();
+    }
+    for (const p of ck.free) {
+      const q = p.life / 0.4;
+      ctx.globalAlpha = 0.85 * q; ctx.beginPath(); ctx.arc(p.x, p.y, rd * (0.6 + 0.4 * q), 0, 6.2832); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+  _tp() {
+    if (this._tpc !== undefined) return this._tpc;
+    try {
+      this._tpc = { prev: new Path2D('M7 6v12M18 6l-8 6 8 6z'), next: new Path2D('M17 6v12M6 6l8 6-8 6z'), play: new Path2D('M8 5.5v13l10.5-6.5z'), pause: new Path2D('M9 6v12M15 6v12') };
+    } catch (err) { this._tpc = null; }
+    return this._tpc;
+  }
+  // Date, weather and the music card, all drawn by the wallpaper
+  _cardInk(ctx) {
+    const st = this.state || {};
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.font = '400 15px Inter, system-ui, sans-serif'; ctx.fillStyle = '#A6A6A6';
+    ctx.fillText(this._dateStr(new Date()), 44, 156);
+    ctx.font = '400 13px Inter, system-ui, sans-serif';
+    const a = '48° Cloudy', b = ' · Chicago', w1 = ctx.measureText(a).width, w2 = ctx.measureText(b).width, x = 576 - w1 - w2;
+    ctx.fillText(a, x, 69);
+    ctx.fillStyle = '#757575'; ctx.fillText(b, x + w1, 69);
+    ctx.font = '500 15px Inter, system-ui, sans-serif'; ctx.fillStyle = '#DDDDDD';
+    ctx.fillText('Track name', 44, 543);
+    ctx.font = '400 13px Inter, system-ui, sans-serif'; ctx.fillStyle = '#A6A6A6';
+    ctx.fillText('Artist', 44, 563);
+    const P = this._tp();
+    if (!P) return;
+    const k = 22 / 24, ic = [[P.prev, 478], [st.playing ? P.pause : P.play, 522], [P.next, 566]];
+    ctx.strokeStyle = '#DDDDDD'; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (const q of ic) {
+      ctx.save(); ctx.translate(q[1] - 11, 548 - 11); ctx.scale(k, k); ctx.lineWidth = 1.6 / k; ctx.stroke(q[0]); ctx.restore();
+    }
+  }
+  renderVals() {
+    if (!this._h) {
+      this._h = {
+        setCanvas: (el) => { if (el) { this._cv = el; if (this._alive) this._start(); } },
+        onMove: (e) => {
+          const g = this._g; if (!g || g.oriOn) return;
+          const r = e.currentTarget.getBoundingClientRect(); if (!r.width) return;
+          const x = ((e.clientX - r.left) / r.width) * 2 - 1, y = ((e.clientY - r.top) / r.height) * 2 - 1;
+          const dz = (v) => (Math.abs(v) < 0.08 ? 0 : (v - Math.sign(v) * 0.08) / 0.92);
+          g.tilt.x = this._cl(dz(x) * 1.3, -1, 1); g.tilt.y = this._cl(dz(y) * 1.3, -1, 1);
+        },
+        onLeave: () => { const g = this._g; if (g && !g.oriOn) { g.tilt.x = 0; g.tilt.y = 0; } },
+        shake: () => this._shock(),
+        togglePlay: () => { const st = this.state || {}; this.setState({ playing: !st.playing }); },
+        setIcon: (el) => { if (el) this._paintIcon(el); }
+      };
+    }
+    const st = this.state || {};
+    const d = new Date(st.now || Date.now());
+    const left = st.shakeLeft || 0;
+    return {
+      setCanvas: this._h.setCanvas, onMove: this._h.onMove, onLeave: this._h.onLeave, togglePlay: this._h.togglePlay,
+      setIcon: this._h.setIcon, shake: this._h.shake, shakeText: left > 0 ? 'Shake · ' + left + ' s' : 'Shake',
+      clockLabel: 'Clock: ' + this._hhmm(d) + ', ' + this._dateStr(d), score: st.score || 0, best: st.best || 0,
+      playLabel: st.playing ? 'Pause' : 'Play'
+    };
+  }
+}
+</script>
+</body>
+</html>

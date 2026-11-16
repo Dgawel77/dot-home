@@ -1,0 +1,758 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ship v2 · space flight</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#A6A6A6}a:hover{color:#DDDDDD}
+.lb{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;line-height:16px;letter-spacing:1px;text-transform:uppercase;color:#A6A6A6;white-space:nowrap}
+.shk{width:96px;height:32px;flex-shrink:0;border-radius:16px;border:0;background:#1A1A1A;color:#DDDDDD;font:500 13px Inter,system-ui,sans-serif;cursor:pointer}
+.shk:focus-visible{outline:2px solid #A6A6A6;outline-offset:2px}
+sc-for,sc-if{display:contents}
+</style>
+</helmet>
+<div style="width: 700px; height: 900px; box-sizing: border-box; padding: 40px 40px 0; background: #000000; display: flex; flex-direction: column; align-items: center; gap: 16px; font-family: Inter, system-ui, sans-serif; color: #DDDDDD">
+<div style="position: relative; width: 620px; height: 722px; flex-shrink: 0; border-radius: 36px; overflow: hidden; background: #000000; color: #DDDDDD; box-shadow: 0 0 0 1px #1A1A1A" onPointerMove="{{ onMove }}" onPointerLeave="{{ onLeave }}">
+<canvas id="dh-ship-cv" ref="{{ setCanvas }}" onPointerDown="{{ onTap }}" role="img" aria-label="Dot space flight wallpaper: a thruster-driven ship among lattice rocks" style="position: absolute; left: 0; top: 0; width: 620px; height: 722px; display: block; touch-action: none; cursor: crosshair"></canvas>
+<canvas id="dh-ship-wg" ref="{{ setWg }}" aria-hidden="true" style="position: absolute; left: 0; top: 0; width: 620px; height: 722px; display: block; pointer-events: none"></canvas>
+<div style="position: absolute; left: 0; top: 0; width: 620px; height: 722px; pointer-events: none">
+<div class="lb" style="position: absolute; left: 24px; top: 24px">TODAY {{ score }} · BEST {{ best }}</div>
+<div role="img" aria-label="{{ time }}" style="position: absolute; left: 22px; top: 62px; width: 300px; height: 84px"></div>
+<div style="position: absolute; left: 24px; top: 154px; font-size: 15px; line-height: 20px; color: #A6A6A6; white-space: nowrap">{{ date }}</div>
+</div>
+</div>
+<div style="width: 620px; display: flex; align-items: flex-start; gap: 16px">
+<button class="shk" aria-label="Shake" onClick="{{ shake }}">{{ shakeText }}</button>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<div style="font-size: 13px; line-height: 20px; color: #A6A6A6">The ship flies itself in zero-g: side thrusters turn it, the main engine pushes it, it flips to brake. Tap to fire red lasers. Move the pointer to tilt.</div>
+<div style="font-size: 13px; line-height: 20px; color: #757575">Tweaks: shipShape (seven designs, see the lineup board to the right), aimMode (turret fires at once, rotate turns to face first), laserColor, thrust, rcsTorque, drag. Shake: shockwave, 8 s cooldown.</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"shipShape":{"editor":"enum","default":"needle","options":["arrow","needle","wedge","ring","pod","pixel","orbit"],"section":"Ship"},"aimMode":{"editor":"enum","default":"turret","options":["turret","rotate"],"section":"Ship"},"laserColor":{"editor":"color","default":"#FF3B30","options":["#FF3B30","#E8141A","#FF5A4E"],"section":"Ship"},"thrust":{"editor":"range","default":160,"min":40,"max":400,"step":10,"unit":"px/s²","section":"Flight"},"rcsTorque":{"editor":"range","default":540,"min":90,"max":1440,"step":30,"unit":"°/s²","section":"Flight"},"drag":{"editor":"range","default":0.02,"min":0,"max":0.5,"step":0.01,"unit":"/s","section":"Flight"},"$preview":{"width":700,"height":900}}'>
+class Component extends DCLogic {
+  _dims() {
+    return { W: 620, H: 722, ROCKS: 7, R: 34, CID: 'dh-ship-cv', WID: 'dh-ship-wg',
+      zones: [[24, 24, 156, 16], [24, 60, 304, 116]] };
+  }
+  componentDidMount() {
+    this.D = this._dims();
+    this._alive = true;
+    this._clock = setInterval(() => { this.setState({ now: Date.now() }); this._paintWg(); }, 10000);
+    this._onOri = (e) => {
+      const g = this._g;
+      if (!g || e.gamma == null || e.beta == null) return;
+      if (!g.ori) g.ori = { g0: e.gamma, b0: e.beta };
+      g.oriOn = true;
+      g.tilt.x = this._cl((e.gamma - g.ori.g0) / 22, -1, 1);
+      g.tilt.y = this._cl((e.beta - g.ori.b0) / 22, -1, 1);
+    };
+    try { window.addEventListener('deviceorientation', this._onOri); } catch (err) {}
+    this._findCanvas(0);
+    setTimeout(() => { if (this._alive) this._paintWg(); }, 200);
+  }
+  componentDidUpdate() { this._paintWg(); }
+  componentWillUnmount() {
+    this._alive = false;
+    if (this._raf) cancelAnimationFrame(this._raf);
+    clearInterval(this._clock);
+    try { window.removeEventListener('deviceorientation', this._onOri); } catch (err) {}
+  }
+  _cl(v, a, b) { return v < a ? a : v > b ? b : v; }
+  // Wraps an angle into -PI..PI
+  _wa(a) { const T = 6.283185307179586; a = (a + Math.PI) % T; if (a < 0) a += T; return a - Math.PI; }
+  // The four greys as alpha on #DDDDDD over the #000000 ground: 100% #DDDDDD, 65% #A6A6A6, 46% #757575, 10% #1A1A1A
+  _L() { return this._lv || (this._lv = { L100: 1, L65: 0.75, L46: 0.53, L10: 0.12 }); }
+  // Collects round dots (centre, diameter, alpha) and fills them in one pass per alpha level
+  _batch() {
+    const bk = [];
+    for (let i = 0; i <= 100; i++) bk.push([]);
+    const put = (x, y, d, a) => {
+      if (!(d > 0.3) || !(a > 0.005)) return;
+      let q = Math.round(a * 100);
+      if (q > 100) q = 100;
+      if (q < 1) return;
+      bk[q].push(x, y, d * 0.5);
+    };
+    put.flush = (ctx) => {
+      ctx.fillStyle = '#DDDDDD';
+      for (let q = 1; q <= 100; q++) {
+        const L = bk[q];
+        if (!L.length) continue;
+        ctx.globalAlpha = q / 100;
+        ctx.beginPath();
+        for (let i = 0; i < L.length; i += 3) { ctx.moveTo(L[i] + L[i + 2], L[i + 1]); ctx.arc(L[i], L[i + 1], L[i + 2], 0, 6.2832); }
+        ctx.fill();
+        L.length = 0;
+      }
+      ctx.globalAlpha = 1;
+    };
+    return put;
+  }
+  // The app's 5x7 matrix font (digits and colon only here)
+  _mxF() {
+    if (this._F) return this._F;
+    this._F = { '0': ['01110', '10001', '10011', '10101', '11001', '10001', '01110'], '1': ['00100', '01100', '00100', '00100', '00100', '00100', '01110'], '2': ['01110', '10001', '00001', '00010', '00100', '01000', '11111'], '3': ['11111', '00010', '00100', '00010', '00001', '10001', '01110'], '4': ['00010', '00110', '01010', '10010', '11111', '00010', '00010'], '5': ['11111', '10000', '11110', '00001', '00001', '10001', '01110'], '6': ['00110', '01000', '10000', '11110', '10001', '10001', '01110'], '7': ['11111', '00001', '00010', '00100', '01000', '01000', '01000'], '8': ['01110', '10001', '10001', '01110', '10001', '10001', '01110'], '9': ['01110', '10001', '10001', '01111', '00001', '00010', '01100'], ':': ['0', '0', '1', '0', '1', '0', '0'] };
+    return this._F;
+  }
+  _mxDraw(put, str, x0, y0, s, lit, grid, wt) {
+    const F = this._mxF();
+    let gx = x0;
+    for (const ch of String(str)) {
+      const rows = F[ch];
+      if (!rows) continue;
+      const w = rows[0].length;
+      for (let r = 0; r < 7; r++) {
+        for (let c = 0; c < w; c++) {
+          if (rows[r].charAt(c) === '1') put(gx + c * s, y0 + r * s, s * wt, lit);
+          else if (grid > 0) put(gx + c * s, y0 + r * s, s * 0.6, grid);
+        }
+      }
+      gx += (w + 1) * s;
+    }
+  }
+  _hhmm(d) { let h = d.getHours() % 12; if (h === 0) h = 12; return String(h).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+  // Clear zones: lattice cells inside a zone stay off; within 16 px of its edge they thin out in a fixed 4x4 ordered dither
+  _zoneSet(W, H, zones) {
+    const S = 4, NI = Math.floor(W / S), NJ = Math.floor(H / S), N1 = NI + 1, n = N1 * (NJ + 1);
+    const mask = new Uint8Array(n), ramp = new Float32Array(n);
+    const BY = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+    for (let j = 0; j <= NJ; j++) {
+      for (let i = 0; i <= NI; i++) {
+        const x = i * S, y = j * S;
+        let t = 0;
+        for (const z of zones) {
+          const dx = Math.max(z[0] - x, 0, x - z[0] - z[2]), dy = Math.max(z[1] - y, 0, y - z[1] - z[3]);
+          const v = 1 - Math.sqrt(dx * dx + dy * dy) / 16;
+          if (v > t) t = v;
+        }
+        const q = j * N1 + i;
+        ramp[q] = t;
+        if (t > 0 && (BY[(j & 3) * 4 + (i & 3)] + 0.5) / 16 < t) mask[q] = 1;
+      }
+    }
+    return { mask: mask, ramp: ramp, N1: N1, NI: NI, NJ: NJ };
+  }
+  // Free dots crossing a zone drop to 10%
+  _zf(Z, x, y, a) {
+    const i = Math.round(x / 4), j = Math.round(y / 4);
+    if (i < 0 || j < 0 || i > Z.NI || j > Z.NJ) return a;
+    const t = Z.ramp[j * Z.N1 + i];
+    if (t <= 0) return a;
+    const lo = a < 0.12 ? a : 0.12;
+    return a + (lo - a) * t;
+  }
+  // Rasterises a polygon onto the fixed 4 px lattice. Rim cells: regular weight x coverage; interior: light weight.
+  _rast(put, poly, a, solid, Z, W, H) {
+    const S = 4, n = poly.length;
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    for (let k = 0; k < n; k++) { const p = poly[k]; if (p[0] < x0) x0 = p[0]; if (p[0] > x1) x1 = p[0]; if (p[1] < y0) y0 = p[1]; if (p[1] > y1) y1 = p[1]; }
+    const NI = Math.floor(W / S), NJ = Math.floor(H / S);
+    const i0 = Math.max(0, Math.ceil((x0 - 2) / S)), i1 = Math.min(NI, Math.floor((x1 + 2) / S));
+    const j0 = Math.max(0, Math.ceil((y0 - 2) / S)), j1 = Math.min(NJ, Math.floor((y1 + 2) / S));
+    for (let j = j0; j <= j1; j++) {
+      const cy = j * S;
+      for (let i = i0; i <= i1; i++) {
+        if (Z && Z.mask[j * Z.N1 + i]) continue;
+        const cx = i * S;
+        let ins = false, dm = 1e9;
+        for (let k = 0, l = n - 1; k < n; l = k++) {
+          const ax = poly[l][0], ay = poly[l][1], bx = poly[k][0], by = poly[k][1], ex = bx - ax, ey = by - ay;
+          if ((ay > cy) !== (by > cy) && cx < (ex * (cy - ay)) / ey + ax) ins = !ins;
+          const wx = cx - ax, wy = cy - ay, ee = ex * ex + ey * ey;
+          let u = ee > 0 ? (wx * ex + wy * ey) / ee : 0;
+          u = u < 0 ? 0 : u > 1 ? 1 : u;
+          const dx = wx - ex * u, dy = wy - ey * u, d2 = dx * dx + dy * dy;
+          if (d2 < dm) dm = d2;
+        }
+        const sd = ins ? -Math.sqrt(dm) : Math.sqrt(dm);
+        if (sd >= S / 2) continue;
+        if (solid || sd > -S) { const cov = 0.5 - sd / S; put(cx, cy, 0.6 * S * (cov > 1 ? 1 : cov), a); }
+        else put(cx, cy, 0.3 * S, a);
+      }
+    }
+  }
+  _findCanvas(n) {
+    if (!this._alive) return;
+    if (!this._cv) { const el = document.getElementById(this.D.CID); if (el) this._cv = el; }
+    if (this._cv) { this._start(); return; }
+    if (n < 40) setTimeout(() => this._findCanvas(n + 1), 100);
+  }
+  // The clock widget is still a bitmap on the phone, so it sits on its own canvas
+  _paintWg() {
+    const D = this.D || this._dims();
+    const el = this._wg || document.getElementById(D.WID);
+    if (!el) return;
+    this._wg = el;
+    const dpr = Math.min(2, window.devicePixelRatio || 1), t = this._hhmm(new Date()), key = t + '|' + dpr;
+    if (el._dhKey === key) return;
+    const ctx = el.getContext('2d'); if (!ctx) return;
+    el._dhKey = key;
+    el.width = Math.round(D.W * dpr); el.height = Math.round(D.H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, D.W, D.H);
+    const L = this._L(), put = this._batch();
+    this._mxDraw(put, t, 28, 68, 12, L.L100, L.L10, 0.6);
+    put.flush(ctx);
+  }
+  _start() {
+    if (this._running || !this._cv || !this._alive) return;
+    if (!this.D) this.D = this._dims();
+    const ctx = this._cv.getContext('2d');
+    if (!ctx) return;
+    this._running = true;
+    this._ctx = ctx;
+    const D = this.D;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    this._dpr = dpr;
+    this._cv.width = Math.round(D.W * dpr);
+    this._cv.height = Math.round(D.H * dpr);
+    this._Z = this._zoneSet(D.W, D.H, D.zones);
+    this._B = this._batch();
+    this._initGame();
+    let last = performance.now();
+    const step = (now) => {
+      if (!this._alive) { this._running = false; return; }
+      let dt = (now - last) / 1000; last = now;
+      if (dt > 0.05) dt = 0.05; if (dt < 0) dt = 0;
+      this._update(dt);
+      this._draw();
+      this._raf = requestAnimationFrame(step);
+    };
+    this._raf = requestAnimationFrame(step);
+  }
+  _band() {
+    const D = this.D, k = Math.sqrt(D.W * D.H) / 669;
+    const zs = D.zones.slice().sort((a, b) => a[1] - b[1]);
+    let cur = 0, lo = 0, hi = 0;
+    for (const z of zs) { if (z[1] - cur > hi - lo) { lo = cur; hi = z[1]; } cur = Math.max(cur, z[1] + z[3]); }
+    if (D.H - cur > hi - lo) { lo = cur; hi = D.H; }
+    lo += 15 * k; hi -= 15 * k;
+    if (hi - lo < 20 * k) { lo = 0.2 * D.H; hi = 0.8 * D.H; }
+    return [lo, hi];
+  }
+  // Ship designs. Local axes: nose along +x, +y to starboard. pts: [x, y, dot, alpha]; nose: muzzle point;
+  // noz: engine nozzles [x, y, plume spread, dot]; rcsN / rcsT: nose and tail side-jet ports [x, |y|]. The two jets fire
+  // on opposite sides as a couple, so they only turn the ship. rad: hit radius. "pixel" adds bm: 16 pre-rotated lattice bitmaps.
+  _shapes() {
+    if (this._shp) return this._shp;
+    const poly = (out, v, d, a) => {
+      for (let i = 0; i < v.length; i++) {
+        const p = v[i], q = v[(i + 1) % v.length], n = Math.max(1, Math.round(Math.hypot(q[0] - p[0], q[1] - p[1]) / 4));
+        for (let j = 0; j < n; j++) { const t = j / n; out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, d, a]); }
+      }
+      return out;
+    };
+    const loop = (out, path, step, d, a) => {
+      const seg = [];
+      let tot = 0;
+      for (let i = 0; i < path.length; i++) { const p = path[i], q = path[(i + 1) % path.length], L = Math.hypot(q[0] - p[0], q[1] - p[1]); seg.push(L); tot += L; }
+      const n = Math.max(3, Math.round(tot / step)), h = tot / n;
+      let i = 0, acc = 0;
+      for (let j = 0; j < n; j++) {
+        const s = j * h;
+        while (i < seg.length - 1 && acc + seg[i] < s) { acc += seg[i]; i++; }
+        const p = path[i], q = path[(i + 1) % path.length], t = seg[i] > 0 ? (s - acc) / seg[i] : 0;
+        out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, d, a]);
+      }
+      return out;
+    };
+    const arc = (cx, cy, r, a0, a1, m) => { const o = []; for (let i = 0; i < m; i++) { const t = a0 + ((a1 - a0) * i) / m; o.push([cx + Math.cos(t) * r, cy + Math.sin(t) * r]); } return o; };
+    // ring: a dotted circle with a short spine through it, a glyph
+    const ring = [];
+    for (let i = 0; i < 16; i++) { const t = (i * Math.PI) / 8; ring.push([Math.cos(t) * 10, Math.sin(t) * 10, 3.4, 1]); }
+    ring.push([18, 0, 3.4, 1], [14, 0, 3.4, 1], [-14, 0, 3.4, 1], [-5, 0, 2.4, 0.75], [0, 0, 2.4, 0.75], [5, 0, 2.4, 0.75]);
+    // pod: a capsule with two side nubs that hold the jets
+    const pod = loop([], arc(6, 0, 7, -Math.PI / 2, Math.PI / 2, 24).concat(arc(-6, 0, 7, Math.PI / 2, 1.5 * Math.PI, 24)), 4, 3.4, 1);
+    pod.push([5, -11.5, 2.4, 0.75], [1, -11.5, 2.4, 0.75], [5, 11.5, 2.4, 0.75], [1, 11.5, 2.4, 0.75]);
+    // pixel: a 7x7 LED sprite on the 4 px lattice, pre-rotated to 16 headings (nearest-orientation redraw)
+    const PX = ['1100000', '0110000', '0111100', '1110111', '0111100', '0110000', '1100000'];
+    const lit = (c, r) => c >= 0 && c < 7 && r >= 0 && r < 7 && PX[r].charAt(c) === '1';
+    const bm = [], pix = [];
+    for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) if (lit(c, r)) pix.push([(c - 3) * 4, (r - 3) * 4, 3, 1]);
+    for (let k = 0; k < 16; k++) {
+      const th = (k * Math.PI) / 8, c = Math.cos(th), s = Math.sin(th), cells = [];
+      for (let j = -5; j <= 5; j++) {
+        for (let i = -5; i <= 5; i++) {
+          let hit = 0;
+          for (let a = 0; a < 4; a++) {
+            for (let b = 0; b < 4; b++) {
+              const x = i + (a - 1.5) / 4, y = j + (b - 1.5) / 4;
+              if (lit(Math.round(x * c + y * s) + 3, Math.round(-x * s + y * c) + 3)) hit++;
+            }
+          }
+          if (hit >= 6) cells.push([i * 4, j * 4]);
+        }
+      }
+      bm.push(cells);
+    }
+    // orbit: three heavy dots and a faint dotted hull between them
+    const ov = [[14, 0], [-9, -9.5], [-9, 9.5]], orb = [];
+    for (let i = 0; i < 3; i++) {
+      const p = ov[i], q = ov[(i + 1) % 3], n = Math.max(2, Math.round(Math.hypot(q[0] - p[0], q[1] - p[1]) / 3));
+      for (let j = 1; j < n; j++) orb.push([p[0] + ((q[0] - p[0]) * j) / n, p[1] + ((q[1] - p[1]) * j) / n, 1.2, 0.53]);
+    }
+    for (const p of ov) orb.push([p[0], p[1], 4, 1]);
+    this._shp = {
+      arrow: { pts: poly([], [[15, 0], [-10, -9.5], [-5, 0], [-10, 9.5]], 3.4, 1), nose: [15, 0], noz: [[-7, 0, 1.5, 1.6]], rcsN: [9, 2.3], rcsT: [-10, 9.5], rad: 10 },
+      needle: { pts: poly([], [[20, 0], [11, -3.6], [-8, -3.6], [-14, -8.5], [-14, -3.6], [-11.5, 0], [-14, 3.6], [-14, 8.5], [-8, 3.6], [11, 3.6]], 3.4, 1), nose: [20, 0], noz: [[-13.5, 0, 1.2, 1.6]], rcsN: [14, 2.4], rcsT: [-13, 7], rad: 10 },
+      wedge: { pts: poly([], [[14, 0], [-11, -14], [-11, -5], [-5.5, -5], [-5.5, 5], [-11, 5], [-11, 14]], 3.4, 1), nose: [14, 0], noz: [[-8, 0, 3, 1.6]], rcsN: [8, 3.4], rcsT: [-11, 13], rad: 12 },
+      ring: { pts: ring, nose: [18, 0], noz: [[-17, 0, 1, 1.6]], rcsN: [7.1, 7.1], rcsT: [-7.1, 7.1], rad: 11 },
+      pod: { pts: pod, nose: [13, 0], noz: [[-15.5, -3.5, 0.6, 2.4], [-15.5, 3.5, 0.6, 2.4]], rcsN: [5, 11.5], rcsT: [1, 11.5], rad: 11 },
+      pixel: { pts: pix, bm: bm, nose: [12, 0], noz: [[-15, 0, 1, 1.6]], rcsN: [10, 2], rcsT: [-12, 12], rad: 12 },
+      orbit: { pts: orb, nose: [14, 0], noz: [[-11.5, 0, 1.5, 1.6]], rcsN: [14, 1.7], rcsT: [-9, 9.5], rad: 10 }
+    };
+    return this._shp;
+  }
+  _shape() { const S = this._shapes(), n = this.props && this.props.shipShape; return (typeof n === 'string' && S.hasOwnProperty(n) && S[n]) || S.needle; }
+  _aim() { return this.props && this.props.aimMode === 'rotate' ? 'rotate' : 'turret'; }
+  _laser() { const c = this.props && this.props.laserColor; return typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c) ? c : '#FF3B30'; }
+  // Flight constants from the Tweaks. flip = time for a 180° turn with this torque under the 180°/s rate cap.
+  _P() {
+    const p = this.props || {}, k = this._g ? this._g.k : 1;
+    const num = (v, d, lo, hi) => { if (v == null || v === '') return d; const n = Number(v); return isFinite(n) ? this._cl(n, lo, hi) : d; };
+    const amax = (num(p.rcsTorque, 540, 30, 3600) * Math.PI) / 180, wmax = Math.PI;
+    const flip = amax * Math.PI >= wmax * wmax ? Math.PI / wmax + wmax / amax : 2 * Math.sqrt(Math.PI / amax);
+    return { thrust: num(p.thrust, 160, 20, 600) * k, amax: amax, wmax: wmax, drag: num(p.drag, 0.02, 0, 2), vmax: 140 * k, flip: flip * 1.15 };
+  }
+  _initGame() {
+    const D = this.D;
+    const g = { t: 0, k: Math.sqrt(D.W * D.H) / 669, tilt: { x: 0, y: 0 }, oriOn: false, ori: null,
+      ship: { x: D.W / 2, y: D.H * 0.6, vx: 0, vy: 0, a: -Math.PI / 2, w: 0, al: 0, thr: 0, thrCmd: 0, burn: false, point: false, hold: -Math.PI / 2,
+        dvx: 0, dvy: 0, pAcc: 0, rAcc: 0.9, nzI: 0, cool: 0, fire: 0, aimT: null },
+      band: this._band(), wander: { x: D.W / 2, y: D.H / 2, t: 0 }, wave: null, shockCool: 0,
+      rc: { bx: 0, by: 0, on: false }, parX: 0, parY: 0,
+      rocks: [], shots: [], parts: [], fx: [], sparks: [], flash: null, rings: [], spawnT: 2, stars: [] };
+    this._g = g;
+    const n = Math.round((D.W * D.H) / 2300);
+    for (let i = 0; i < n; i++) g.stars.push({ x: Math.random() * D.W, y: Math.random() * D.H, p: Math.random() * 6.283, d: 0.2 + Math.random() * 0.8 });
+    for (let i = 0; i < D.ROCKS; i++) g.rocks.push(this._newRock(i % 3 === 2 ? 2 : 3, null, true));
+  }
+  _newRock(size, parent, anywhere) {
+    const D = this.D, g = this._g, k = g.k;
+    const r = D.R * (size === 3 ? 1 : size === 2 ? 0.62 : 0.38);
+    let x, y, vx, vy;
+    if (parent) {
+      x = parent.x; y = parent.y;
+      const ang = Math.random() * 6.283, sp = (18 + Math.random() * 26) * k;
+      vx = parent.vx * 0.6 + Math.cos(ang) * sp; vy = parent.vy * 0.6 + Math.sin(ang) * sp;
+    } else if (anywhere) {
+      let tries = 0;
+      do { x = Math.random() * D.W; y = Math.random() * D.H; tries++; } while (tries < 30 && Math.hypot(x - g.ship.x, y - g.ship.y) < 150 * k);
+      const ang = Math.random() * 6.283, sp = (10 + Math.random() * 18) * k;
+      vx = Math.cos(ang) * sp; vy = Math.sin(ang) * sp;
+    } else {
+      const side = Math.floor(Math.random() * 4);
+      if (side === 0) { x = -r; y = Math.random() * D.H; }
+      else if (side === 1) { x = D.W + r; y = Math.random() * D.H; }
+      else if (side === 2) { x = Math.random() * D.W; y = -r; }
+      else { x = Math.random() * D.W; y = D.H + r; }
+      const tx = D.W * (0.25 + Math.random() * 0.5), ty = D.H * (0.25 + Math.random() * 0.5);
+      const ang = Math.atan2(ty - y, tx - x), sp = (10 + Math.random() * 18) * k;
+      vx = Math.cos(ang) * sp; vy = Math.sin(ang) * sp;
+    }
+    const nv = 9 + Math.floor(Math.random() * 4);
+    const verts = [];
+    for (let i = 0; i < nv; i++) { const a = (i / nv) * 6.2832; const rr = r * (0.72 + Math.random() * 0.4); verts.push([Math.cos(a) * rr, Math.sin(a) * rr]); }
+    return { x: x, y: y, vx: vx, vy: vy, r: r, size: size, rot: Math.random() * 6.283, vr: (Math.random() - 0.5) * 0.5, verts: verts };
+  }
+  _rockPoly(r) {
+    const c = Math.cos(r.rot), s = Math.sin(r.rot);
+    return r.verts.map((v) => [r.x + v[0] * c - v[1] * s, r.y + v[0] * s + v[1] * c]);
+  }
+  // Departures: the rock's lit lattice cells release as free grey particles
+  _kill(i) {
+    const g = this._g, D = this.D, r = g.rocks[i];
+    g.rocks.splice(i, 1);
+    const src = [];
+    this._rast((x, y, d) => { if (d >= 0.6) src.push([x, y, d >= 1.8 ? 2.4 : 1.2]); }, this._rockPoly(r), 1, false, this._Z, D.W, D.H);
+    for (const p of src) {
+      if (g.parts.length > 2000) break;
+      const dx = p[0] - r.x, dy = p[1] - r.y, dd = Math.hypot(dx, dy) || 1, out = 18 + Math.random() * 75;
+      const l = 0.7 + Math.random() * 1.0;
+      g.parts.push({ x: p[0], y: p[1], vx: r.vx + (dx / dd) * out + (Math.random() - 0.5) * 24, vy: r.vy + (dy / dd) * out + (Math.random() - 0.5) * 24, life: l, l0: l, d: p[2] });
+    }
+    if (r.size > 1) { g.rocks.push(this._newRock(r.size - 1, r, false)); g.rocks.push(this._newRock(r.size - 1, r, false)); }
+    this._sc = (this._sc || 0) + 1;
+    this._best = Math.max(this._best || 0, this._sc);
+    this.setState({ score: this._sc, best: this._best });
+  }
+  _shock() {
+    const g = this._g, D = this.D;
+    if (!g || g.t < 1.2 || g.shockCool > 0) return;
+    g.shockCool = 8;
+    g.wave = { x: g.ship.x, y: g.ship.y, r: 0, max: Math.hypot(D.W, D.H), t: 0 };
+  }
+  // Where the ship is drawn. The pixel sprite snaps to the 4 px lattice and to the nearest of its 16 headings.
+  _pose(sh) {
+    const s = this._g.ship;
+    if (!sh.bm) return { x: s.x, y: s.y, a: s.a, k: 0 };
+    const k = ((Math.round(s.a / 0.39269908) % 16) + 16) % 16;
+    return { x: Math.round(s.x / 4) * 4, y: Math.round(s.y / 4) * 4, a: k * 0.39269908, k: k };
+  }
+  // A laser bolt from a ship-local muzzle point (lx, ly), flying along angle a
+  _shoot(lx, ly, a) {
+    const g = this._g, s = g.ship, k = g.k, po = this._pose(this._shape());
+    const c = Math.cos(po.a), sn = Math.sin(po.a);
+    const x = po.x + lx * c - ly * sn, y = po.y + lx * sn + ly * c, v = 900 * k;
+    s.fire = 0.12;
+    g.flash = { lx: lx, ly: ly, ra: this._wa(a - po.a), t: 0.08 };
+    if (g.shots.length < 40) g.shots.push({ x: x, y: y, px: x, py: y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, a: a, t: 0, trav: 0, hit: 0, life: 1.1 });
+  }
+  _fire(x, y) {
+    const g = this._g; if (!g) return;
+    const s = g.ship, sh = this._shape();
+    // Rotate mode: remember the target; the RCS turns the ship and it fires once aligned within 5°
+    if (this._aim() === 'rotate') { s.aimT = { x: x, y: y, t: 0 }; return; }
+    if (s.fire > 0) return;
+    const po = this._pose(sh), c = Math.cos(po.a), sn = Math.sin(po.a);
+    let lx = sh.nose[0], ly = sh.nose[1];
+    const rel = this._wa(Math.atan2(y - po.y, x - po.x) - po.a);
+    // Turret: from the nose. A tap behind the ship fires from the hull edge facing it, not back through the hull.
+    if (Math.abs(rel) > 1.5708) { const rr = 0.6 * sh.nose[0]; lx = Math.cos(rel) * rr; ly = Math.sin(rel) * rr; }
+    const mx = po.x + lx * c - ly * sn, my = po.y + lx * sn + ly * c;
+    this._shoot(lx, ly, Math.atan2(y - my, x - mx));
+  }
+  // First crossing of segment (x0,y0)-(x1,y1) into a circle, as a 0..1 fraction; -1 for a miss
+  _seg(x0, y0, x1, y1, cx, cy, r) {
+    const dx = x1 - x0, dy = y1 - y0, fx = x0 - cx, fy = y0 - cy;
+    const c = fx * fx + fy * fy - r * r;
+    if (c <= 0) return 0;
+    const a = dx * dx + dy * dy; if (a < 1e-9) return -1;
+    const b = 2 * (fx * dx + fy * dy), disc = b * b - 4 * a * c;
+    if (disc < 0) return -1;
+    const u = (-b - Math.sqrt(disc)) / (2 * a);
+    return u >= 0 && u <= 1 ? u : -1;
+  }
+  _sparks(x, y, a) {
+    const g = this._g, k = g.k, n = 5 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < n; i++) {
+      const ang = a + Math.PI + (Math.random() - 0.5) * 2.4, sp = (140 + Math.random() * 220) * k, l = 0.1 + Math.random() * 0.07;
+      g.sparks.push({ x: x, y: y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, life: l, l0: l });
+    }
+  }
+  // Autopilot as a PD controller. Sets s.al (RCS angular acceleration) and s.thrCmd (main engine 0..1).
+  _pilot(dt, P) {
+    const g = this._g, D = this.D, s = g.ship, k = g.k, w = g.wander;
+    w.t -= dt;
+    if (w.t <= 0) { w.x = D.W * (0.18 + Math.random() * 0.64); w.y = g.band[0] + (g.band[1] - g.band[0]) * Math.random(); w.t = 5 + Math.random() * 3; }
+    // 1. Desired velocity: toward the wander point, no faster than it can still flip and brake in time
+    const dx = w.x - s.x, dy = w.y - s.y, d = Math.hypot(dx, dy);
+    let vx = 0, vy = 0;
+    if (d > 1e-3) {
+      const ab = 0.8 * P.thrust, tf = P.flip, dd = Math.max(0, d - 10 * k);
+      const sp = Math.min(P.vmax, ab * (Math.sqrt(tf * tf + (2 * dd) / ab) - tf));
+      vx = (dx / d) * sp; vy = (dy / d) * sp;
+    }
+    // Rock avoidance: steer away from where each rock will be at closest approach (or from it now when close)
+    for (const r of g.rocks) {
+      const rx = r.x - s.x, ry = r.y - s.y, nowD = Math.hypot(rx, ry);
+      if (nowD > r.r + 260 * k) continue;
+      const rvx = r.vx - s.vx, rvy = r.vy - s.vy, rv2 = rvx * rvx + rvy * rvy;
+      const tc = rv2 > 1e-6 ? this._cl(-(rx * rvx + ry * rvy) / rv2, 0, 1.6) : 0;
+      let cx = rx + rvx * tc, cy = ry + rvy * tc, cd = Math.hypot(cx, cy);
+      const clear = r.r + 40 * k;
+      let u = cd < clear ? (1 - cd / clear) * (1 - (0.5 * tc) / 1.6) : 0;
+      const near = 1 - nowD / (r.r + 50 * k);
+      if (near > u) { u = near; cx = rx; cy = ry; cd = nowD; }
+      if (u <= 0) continue;
+      if (cd < 1e-3) { const rv = Math.sqrt(rv2) || 1; cx = -rvy / rv; cy = rvx / rv; cd = 1; }
+      vx -= (cx / cd) * u * P.vmax * 1.4; vy -= (cy / cd) * u * P.vmax * 1.4;
+    }
+    const m = 60 * k;
+    if (s.x < m) vx += ((m - s.x) / m) * P.vmax;
+    if (s.x > D.W - m) vx -= ((s.x - D.W + m) / m) * P.vmax;
+    if (s.y < m) vy += ((m - s.y) / m) * P.vmax;
+    if (s.y > D.H - m) vy -= ((s.y - D.H + m) / m) * P.vmax;
+    const vm = Math.hypot(vx, vy);
+    if (vm > P.vmax) { vx *= P.vmax / vm; vy *= P.vmax / vm; }
+    const lp = 1 - Math.exp(-dt / 0.4);
+    s.dvx += (vx - s.dvx) * lp; s.dvy += (vy - s.dvy) * lp;
+    // 2. The velocity error sets the wanted heading. Slowing down makes it point against the motion: flip and burn.
+    const ex = s.dvx - s.vx, ey = s.dvy - s.vy, em = Math.hypot(ex, ey);
+    if (s.point) { if (em < 5 * k) { s.point = false; s.hold = s.a; } }
+    else if (em > 20 * k) s.point = true;
+    let hd = s.point ? Math.atan2(ey, ex) : s.hold;
+    if (s.aimT) hd = Math.atan2(s.aimT.y - s.y, s.aimT.x - s.x);
+    // 3. RCS: PD on the heading error. The rate target is capped at 180°/s and at what it can stop from in time.
+    const ae = this._wa(hd - s.a);
+    const lim = Math.min(P.wmax, Math.sqrt(2 * 0.8 * P.amax * Math.abs(ae)));
+    const wd = this._cl(4 * ae, -lim, lim);
+    let al = this._cl(8 * (wd - s.w), -P.amax, P.amax);
+    if (Math.abs(ae) < 0.05 && Math.abs(s.w) < 0.08) al = 0;
+    s.al = al;
+    // 4. Main engine only when the nose is within 20° of the wanted heading
+    const ok = s.point && !s.aimT && Math.abs(ae) < 0.349;
+    if (s.burn) { if (!ok || em < 5 * k) s.burn = false; }
+    else if (ok && em > 20 * k) s.burn = true;
+    s.thrCmd = s.burn ? this._cl(em / (0.25 * P.thrust), 0.3, 1) * Math.cos(ae) : 0;
+  }
+  // Thruster particles: main-engine plume from the nozzles, RCS puffs from the nose and tail ports
+  _emit(dt, P) {
+    const g = this._g, s = g.ship, k = g.k, sh = this._shape(), po = this._pose(sh);
+    const c = Math.cos(po.a), sn = Math.sin(po.a);
+    const add = (lx, ly, ex, ey, l, d, a, dr) => {
+      if (g.fx.length > 700) return;
+      const wx = ex * c - ey * sn, wy = ex * sn + ey * c, u = Math.random() * dt;
+      g.fx.push({ x: po.x + lx * c - ly * sn + wx * u, y: po.y + lx * sn + ly * c + wy * u, vx: s.vx + wx, vy: s.vy + wy, life: l - u, l0: l, d: d, a: a, dr: dr });
+    };
+    s.pAcc = Math.min(4, s.pAcc + s.thr * 130 * dt);
+    while (s.pAcc >= 1) {
+      s.pAcc -= 1;
+      s.nzI = (s.nzI + 1) % sh.noz.length;
+      const nz = sh.noz[s.nzI], sp = (120 + Math.random() * 80) * k, spr = (Math.random() - 0.5) * 0.4;
+      add(nz[0], nz[1] + (Math.random() * 2 - 1) * nz[2], -Math.cos(spr) * sp, Math.sin(spr) * sp, 0.24 + Math.random() * 0.1, 1.8 + s.thr, 1, 1.5);
+    }
+    const ra = Math.abs(s.al) / P.amax;
+    if (ra < 0.12) { s.rAcc = 0.9; return; }
+    s.rAcc = Math.min(3, s.rAcc + (2 + ra * 24) * dt);
+    const dir = s.al > 0 ? 1 : -1;
+    while (s.rAcc >= 1) {
+      s.rAcc -= 1;
+      for (const port of [[sh.rcsN, -dir], [sh.rcsT, dir]]) {
+        const n = 2 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < n; i++) add(port[0][0] + (Math.random() - 0.5) * 2, port[1] * (port[0][1] + 1.5), (Math.random() - 0.5) * 26 * k, port[1] * (60 + Math.random() * 60) * k, 0.15 + Math.random() * 0.08, 2.2, 0.9, 5);
+      }
+    }
+  }
+  _update(dt) {
+    const g = this._g, D = this.D, s = g.ship, k = g.k, P = this._P(), sh = this._shape();
+    g.t += dt;
+    if (g.shockCool > 0) g.shockCool -= dt;
+    const live = g.t > 1.2;
+    if (s.aimT && this._aim() !== 'rotate') { s.aimT = null; s.hold = s.a; }
+    if (live) this._pilot(dt, P); else { s.al = 0; s.thrCmd = 0; }
+    // Newtonian step: the engine pushes along the heading only; the RCS couple only changes the spin
+    s.thr += (s.thrCmd - s.thr) * (1 - Math.exp(-dt / 0.07));
+    if (s.thr < 0.003) s.thr = 0;
+    const acc = s.thr * P.thrust;
+    s.vx += Math.cos(s.a) * acc * dt; s.vy += Math.sin(s.a) * acc * dt;
+    s.w = this._cl(s.w + s.al * dt, -1.6 * P.wmax, 1.6 * P.wmax);
+    const dr = Math.exp(-P.drag * dt);
+    s.vx *= dr; s.vy *= dr; s.w *= dr;
+    const sp = Math.hypot(s.vx, s.vy), cap = 1.6 * P.vmax;
+    if (sp > cap) { s.vx *= cap / sp; s.vy *= cap / sp; }
+    s.a = this._wa(s.a + s.w * dt);
+    s.x += s.vx * dt; s.y += s.vy * dt;
+    const m = 18 * k;
+    if (s.x < m) { s.x = m; s.vx = Math.abs(s.vx) * 0.45; }
+    if (s.x > D.W - m) { s.x = D.W - m; s.vx = -Math.abs(s.vx) * 0.45; }
+    if (s.y < m) { s.y = m; s.vy = Math.abs(s.vy) * 0.45; }
+    if (s.y > D.H - m) { s.y = D.H - m; s.vy = -Math.abs(s.vy) * 0.45; }
+    if (s.fire > 0) s.fire -= dt;
+    if (s.cool > 0) s.cool -= dt;
+    if (s.aimT) {
+      s.aimT.t += dt;
+      const ta = Math.atan2(s.aimT.y - s.y, s.aimT.x - s.x);
+      if (live && s.fire <= 0 && Math.abs(this._wa(ta - s.a)) < 0.0873) { this._shoot(sh.nose[0], sh.nose[1], s.a); s.aimT = null; s.hold = s.a; }
+      else if (s.aimT.t > 3) { s.aimT = null; s.hold = s.a; }
+    }
+    this._emit(dt, P);
+    const e15 = Math.exp(-1.5 * dt), e5 = Math.exp(-5 * dt);
+    for (const p of g.fx) { const e = p.dr > 3 ? e5 : e15; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= e; p.vy *= e; p.life -= dt; }
+    g.fx = g.fx.filter((p) => p.life > 0);
+    for (const r of g.rocks) {
+      r.x += r.vx * dt; r.y += r.vy * dt; r.rot += r.vr * dt;
+      const e = r.r * 1.3;
+      if (r.x < -e) r.x = D.W + e; else if (r.x > D.W + e) r.x = -e;
+      if (r.y < -e) r.y = D.H + e; else if (r.y > D.H + e) r.y = -e;
+    }
+    for (const b of g.shots) {
+      b.t += dt;
+      if (b.hit > 0) { b.hit -= dt; if (b.hit <= 0) b.life = 0; continue; }
+      b.px = b.x; b.py = b.y;
+      b.x += b.vx * dt; b.y += b.vy * dt; b.trav += 900 * k * dt; b.life -= dt;
+      if (b.x < -40 || b.x > D.W + 40 || b.y < -40 || b.y > D.H + 40) b.life = 0;
+      if (b.life <= 0) continue;
+      for (let i = 0; i < g.rocks.length; i++) {
+        const r = g.rocks[i], u = this._seg(b.px, b.py, b.x, b.y, r.x, r.y, r.r * 0.92);
+        if (u < 0) continue;
+        b.x = b.px + (b.x - b.px) * u; b.y = b.py + (b.y - b.py) * u; b.hit = 0.06;
+        this._sparks(b.x, b.y, b.a);
+        this._kill(i);
+        break;
+      }
+    }
+    g.shots = g.shots.filter((b) => b.life > 0);
+    const se = Math.exp(-4 * dt);
+    for (const p of g.sparks) { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= se; p.vy *= se; p.life -= dt; }
+    g.sparks = g.sparks.filter((p) => p.life > 0);
+    if (g.flash) { g.flash.t -= dt; if (g.flash.t <= 0) g.flash = null; }
+    if (live) {
+      for (const r of g.rocks) {
+        const dx = s.x - r.x, dy = s.y - r.y, d = Math.hypot(dx, dy) || 1, lim = r.r * 0.82 + sh.rad * k;
+        if (d < lim) {
+          const nx = dx / d, ny = dy / d;
+          s.x = r.x + nx * (lim + 1); s.y = r.y + ny * (lim + 1);
+          if (s.cool <= 0) {
+            s.vx += nx * 150 * k; s.vy += ny * 150 * k;
+            r.vx -= nx * 20 * k; r.vy -= ny * 20 * k;
+            // An off-centre knock also spins the ship; the RCS has to counter-fire to stop it
+            const tq = Math.cos(s.a) * ny - Math.sin(s.a) * nx;
+            s.w += (tq >= 0 ? 1 : -1) * (1.3 + Math.random());
+            s.cool = 0.4;
+            g.rings.push({ x: s.x - nx * 6 * k, y: s.y - ny * 6 * k, t: 0 });
+          }
+        }
+      }
+    }
+    if (g.wave) {
+      const wv = g.wave;
+      wv.t += dt; wv.r = wv.max * Math.min(1, wv.t / 0.8);
+      let again = true;
+      while (again) {
+        again = false;
+        for (let i = 0; i < g.rocks.length; i++) {
+          const r = g.rocks[i];
+          if (Math.hypot(r.x - wv.x, r.y - wv.y) - r.r < wv.r) { this._kill(i); again = true; break; }
+        }
+      }
+      if (wv.t >= 0.8) g.wave = null;
+    }
+    for (const rg of g.rings) rg.t += dt;
+    g.rings = g.rings.filter((rg) => rg.t < 0.8);
+    const fr = Math.exp(-0.8 * dt), gx = g.tilt.x * 160 * k * dt, gy = g.tilt.y * 160 * k * dt;
+    for (const p of g.parts) { p.vx += gx; p.vy += gy; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= fr; p.vy *= fr; p.life -= dt; }
+    g.parts = g.parts.filter((p) => p.life > 0);
+    let mass = 0;
+    for (const r of g.rocks) mass += r.size === 3 ? 1 : r.size === 2 ? 0.45 : 0.2;
+    g.spawnT -= dt;
+    if (g.spawnT <= 0 && mass < D.ROCKS * 0.85) { g.rocks.push(this._newRock(3, null, false)); g.spawnT = 1.6 + Math.random() * 1.4; }
+    const rc = g.rc;
+    let tx = 0, ty = 0;
+    if (!rc.on) { rc.bx = g.tilt.x; rc.by = g.tilt.y; rc.on = true; }
+    else {
+      tx = this._cl(g.tilt.x - rc.bx, -1, 1); ty = this._cl(g.tilt.y - rc.by, -1, 1);
+      const b = 1 - Math.exp(-dt / 4);
+      rc.bx += (g.tilt.x - rc.bx) * b; rc.by += (g.tilt.y - rc.by) * b;
+    }
+    const pa = 1 - Math.exp(-dt / 0.15);
+    g.parX += (tx - g.parX) * pa; g.parY += (ty - g.parY) * pa;
+    const left = g.shockCool > 0 ? Math.ceil(g.shockCool) : 0;
+    if (left !== this._shLeft) { this._shLeft = left; this.setState({ shakeLeft: left }); }
+  }
+  _wrap(v, size) { const m = v % size; return m < 0 ? m + size : m; }
+  _draw() {
+    const ctx = this._ctx, g = this._g, D = this.D, dpr = this._dpr, k = g.k, L = this._L(), Z = this._Z, put = this._B;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalAlpha = 1; ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, D.W, D.H);
+    const zf = (x, y, a) => this._zf(Z, x, y, a);
+    const f = this._cl((g.t - 0.2) / 1.0, 0, 1), fade = 1 - Math.pow(1 - f, 3);
+    const ox = g.parX * 28 * k, oy = g.parY * 28 * k, br = (g.t * 6.2832) / 4;
+    for (const st of g.stars) {
+      const x = this._wrap(st.x + ox * st.d, D.W), y = this._wrap(st.y + oy * st.d, D.H);
+      const tw = 0.55 + 0.45 * Math.sin(br + st.p);
+      put(x, y, 1.2, zf(x, y, L.L65 * tw * fade));
+    }
+    for (const r of g.rocks) this._rast(put, this._rockPoly(r), L.L65 * fade, false, Z, D.W, D.H);
+    for (const p of g.parts) { const q = p.life / p.l0; put(p.x, p.y, p.d, zf(p.x, p.y, L.L65 * q)); }
+    for (const p of g.fx) { const q = p.life / p.l0; put(p.x, p.y, 0.7 + (p.d - 0.7) * q, zf(p.x, p.y, p.a * q)); }
+    const s = g.ship, sh = this._shape();
+    if (g.t < 1.2) put(s.x, s.y, 3.4 * (1 + 0.9 * Math.abs(Math.sin(g.t * 3.2))), L.L100 * (1 - this._cl((g.t - 0.8) / 0.4, 0, 1)));
+    const sa = this._cl((g.t - 0.8) / 0.4, 0, 1);
+    if (sa > 0) {
+      const po = this._pose(sh), c = Math.cos(po.a), sn = Math.sin(po.a);
+      const blink = s.cool > 0 ? 0.55 + 0.45 * Math.cos(s.cool * 40) : 1, al = sa * blink;
+      if (sh.bm) { for (const q of sh.bm[po.k]) put(po.x + q[0], po.y + q[1], 3, al); }
+      else { for (const p of sh.pts) put(po.x + p[0] * c - p[1] * sn, po.y + p[0] * sn + p[1] * c, p[2], p[3] * al); }
+      for (const nz of sh.noz) put(po.x + nz[0] * c - nz[1] * sn, po.y + nz[0] * sn + nz[1] * c, nz[3] + 1.4 * s.thr, (L.L46 + (L.L100 - L.L46) * s.thr) * sa);
+    }
+    if (s.aimT) {
+      const q = L.L65 * (0.6 + 0.4 * Math.sin(g.t * 12)), x = s.aimT.x, y = s.aimT.y;
+      put(x - 6, y, 1.6, q); put(x + 6, y, 1.6, q); put(x, y - 6, 1.6, q); put(x, y + 6, 1.6, q);
+    }
+    if (g.wave) {
+      const wv = g.wave, al = 1 - wv.t / 0.8, rad = wv.r;
+      if (al > 0 && rad > 1) {
+        const n = Math.max(12, Math.round((6.2832 * rad) / (6 * k)));
+        for (let j = 0; j < n; j++) {
+          const a = (j / n) * 6.2832, x = wv.x + Math.cos(a) * rad, y = wv.y + Math.sin(a) * rad;
+          if (x < -4 || y < -4 || x > D.W + 4 || y > D.H + 4) continue;
+          put(x, y, 2.4, L.L100 * al);
+        }
+      }
+    }
+    for (const rg of g.rings) {
+      const q = rg.t / 0.8, rad = 8 + q * 62, n = 30;
+      for (let i = 0; i < n; i++) { const a = (i / n) * 6.2832, x = rg.x + Math.cos(a) * rad, y = rg.y + Math.sin(a) * rad; put(x, y, 2.4, zf(x, y, L.L65 * (1 - q))); }
+    }
+    put.flush(ctx);
+    this._drawRed(ctx);
+  }
+  // Red is used for lasers only: bolts (soft glow + core), the muzzle flash and the hit sparks
+  _drawRed(ctx) {
+    const g = this._g;
+    if (!g.shots.length && !g.sparks.length && !g.flash) return;
+    ctx.save();
+    const col = this._laser();
+    ctx.lineCap = 'round'; ctx.strokeStyle = col; ctx.fillStyle = col;
+    const segs = [];
+    for (const b of g.shots) {
+      const ux = Math.cos(b.a), uy = Math.sin(b.a);
+      let len, th, al = 1;
+      if (b.hit > 0) { const q = b.hit / 0.06; len = 15 * (0.15 + 0.35 * q); th = 3 * (1.6 - 0.6 * q); al = 0.4 + 0.6 * q; }
+      else { const st = 1 + 0.35 * Math.max(0, 1 - b.t / 0.1); len = Math.min(15 * st, b.trav); th = 3 / Math.sqrt(st); }
+      segs.push([b.x - ux * len, b.y - uy * len, b.x, b.y, th, al]);
+    }
+    // Soft glow: a 3x pass at 18% and a 2x pass at 22% stack to about 35% beside the core
+    for (const pass of [[3, 0.18], [2, 0.22], [1, 1]]) {
+      for (const q of segs) {
+        ctx.globalAlpha = pass[1] * q[5]; ctx.lineWidth = q[4] * pass[0];
+        ctx.beginPath(); ctx.moveTo(q[0], q[1]); ctx.lineTo(q[2], q[3]); ctx.stroke();
+      }
+    }
+    if (g.flash) {
+      const fl = g.flash, q = fl.t / 0.08, po = this._pose(this._shape()), c = Math.cos(po.a), sn = Math.sin(po.a), fa = po.a + fl.ra;
+      const x = po.x + fl.lx * c - fl.ly * sn + Math.cos(fa) * 2, y = po.y + fl.lx * sn + fl.ly * c + Math.sin(fa) * 2, r = 1.2 + 1.6 * q;
+      ctx.globalAlpha = 0.35 * q; ctx.beginPath(); ctx.arc(x, y, r * 2.5, 0, 6.2832); ctx.fill();
+      ctx.globalAlpha = q; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.fill();
+    }
+    ctx.lineWidth = 1.6;
+    for (const p of g.sparks) {
+      ctx.globalAlpha = p.life / p.l0;
+      ctx.beginPath(); ctx.moveTo(p.x - p.vx * 0.014, p.y - p.vy * 0.014); ctx.lineTo(p.x, p.y); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  renderVals() {
+    if (!this._h) {
+      this._h = {
+        setCanvas: (el) => { if (el) { this._cv = el; if (this._alive) this._start(); } },
+        setWg: (el) => { if (el) { this._wg = el; this._paintWg(); } },
+        onMove: (e) => {
+          const g = this._g; if (!g || g.oriOn) return;
+          const r = e.currentTarget.getBoundingClientRect(); if (!r.width) return;
+          const x = ((e.clientX - r.left) / r.width) * 2 - 1, y = ((e.clientY - r.top) / r.height) * 2 - 1;
+          const dz = (v) => (Math.abs(v) < 0.08 ? 0 : (v - Math.sign(v) * 0.08) / 0.92);
+          g.tilt.x = this._cl(dz(x) * 1.3, -1, 1); g.tilt.y = this._cl(dz(y) * 1.3, -1, 1);
+        },
+        onLeave: () => { const g = this._g; if (g && !g.oriOn) { g.tilt.x = 0; g.tilt.y = 0; } },
+        onTap: (e) => {
+          const r = e.currentTarget.getBoundingClientRect(); if (!r.width) return;
+          const D = this.D || this._dims();
+          this._fire(((e.clientX - r.left) / r.width) * D.W, ((e.clientY - r.top) / r.height) * D.H);
+        },
+        shake: () => this._shock()
+      };
+    }
+    const st = this.state || {};
+    const d = new Date(st.now || Date.now());
+    const left = st.shakeLeft || 0;
+    return {
+      setCanvas: this._h.setCanvas, setWg: this._h.setWg, onMove: this._h.onMove, onLeave: this._h.onLeave, onTap: this._h.onTap, shake: this._h.shake,
+      shakeText: left > 0 ? 'Shake · ' + left + ' s' : 'Shake',
+      time: this._hhmm(d), date: d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
+      score: st.score || 0, best: st.best || 0
+    };
+  }
+}
+</script>
+</body>
+</html>
