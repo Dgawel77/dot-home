@@ -19,7 +19,6 @@ SVG = b'<svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><
 SOLID_SVG = SVG % b'd="M0 0h24v24H0z"'
 WIDE_SVG = SVG % b'd="M0 9h24v6H0z"'  # 4:1 bar, a wordmark's proportions
 FRAME_SVG = SVG % b'fill-rule="evenodd" d="M2 2h20v20H2zM4.5 4.5v15h15v-15z"'  # square, fill ~0.44
-HAIRLINE_SVG = SVG % b'fill-rule="evenodd" d="M2 2h20v20H2zM2.2 2.2v19.6h19.6V2.2z"'  # too thin for dots
 
 
 # ---------------------------------------------------------------- fixtures
@@ -184,67 +183,110 @@ class Fill(unittest.TestCase):
 
 # ---------------------------------------------------------------- stipple geometry
 
+def half_cov_shape(cov):
+    """A mask whose every cell has mean alpha `cov` (full rows of 255 in the top part of each cell)."""
+    a = np.zeros((S, S), np.uint8)
+    rows = int(round(cov * 9))
+    for y in range(S):
+        if y % 9 < rows:
+            a[y, :] = 255
+    return a
+
+
+def r_of(shape, lum=1.0):
+    dots = ix.place_dots(shape, lum)
+    return sorted({round(r, 6) for _, _, r in dots}), dots
+
+
 class Grid(unittest.TestCase):
-    def test_pitch(self):
-        self.assertAlmostEqual(ix.P, 14.4)
+    def test_pitch_and_cells(self):
+        self.assertEqual(ix.CELLS, 48)
+        self.assertAlmostEqual(ix.P, 9.0)
 
-    def test_hex_grid(self):
-        pts = ix.hex_grid()
-        ys = sorted({round(y, 6) for _, y in pts})
-        self.assertEqual(len(ys), 33)
-        self.assertAlmostEqual(ys[16], S / 2.0)  # middle row on the centre line
-        steps = np.diff(ys)
-        self.assertTrue(np.allclose(steps, ix.P * math.sqrt(3) / 2), steps)
-        rows = [sorted(x for x, y in pts if abs(y - ry) < 1e-6) for ry in ys]
-        for r in rows:
-            self.assertTrue(np.allclose(np.diff(r), ix.P))
-        self.assertAlmostEqual(abs(rows[1][0] - rows[0][0]), ix.P / 2)  # odd rows offset by P/2
-        for x, y in pts:  # whole dots stay inside the tile
-            self.assertTrue(ix.P / 2 - 1e-9 <= x <= S - ix.P / 2 + 1e-9)
-            self.assertTrue(ix.P / 2 - 1e-9 <= y <= S - ix.P / 2 + 1e-9)
-        a = np.array(pts)
-        mid = a[np.argmin(np.hypot(a[:, 0] - S / 2, a[:, 1] - S / 2))]
-        self.assertTrue(np.allclose(mid, (S / 2.0, S / 2.0)))  # a dot on the tile centre
-        d = np.hypot(a[:, 0] - mid[0], a[:, 1] - mid[1])
-        self.assertAlmostEqual(np.sort(d)[1], ix.P)  # nearest neighbours are P apart
-        self.assertEqual(int(np.sum(np.abs(d - ix.P) < 1e-6)), 6)  # hex: six of them
-        self.assertEqual(len(pts), 17 * 29 + 16 * 30)
-
-    def test_hex_grid_is_mirror_symmetric(self):
-        key = lambda x, y: (round(x, 6), round(y, 6))  # noqa: E731
-        pts = {key(x, y) for x, y in ix.hex_grid()}
-        self.assertEqual(pts, {key(S - x, y) for x, y in pts})
-        self.assertEqual(pts, {key(x, S - y) for x, y in pts})
+    def test_square_grid_of_48_by_48_candidate_cells(self):
+        dots = ix.place_dots(np.full((S, S), 255, np.uint8), 1.0)
+        self.assertEqual(len(dots), 48 * 48)
+        xs = sorted({round(x, 6) for x, _, _ in dots})
+        ys = sorted({round(y, 6) for _, y, _ in dots})
+        self.assertEqual(xs, [(i + 0.5) * 9 for i in range(48)])
+        self.assertEqual(ys, xs)
+        self.assertEqual(len({(round(x, 6), round(y, 6)) for x, y, _ in dots}), 48 * 48)
 
     def test_symmetric_glyph_stipples_symmetrically(self):
-        dots = ix.place_dots(u8(ring()), lambda xs, ys: 1.0)
+        dots = ix.place_dots(u8(ring()), 1.0)
         key = lambda x, y: (round(x, 6), round(y, 6))  # noqa: E731
         pts = {key(x, y) for x, y, _ in dots}
         self.assertEqual(pts, {key(x, S - y) for x, y in pts})
         self.assertEqual(pts, {key(S - x, y) for x, y in pts})
 
-    def test_gradient(self):
-        self.assertAlmostEqual(ix.gradient(0, 0), 1.0)
-        self.assertAlmostEqual(ix.gradient(S, S), 0.88)
-        self.assertAlmostEqual(ix.gradient(S, 0), 0.94)
+    def test_full_mask_full_tone_gives_every_cell_max_radius(self):
+        rs, dots = r_of(np.full((S, S), 255, np.uint8), 1.0)
+        for _, _, r in dots:
+            self.assertAlmostEqual(r, 9 * 0.47 * math.sqrt(1.0), delta=0.05)
+        self.assertAlmostEqual(dots[0][2], 4.23, delta=0.05)
+
+    def test_half_covered_edge_cell_radius_scales_with_sqrt_cov(self):
+        rs, dots = r_of(half_cov_shape(0.5), 1.0)  # rows 0..3 of 9 are ink: cov 4/9
+        cov = 4 / 9.0
+        want = 9 * 0.47 * math.sqrt(cov / 0.85)
+        self.assertEqual(len(rs), 1)
+        self.assertAlmostEqual(rs[0], want, delta=0.01)
+        full = 9 * 0.47
+        self.assertAlmostEqual(rs[0] / full, math.sqrt(cov / 0.85), delta=0.002)
+
+    def test_cell_below_012_is_skipped_and_at_012_is_drawn(self):
+        low = ix.place_dots(np.full((S, S), round(0.11 * 255), np.uint8), 1.0)  # 0.1098
+        at = ix.place_dots(np.full((S, S), round(0.12 * 255), np.uint8), 1.0)   # 0.1216
+        self.assertEqual(len(low), 0)
+        self.assertEqual(len(at), 48 * 48)
+        cut_off = np.full((S, S), 255, np.uint8)
+        exact = np.zeros((S, S), np.uint8)
+        for y in range(S):  # 1 of 9 rows inked: cov 0.111 < 0.12 -> skipped
+            if y % 9 < 1:
+                exact[y, :] = 255
+        self.assertEqual(len(ix.place_dots(exact, 1.0)), 0)
+        two = np.zeros((S, S), np.uint8)
+        for y in range(S):  # 2 of 9 rows: cov 0.222 >= 0.12 -> drawn
+            if y % 9 < 2:
+                two[y, :] = 255
+        self.assertEqual(len(ix.place_dots(two, 1.0)), 48 * 48)
+        self.assertEqual(len(ix.place_dots(cut_off, 1.0)), 48 * 48)
+
+    def test_min_radius_applies_from_cov_03(self):
+        # cov 0.3: sqrt(0.3/0.85) * 0.47 * 9 = 2.51 > 0.22 * 9 = 1.98, so use a low tone-free check on dot_radius
+        self.assertAlmostEqual(float(ix.dot_radius(0.85, 0.3)), max(9 * 0.47 * math.sqrt(0.85) * math.sqrt(0.3 / 0.85), 1.98))
+        # below 0.3 the floor does not apply: r follows the formula down to tiny dots
+        r = float(ix.dot_radius(0.85, 0.12))
+        self.assertAlmostEqual(r, 9 * 0.47 * math.sqrt(0.85) * math.sqrt(0.12 / 0.85))
+        self.assertLess(r, 0.22 * 9)
+        # a dim, thin cell right at the threshold gets lifted to the floor
+        self.assertAlmostEqual(float(ix.dot_radius(0.0, 0.3)), 0.22 * 9)
+        self.assertAlmostEqual(float(ix.dot_radius(0.0, 0.299)), 0.0)
+        self.assertGreaterEqual(float(ix.dot_radius(0.85, 0.3)), 0.22 * 9)
+
+    def test_tone_is_flat(self):
+        full = np.full((S, S), 255, np.uint8)
+        r0 = ix.place_dots(full, 0.0)[0][2]
+        r1 = ix.place_dots(full, 1.0)[0][2]
+        self.assertAlmostEqual(r0 / r1, math.sqrt(0.85), delta=1e-9)
+        self.assertAlmostEqual(r0, 9 * 0.47 * math.sqrt(0.85), delta=1e-9)
+
+    def test_no_gradient(self):
+        full = np.full((S, S), 255, np.uint8)
+        dots = ix.place_dots(full, 0.5)
+        self.assertEqual(len({round(r, 9) for _, _, r in dots}), 1)
+        self.assertAlmostEqual(dots[0][2], dots[-1][2])  # top-left vs bottom-right
 
     def test_tone_mapping(self):
-        self.assertAlmostEqual(ix.tone_t(1.0, 0, 0), 0.95)
-        self.assertAlmostEqual(ix.tone_t(0.0, 0, 0), 0.38)
-        self.assertAlmostEqual(ix.tone_t(0.7, S, S), (0.38 + 0.57 * 0.7) * 0.88)
+        self.assertAlmostEqual(ix.tone_t(1.0), 1.0)
+        self.assertAlmostEqual(ix.tone_t(0.0), 0.85)
+        self.assertAlmostEqual(ix.tone_t(0.7), 0.85 + 0.15 * 0.7)
 
-    def test_radius(self):
-        self.assertAlmostEqual(ix.dot_radius(1.0), 0.47 * ix.P)
-        self.assertAlmostEqual(ix.dot_radius(0.0), 0.28 * ix.P)
-        self.assertAlmostEqual(ix.dot_radius(0.3), 0.28 * ix.P)  # floor: 0.47 sqrt(.3) < 0.28
-        self.assertAlmostEqual(ix.dot_radius(0.5), 0.47 * ix.P * math.sqrt(0.5))
-        rs = [ix.dot_radius(t) for t in np.linspace(0, 1, 101)]
+    def test_radius_grows_with_tone_and_coverage(self):
+        rs = [float(ix.dot_radius(ix.tone_t(L), 1.0)) for L in np.linspace(0, 1, 11)]
+        self.assertTrue(all(b > a for a, b in zip(rs, rs[1:])))
+        rs = [float(ix.dot_radius(1.0, c)) for c in np.linspace(0.12, 1, 20)]
         self.assertTrue(all(b >= a for a, b in zip(rs, rs[1:])))
-
-    def test_dot_needs_half_the_box_covered(self):
-        flat = lambda xs, ys: 1.0  # noqa: E731
-        self.assertEqual(len(ix.place_dots(np.full((S, S), 128, np.uint8), flat)), len(ix.hex_grid()))
-        self.assertEqual(len(ix.place_dots(np.full((S, S), 127, np.uint8), flat)), 0)
 
 
 class Stipple(unittest.TestCase):
@@ -262,7 +304,7 @@ class Stipple(unittest.TestCase):
         self.assertEqual({tuple(p) for p in a[on][:, :3]}, {ix.FG})
 
     def test_dots_are_antialiased_circles(self):
-        dots = ix.place_dots(np.full((S, S), 255, np.uint8), lambda xs, ys: 0.5)
+        dots = ix.place_dots(np.full((S, S), 255, np.uint8)[:, :], 0.5)
         img = ix.render_dots(dots)
         a = np.asarray(img.getchannel("A"))
         partial = (a > 0) & (a < 255)
@@ -272,14 +314,14 @@ class Stipple(unittest.TestCase):
 
     def test_dot_edges_match_exact_coverage(self):
         # off-grid centres and the whole radius range; every pixel within 20/255 of exact coverage
-        for cx, cy, r in ((40.0, 40.0, 0.28 * ix.P), (100.3, 61.77, 5.2), (200.5, 300.25, 0.47 * ix.P)):
+        for cx, cy, r in ((40.0, 40.0, 0.22 * ix.P), (100.3, 61.77, 5.2), (200.5, 300.25, 0.47 * ix.P)):
             a = ink(ix.render_dots([(cx, cy, r)]))
             x0, y0 = int(cx) - 10, int(cy) - 10
             err = np.abs(a[y0:y0 + 20, x0:x0 + 20] - exact_coverage(cx, cy, r, x0, y0, 20))
             self.assertLess(err.max(), 20 / 255.0, "r=%.2f" % r)
-            self.assertAlmostEqual(a.sum(), math.pi * r * r, delta=0.02 * math.pi * r * r)
+            self.assertAlmostEqual(a.sum(), math.pi * r * r, delta=0.03 * math.pi * r * r)  # 4x supersample: small dots
 
-    def test_dot_radius_grows_with_tone(self):
+    def test_dot_radius_follows_tone(self):
         full = np.full((S, S), 255, np.uint8)
         dots = ix.stipple_dots(full, self.gradient_tone())
         meas = measured_radii(ix.render_dots(dots), dots)
@@ -290,10 +332,8 @@ class Stipple(unittest.TestCase):
         for row in by_row.values():  # luminance rises left to right in every row
             row.sort()
             rs = [r for _, r, _ in row]
-            ms = [m for _, _, m in row]
             self.assertTrue(all(b >= a for a, b in zip(rs, rs[1:])), rs)
-            self.assertTrue(all(b > a for a, b in zip(ms, ms[1:])), ms)
-            self.assertGreater(ms[-1] - ms[0], 1.5)  # ~2 px from black to white across a row
+            self.assertGreater(rs[-1] - rs[0], 0.2)  # flat tone: only ~0.35 px from black to white
 
     def test_no_ink_outside_shape_dilated_by_pitch(self):
         for name, shape in (("ring", ring()), ("blobs", blobs()), ("letter", ix.letter_mask("R") / 255.0)):
@@ -303,11 +343,10 @@ class Stipple(unittest.TestCase):
             outside = inked & ~dilate(shape > 0, ix.P)
             self.assertFalse(outside.any(), "%s: %d px outside" % (name, int(outside.sum())))
 
-    def test_full_mask_at_t1_fills_the_grid_with_max_dots(self):
+    def test_full_mask_at_full_tone_fills_the_grid_with_max_dots(self):
         full = np.full((S, S), 255, np.uint8)
-        dots = ix.place_dots(full, lambda xs, ys: 1.0)
-        grid = ix.hex_grid()
-        self.assertEqual(len(dots), len(grid))
+        dots = ix.place_dots(full, 1.0)
+        self.assertEqual(len(dots), 48 * 48)
         rmax = 0.47 * ix.P
         for cx, cy, r in dots:
             self.assertAlmostEqual(r, rmax)
@@ -331,10 +370,12 @@ class ToneLayer(unittest.TestCase):
         write_png(t, alpha, grey, size=size)
         return m, t
 
-    def check_follows(self, dots, lum_of, tol):
+    def check_follows(self, dots, lum_of, tol, shape=None):
         self.assertGreater(len(dots), 100)
+        cov = ix.cell_means(ring() if shape is None else shape)
         for cx, cy, r in dots:
-            want = ix.dot_radius(ix.tone_t(lum_of(cx, cy), cx, cy))
+            c = cov[int(cy // ix.P), int(cx // ix.P)]
+            want = ix.dot_radius(ix.tone_t(lum_of(cx, cy)), c)
             self.assertAlmostEqual(r, want, delta=tol, msg="dot at %.1f,%.1f" % (cx, cy))
 
     def test_tone_lines_up_with_the_mask(self):
@@ -351,12 +392,12 @@ class ToneLayer(unittest.TestCase):
         step = (np.arange(S)[None, :] >= S // 2) * np.ones((S, 1))
         m, t = self.pair(1.0, step)
         dots = ix.stipple_dots(ix.load_shape(m), ix.load_tone(t))
-        left = [(cx, cy, r) for cx, cy, r in dots if cx < S / 2 - ix.P / 4 - 1]
-        right = [(cx, cy, r) for cx, cy, r in dots if cx > S / 2 + ix.P / 4 + 1]
+        left = [(cx, cy, r) for cx, cy, r in dots if cx < S / 2]
+        right = [(cx, cy, r) for cx, cy, r in dots if cx > S / 2]
         self.assertTrue(left and right)
         for side, lum in ((left, 0.0), (right, 1.0)):
             for cx, cy, r in side:
-                self.assertAlmostEqual(r, ix.dot_radius(ix.tone_t(lum, cx, cy)), delta=1e-6)
+                self.assertAlmostEqual(r, ix.dot_radius(ix.tone_t(lum), 1.0), delta=1e-6)
         self.assertLess(max(r for _, _, r in left), min(r for _, _, r in right))
 
     def test_old_192px_export_is_scaled_smoothly_and_stays_aligned(self):
@@ -368,7 +409,7 @@ class ToneLayer(unittest.TestCase):
         self.assertTrue(((shape > 0) & (shape < 255)).any())  # smooth resample, not nearest-neighbour
         # 432 px coordinate cx sits at 192 px pixel index cx * n / S - 0.5
         self.check_follows(ix.stipple_dots(shape, tone),
-                           lambda cx, cy: (cx * n / float(S) - 0.5) / (n - 1.0), 0.05)
+                           lambda cx, cy: (cx * n / float(S) - 0.5) / (n - 1.0), 0.05, shape=shape / 255.0)
 
     def test_luminance_is_weighted_by_coverage(self):
         lum = np.where(np.arange(S)[None, :] < S // 2, 1.0, 0.3) * np.ones((S, 1))
@@ -529,11 +570,13 @@ class Wordmark(unittest.TestCase):
         self.assertTrue(ix.brand_ok(img))
 
     def test_glyph_spanning_too_few_dot_rows_is_rejected(self):
-        img = ix.brand_icon(HAIRLINE_SVG)
-        a = np.asarray(img.getchannel("A"))
-        self.assertFalse(ix.too_empty(ix.brand_fill(img)))
+        # a band 2 cells tall (18 px): a thin glyph now stipples (small dots) rather than breaking up, so the
+        # row gate is checked on a short, wide-enough band that is not caught by the aspect test
+        a = np.zeros((S, S), np.uint8)
+        a[S // 2 - 9:S // 2 + 9, 100:332] = 255
         self.assertLess(ix.row_span(ix.stipple_dots(a)), ix.MIN_ROWS)
-        self.assertEqual(ix.brand_problem(img), "wordmark")
+        self.assertTrue(ix.wordmark(a))
+        self.assertEqual(ix.row_span([]), 0)
 
     def test_blob_check_uses_the_square_padded_box(self):
         icons = os.path.join(ix.ensure_simple_icons(), "icons")

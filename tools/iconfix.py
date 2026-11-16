@@ -5,8 +5,11 @@ Reads the phone export (build/icons/: <drawable>.png shape masks, optional align
 <drawable>.tone.png tone layers, index.tsv) and writes build/icons-final/<drawable>.png. The export is
 never modified, so re-runs are idempotent.
 
-Every final icon is a greyscale stipple of a shape: FG dots on a hex grid (pitch P = 432/30), placed
-where the shape covers half of a +-P/4 box, sized by tone. The dot colour is constant; tone is dot size.
+Every final icon is a greyscale stipple of a shape: FG dots on a square grid of 48 x 48 cells (pitch P = 9 px,
+centres at (i + 0.5) P). A cell gets a dot when the shape covers at least 12% of it; the radius is
+r = P 0.47 sqrt(t) k with a nearly flat tone t = 0.85 + 0.15 L and an edge factor k = sqrt(min(1, cov
+/ 0.85)) that shrinks dots on thin or edge cells (r >= 0.22 P once cov >= 0.3). The dot colour is
+constant; tone is dot size.
 
 Per index.tsv row (component, drawable, mono|auto[, label]):
   * iconpack/overrides/<drawable>.png             -> kept as is (hand-made wins)
@@ -31,7 +34,6 @@ in tools/cache/.
 import base64
 import hashlib
 import json
-import math
 import os
 import re
 import shutil
@@ -80,18 +82,19 @@ MIN_ROWS = 4
 # border and have some inner structure; masks of gradient or photo backgrounds break into many clusters
 # (10-21 seen) or carry background ink into the outer band (6-12% seen), and featureless solids
 # (squares, discs: 0.76-1.0 of their own bbox filled) say less than an initial (real glyphs <= 0.74).
-MAX_PARTS = 4                    # connected dot clusters (dots P apart are connected)
+MAX_PARTS = 4                    # connected dot clusters (dots in adjacent cells, diagonals included, are connected)
 EDGE_BAND = 14                   # px from the tile border (~P)
 MAX_EDGE = 0.02                  # share of the mask's ink inside that band
 MAX_SOLID = 0.75                 # fill ratio of the mask's own ink bbox
 
-# Stipple (Task 6): hex grid, dot where the shape covers >= half of a +-P/4 box; tone -> dot radius.
-P = SIZE / 30.0                  # 14.4 px pitch: nearest-neighbour distance on the hex grid
-BOX = P / 4                      # coverage / tone sampling box half-width
-COVER = 0.5
-T_BASE, T_GAIN = 0.38, 0.57      # t = (T_BASE + T_GAIN * L) * g
-G_END = 0.88                     # light gradient g: 1.0 top-left -> G_END bottom-right
-R_FLOOR, R_GAIN = 0.28, 0.47     # r = max(R_FLOOR * P, R_GAIN * P * sqrt(t))
+# Stipple (user pick D): square grid, one candidate dot per cell; coverage sets the edge factor.
+CELLS = 48                       # cells across the tile
+P = SIZE / float(CELLS)          # 9 px pitch; cell (i, j) is centred on ((i + .5) P, (j + .5) P)
+COV_MIN = 0.12                   # skip a cell whose mean shape alpha is below this
+COV_FULL = 0.85                  # edge factor k = sqrt(min(1, cov / COV_FULL))
+COV_FLOOR = 0.3                  # from this coverage on, r >= R_FLOOR * P
+T_BASE, T_GAIN = 0.85, 0.15      # t = T_BASE + T_GAIN * L (flat tone, no gradient)
+R_FLOOR, R_GAIN = 0.22, 0.47     # r = P * R_GAIN * sqrt(t) * k
 L_DEFAULT = 0.7                  # luminance without a tone layer
 SS = 4                           # dots are drawn at SS x and area-averaged down (see render_dots)
 
@@ -348,10 +351,10 @@ def brand_fill(img, box=None):
 
 
 def row_span(dots):
-    """Number of lattice rows from the top dot to the bottom one (0 without dots)."""
+    """Number of grid rows from the top dot to the bottom one (0 without dots)."""
     if not dots:
         return 0
-    rows = [int(round((cy - SIZE / 2.0) / (P * math.sqrt(3) / 2))) for _, cy, _ in dots]
+    rows = [int(round(cy / P - 0.5)) for _, cy, _ in dots]
     return max(rows) - min(rows) + 1
 
 
@@ -386,12 +389,12 @@ def brand_ok(img, box=None):
 
 
 def dot_parts(dots):
-    """Connected clusters of dots (neighbours on the lattice are P apart)."""
+    """Connected clusters of dots (8-neighbours on the grid: at most P * sqrt(2) apart)."""
     n = len(dots)
     if not n:
         return 0
     xy = np.array([(x, y) for x, y, _ in dots])
-    near = np.hypot(xy[:, None, 0] - xy[None, :, 0], xy[:, None, 1] - xy[None, :, 1]) <= P * 1.05
+    near = np.hypot(xy[:, None, 0] - xy[None, :, 0], xy[:, None, 1] - xy[None, :, 1]) <= P * 1.5
     seen = np.zeros(n, bool)
     parts = 0
     for i in range(n):
@@ -502,98 +505,63 @@ def load_tone(path):
 
 # ---------------------------------------------------------------- stipple
 
-def hex_grid(size=SIZE, pitch=P):
-    """Dot centres [(x, y)]: 33 rows pitch*sqrt(3)/2 apart, the middle one on y = size/2. Rows alternate
-    between a dot on x = size/2 and dots P/2 either side of it, so all six neighbours are P away, the
-    tile centre is a dot, and the lattice is mirror-symmetric top/bottom and left/right (a symmetric
-    glyph stipples the same on both sides). Every centre is >= P/2 from the edge."""
-    row = pitch * math.sqrt(3) / 2
-    c = size / 2.0
-    half = int((c - pitch / 2.0) / row + 1e-9)
-    lo, hi = pitch / 2.0, size - pitch / 2.0
-    pts = []
-    for j in range(-half, half + 1):
-        x0 = c + (pitch / 2.0 if j % 2 else 0.0)
-        i0 = int(math.ceil((lo - x0) / pitch - 1e-9))
-        i1 = int(math.floor((hi - x0) / pitch + 1e-9))
-        pts.extend((x0 + i * pitch, c + j * row) for i in range(i0, i1 + 1))
-    return pts
+def cell_means(a):
+    """Mean of a (SIZE x SIZE) array over each grid cell: a CELLS x CELLS array (row = y, column = x)."""
+    a = np.asarray(a, np.float64)
+    n = a.shape[0] // CELLS
+    return a.reshape(CELLS, n, CELLS, n).mean(axis=(1, 3))
 
 
-def gradient(cx, cy):
-    """Light gradient g: 1.0 at the top-left corner, G_END at the bottom-right, linear in x + y."""
-    return 1.0 - (1.0 - G_END) * (cx + cy) / (2.0 * SIZE)
+def dot_radius(t, cov):
+    """Dot radius for tone t and cell coverage cov: P R_GAIN sqrt(t) k, k = sqrt(min(1, cov / COV_FULL)),
+    and at least R_FLOOR P once cov >= COV_FLOOR."""
+    t, cov = np.asarray(t, np.float64), np.asarray(cov, np.float64)
+    k = np.sqrt(np.minimum(1.0, cov / COV_FULL))
+    r = R_GAIN * P * np.sqrt(np.maximum(t, 0.0)) * k
+    return np.where(cov >= COV_FLOOR, np.maximum(r, R_FLOOR * P), r)
 
 
-def tone_t(lum, cx, cy):
-    return (T_BASE + T_GAIN * lum) * gradient(cx, cy)
-
-
-def dot_radius(t):
-    return np.maximum(R_FLOOR * P, R_GAIN * P * np.sqrt(np.maximum(t, 0.0)))
-
-
-def _integral(a):
-    ii = np.zeros((a.shape[0] + 1, a.shape[1] + 1), np.float64)
-    ii[1:, 1:] = np.asarray(a, np.float64).cumsum(0).cumsum(1)
-    return ii
-
-
-def _box_sums(ii, xs, ys):
-    """Sum over the pixels whose centres lie in the +-BOX square around each (x, y), and its pixel count."""
-    h, w = ii.shape[0] - 1, ii.shape[1] - 1
-    x0 = np.clip(np.ceil(xs - BOX - 0.5), 0, w).astype(int)
-    x1 = np.clip(np.floor(xs + BOX - 0.5) + 1, 0, w).astype(int)
-    y0 = np.clip(np.ceil(ys - BOX - 0.5), 0, h).astype(int)
-    y1 = np.clip(np.floor(ys + BOX - 0.5) + 1, 0, h).astype(int)
-    return ii[y1, x1] - ii[y0, x1] - ii[y1, x0] + ii[y0, x0], np.maximum(1, (x1 - x0) * (y1 - y0))
+def tone_t(lum):
+    return T_BASE + T_GAIN * lum
 
 
 class Tone(object):
     """The colour icon: luminance (0..1) and coverage (0..1) at SIZE, aligned pixel for pixel with the shape."""
 
     def __init__(self, lum, cov):
-        lum, cov = np.asarray(lum, np.float64), np.asarray(cov, np.float64)
-        self._lum_cov = _integral(lum * cov)
-        self._cov = _integral(cov)
+        self.lum = np.asarray(lum, np.float64)
+        self.cov = np.asarray(cov, np.float64)
 
     def mean(self):
         """Coverage-weighted mean luminance; None when nothing is covered."""
-        a = self._cov[-1, -1]
-        return float(self._lum_cov[-1, -1] / a) if a > 1e-9 else None
+        a = self.cov.sum()
+        return float((self.lum * self.cov).sum() / a) if a > 1e-9 else None
 
-    def at(self, xs, ys, default):
-        """Coverage-weighted luminance in the +-P/4 box of each centre; `default` where it is uncovered."""
-        la, n = _box_sums(self._lum_cov, xs, ys)
-        a, _ = _box_sums(self._cov, xs, ys)
-        ok = a > 0.01 * n
-        return np.where(ok, la / np.where(ok, a, 1.0), default)
-
-
-def place_dots(shape, t_of):
-    """[(cx, cy, r)]: a dot on every hex grid point whose +-P/4 box has mean shape alpha >= 0.5; its
-    radius comes from the tone t_of(xs, ys) (scalar or one per centre)."""
-    pts = np.array(hex_grid(), np.float64)
-    xs, ys = pts[:, 0], pts[:, 1]
-    cover, n = _box_sums(_integral(np.asarray(shape, np.float64) / 255.0), xs, ys)
-    on = cover / n >= COVER
-    xs, ys = xs[on], ys[on]
-    if not len(xs):
-        return []
-    r = dot_radius(np.broadcast_to(np.asarray(t_of(xs, ys), np.float64), xs.shape))
-    return [(float(x), float(y), float(q)) for x, y, q in zip(xs, ys, r)]
+    def cells(self, solid, cov, default):
+        """Per cell: mean of luminance x tone coverage over the pixels where `solid` (shape alpha > 0.5),
+        divided by max(cov, 1e-3) and clamped to 0..1; `default` where the tone layer covers none of them."""
+        w = self.cov * solid
+        a = cell_means(w)
+        level = np.clip(cell_means(self.lum * w) / np.maximum(cov, 1e-3), 0.0, 1.0)
+        return np.where(a > 0.01, level, default)
 
 
-def stipple_dots(shape, lum=None):
-    """Dots for a shape. lum: a Tone (luminance sampled per dot), one luminance, or None (L_DEFAULT)."""
+def place_dots(shape, lum=None):
+    """[(cx, cy, r)] for a shape: one candidate per grid cell, skipped below COV_MIN coverage. lum: a
+    Tone (luminance per cell), one luminance, or None (L_DEFAULT)."""
+    alpha = np.asarray(shape, np.float64) / 255.0
+    cov = cell_means(alpha)
     if isinstance(lum, Tone):
         mean = lum.mean()
-        fallback = L_DEFAULT if mean is None else mean
-        level = lambda xs, ys: lum.at(xs, ys, fallback)  # noqa: E731
+        level = lum.cells(alpha > 0.5, cov, L_DEFAULT if mean is None else mean)
     else:
-        const = L_DEFAULT if lum is None else float(lum)
-        level = lambda xs, ys: const  # noqa: E731
-    return place_dots(shape, lambda xs, ys: tone_t(level(xs, ys), xs, ys))
+        level = np.full(cov.shape, L_DEFAULT if lum is None else float(lum))
+    js, is_ = np.nonzero(cov >= COV_MIN)
+    r = dot_radius(tone_t(level[js, is_]), cov[js, is_])
+    return [(float((i + 0.5) * P), float((j + 0.5) * P), float(q)) for j, i, q in zip(js, is_, r)]
+
+
+stipple_dots = place_dots
 
 
 def render_dots(dots, size=SIZE):
@@ -615,7 +583,7 @@ def render_dots(dots, size=SIZE):
 
 
 def stipple(shape, lum=None):
-    return render_dots(stipple_dots(shape, lum))
+    return render_dots(place_dots(shape, lum))
 
 
 # ---------------------------------------------------------------- pipeline
