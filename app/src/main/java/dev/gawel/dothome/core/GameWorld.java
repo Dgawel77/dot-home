@@ -56,6 +56,7 @@ public final class GameWorld {
     public float height() { return h; }
 
     public void resize(float nw, float nh) {
+        if (!(nw > 0 && nh > 0)) return;
         GameConfig old = cfg;
         cfg = GameConfig.forSize(nw, nh);
         if (old == null) {

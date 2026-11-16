@@ -92,13 +92,33 @@ public final class GameWorldTest {
     }
 
     public static void testParticlesCapped() {
-        GameWorld g = world(new Count());
-        for (int i = 0; i < 60; i++) g.addRock(1, g.ship().x + 30 + i, g.ship().y - 60, 0, 0);
-        for (int i = 0; i < 60; i++) {
-            g.fire(g.ship().x + 30 + i, g.ship().y - 60);
-            g.step(0.1f);
+        Count c = new Count();
+        GameWorld g = world(c);
+        for (int i = 0; i < 1995; i++) {
+            GameWorld.Particle p = new GameWorld.Particle();
+            p.life = p.life0 = 100f;
+            g.particles().add(p);
         }
+        g.addRock(1, 310, 200, 0, 0);
+        fireUntilKill(g, c, 310, 200);
+        T.eq(1, c.destroyed, "kill still happened");
         T.check(g.particles().size() <= 2000, "cap " + g.particles().size());
+        T.check(g.particles().size() > 1995, "burst added some particles " + g.particles().size());
+    }
+
+    public static void testZeroResizeIgnored() {
+        GameWorld g = new GameWorld(new Rng(1));
+        g.resize(620, 722);
+        g.resize(0, 722);
+        g.resize(330, 810);
+        GameConfig cfg = GameConfig.forSize(330, 810);
+        GameWorld.Ship s = g.ship();
+        T.check(!Float.isNaN(s.x) && !Float.isInfinite(s.x) && !Float.isNaN(s.y) && !Float.isInfinite(s.y), "ship finite");
+        T.check(s.x >= cfg.edgeMargin && s.x <= 330 - cfg.edgeMargin, "ship x " + s.x);
+        T.check(s.y >= cfg.edgeMargin && s.y <= 810 - cfg.edgeMargin, "ship y " + s.y);
+        for (GameWorld.Rock r : g.rocks()) {
+            T.check(!Float.isNaN(r.x) && !Float.isInfinite(r.x) && !Float.isNaN(r.y) && !Float.isInfinite(r.y), "rock finite");
+        }
     }
 
     public static void testSpawnRestoresMass() {
