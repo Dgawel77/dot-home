@@ -9,11 +9,12 @@ import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.provider.AlarmClock;
 import android.util.Log;
+import android.util.TypedValue;
+import android.view.View;
 import android.widget.RemoteViews;
 
 import dev.gawel.dothome.core.CardShape;
-import dev.gawel.dothome.core.ClockLayout;
-import dev.gawel.dothome.core.Lattice;
+import dev.gawel.dothome.core.ClockFit;
 import dev.gawel.dothome.core.NowPlaying;
 import dev.gawel.dothome.core.Weather;
 
@@ -23,6 +24,8 @@ final class WidgetUpdater {
     private static final String CLOCK_PKG = "com.sec.android.app.clockpackage";
     private static final int DEFAULT_W_DP = 250, DEFAULT_H_DP = 110;
     static final int MAX_SIDE_PX = 1200; // keeps each RemoteViews bitmap far below the binder/memory limit
+    /** Clock bottom row: the weather's left margin, the least it gets, and slack on the measured date width. */
+    private static final float WEATHER_MARGIN_DP = 12f, MIN_WEATHER_DP = 64f, DATE_SLACK_DP = 4f;
 
     private WidgetUpdater() {}
 
@@ -56,30 +59,56 @@ final class WidgetUpdater {
         int hDp = o == null ? 0 : o.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0);
         if (wDp <= 0) wDp = DEFAULT_W_DP;
         if (hDp <= 0) hDp = DEFAULT_H_DP;
-        float wPx = wDp * density, hPx = hDp * density;
-        float shrink = Math.min(1f, MAX_SIDE_PX / Math.max(wPx, hPx));
-        wPx *= shrink;
-        hPx *= shrink;
-        float eff = density * shrink; // bitmap px per dp: dot scale must come out right after the launcher stretches it back
-        Lattice.Step step = ClockLayout.clockStep(wDp, hDp);
-        int clockDp = ClockLayout.clockWidthDp(step);
-        int clockW = Math.max(1, Math.round(clockDp * eff));
-        int weatherW = Math.max(1, Math.round(wPx) - clockW);
-        int h = Math.max(1, Math.round(hPx));
-        float radiusDp = shapeRadiusDp(o, wDp, hDp);
-
         RemoteViews rv = new RemoteViews(ctx.getPackageName(), R.layout.widget_clock);
-        Bitmap clock = safe(h, clockW, () -> WidgetArt.clock(ctx, clockW, h, now, step, eff, 0, clockW + weatherW, radiusDp));
-        Bitmap weather = safe(h, weatherW, () -> WidgetArt.weather(ctx, weatherW, h, wx, now, eff, clockW, clockW + weatherW,
-            radiusDp));
-        if (android.os.Build.VERSION.SDK_INT >= 31) {
-            rv.setViewLayoutWidth(R.id.clock_img, clockDp, android.util.TypedValue.COMPLEX_UNIT_DIP);
-        } // before 31 the layout's fixed 216 dp stands
-        rv.setImageViewBitmap(R.id.clock_img, clock);
-        rv.setImageViewBitmap(R.id.weather_img, weather);
-        rv.setOnClickPendingIntent(R.id.clock_img, PendingIntent.getActivity(ctx, 1, clockIntent(ctx), flags()));
+
+        // the glass card behind everything, one piece over the whole widget
+        if (WidgetArt.backdropOn(ctx)) {
+            float eff = density * shrink(Math.max(wDp, hDp) * density); // bitmap px per dp
+            int w = Math.max(1, Math.round(wDp * eff)), h = Math.max(1, Math.round(hDp * eff));
+            float radiusDp = shapeRadiusDp(o, wDp, hDp);
+            rv.setImageViewBitmap(R.id.card_img, safe(h, w, () -> WidgetArt.card(w, h, eff, radiusDp)));
+            rv.setViewVisibility(R.id.card_img, View.VISIBLE);
+        } else {
+            rv.setViewVisibility(R.id.card_img, View.GONE);
+        }
+
+        // the time: TextClocks in the matrix font (they tick the seconds themselves), or the per-minute fallback
+        int innerDp = wDp - 2 * ClockFit.PAD_DP;
+        if (new PrefsStore(ctx).bitmapClock()) {
+            int cell = ClockFit.cellDp(wDp, hDp, ClockFit.MINUTES_COLS);
+            float eff = density * shrink(Math.max(1, innerDp) * density);
+            int w = Math.max(1, Math.round(innerDp * eff));
+            int h = Math.max(1, Math.round(ClockFit.timeHeightDp(cell) * eff));
+            rv.setViewVisibility(R.id.time_grid, View.GONE);
+            rv.setViewVisibility(R.id.time_lit, View.GONE);
+            rv.setViewVisibility(R.id.time_img, View.VISIBLE);
+            rv.setImageViewBitmap(R.id.time_img, safe(h, w, () -> WidgetArt.timeBitmap(ctx, w, now, cell, eff)));
+        } else {
+            int cell = ClockFit.cellDp(wDp, hDp, ClockFit.SECONDS_COLS);
+            float size = ClockFit.textSizeDp(cell); // both layers get the same size, so the dots stay registered
+            rv.setTextViewTextSize(R.id.time_grid, TypedValue.COMPLEX_UNIT_DIP, size);
+            rv.setTextViewTextSize(R.id.time_lit, TypedValue.COMPLEX_UNIT_DIP, size);
+            rv.setViewVisibility(R.id.time_grid, View.VISIBLE);
+            rv.setViewVisibility(R.id.time_lit, View.VISIBLE);
+            rv.setViewVisibility(R.id.time_img, View.GONE);
+        }
+
+        // the weather, right of the date: whatever the date leaves, so the date stays whole
+        float dateDp = WidgetArt.dateWidthDp(ctx, now) + DATE_SLACK_DP;
+        float maxDp = Math.max(MIN_WEATHER_DP, innerDp - WEATHER_MARGIN_DP - dateDp);
+        float effRow = density * shrink(maxDp * density);
+        int rowH = Math.max(1, Math.round(ClockFit.ROW_DP * effRow));
+        rv.setImageViewBitmap(R.id.weather_img, safe(rowH, Math.round(maxDp * effRow),
+            () -> WidgetArt.weather(ctx, wx, now, ClockFit.ROW_DP, maxDp, effRow)));
+
+        rv.setOnClickPendingIntent(R.id.clock_root, PendingIntent.getActivity(ctx, 1, clockIntent(ctx), flags()));
         rv.setOnClickPendingIntent(R.id.weather_img, radarTap(ctx));
         return rv;
+    }
+
+    /** Scale that keeps a bitmap side of sidePx within MAX_SIDE_PX (1 when it already fits). */
+    private static float shrink(float sidePx) {
+        return Math.min(1f, MAX_SIDE_PX / Math.max(1f, sidePx));
     }
 
     private static final int MUSIC_DEFAULT_W_DP = 330, MUSIC_DEFAULT_H_DP = 76;

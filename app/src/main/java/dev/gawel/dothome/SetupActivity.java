@@ -30,6 +30,7 @@ public class SetupActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_setup);
         PrefsStore prefs = new PrefsStore(this);
+        applyClockMode(prefs, getIntent());
 
         stepLocation = findViewById(R.id.step_location);
         stepBackground = findViewById(R.id.step_background);
@@ -173,6 +174,18 @@ public class SetupActivity extends Activity {
         } catch (RuntimeException e) {
             return false;
         }
+    }
+
+    /**
+     * The hidden clock-mode switch (no UI): {@code adb shell am start -n dev.gawel.dothome/.SetupActivity
+     * --es widget.clockMode bitmap} (or {@code text}) flips the clock widget's time between the matrix-font
+     * TextClocks and the per-minute bitmap, for a launcher that cannot render the font.
+     */
+    private void applyClockMode(PrefsStore prefs, Intent intent) {
+        String mode = intent == null ? null : intent.getStringExtra(PrefsStore.KEY_CLOCK_MODE);
+        if (!PrefsStore.CLOCK_TEXT.equals(mode) && !PrefsStore.CLOCK_BITMAP.equals(mode)) return;
+        prefs.put(PrefsStore.KEY_CLOCK_MODE, mode);
+        WidgetUpdater.updateAll(this);
     }
 
     private void safeStart(Intent i) {

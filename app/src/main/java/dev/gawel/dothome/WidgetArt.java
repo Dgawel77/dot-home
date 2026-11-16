@@ -30,14 +30,20 @@ import dev.gawel.dothome.core.Weather;
 import dev.gawel.dothome.core.WeatherCodes;
 
 /**
- * Draws the clock, weather and music widgets as bitmaps (a clear glass card when backdrops are on) on the 4 dp lattice. Every function takes the
+ * Draws the widget bitmaps on the 4 dp lattice: the clear glass card, the clock's weather row (and its bitmap time
+ * fallback), the music widget and the radar's glass finish. Every function takes the
  * effective density (display density times the shrink applied to the bitmap), so sizes come out as true dp once
  * the launcher stretches the bitmap back. Content offsets snap to multiples of the step; no containers, glows or
  * gradients.
  */
 final class WidgetArt {
     private static final long STALE_MS = 90L * 60 * 1000;
-    private static final int WORST_TEMP_COLS = 23;
+    static final String DATE_PATTERN = "EEEE, MMMM d"; // as the date TextClock in widget_clock.xml
+    static final float DATE_SIZE_DP = 15f;
+    private static final float WEATHER_ICON_DP = 20f;
+    /** Below this much room the weather row drops its text and keeps the icon and temperature. */
+    private static final float MIN_TEXT_DP = 24f;
+    private static final String SEP = " \u00B7 ";
     private static final float ART_RADIUS_DP = 12f;
     private static final float ICON_STROKE_DP = 1.6f;
     /** Clear glass card: 75% near-black tint, diagonal white sheen from the top-left, gradient white rim. */
@@ -81,110 +87,99 @@ final class WidgetArt {
         return p;
     }
 
-    static Bitmap clock(Context ctx, int wPx, int hPx, long nowMs, Lattice.Step step, float dens, int xOff, int totalW,
-                        float radiusDp) {
-        Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
-        Canvas c = new Canvas(bmp);
-        backdrop(ctx, c, bmp.getHeight(), dens, xOff, totalW, radiusDp);
-
+    /**
+     * The per-minute bitmap fallback for the time (pref widget.clockMode = bitmap, for a launcher that cannot render
+     * the matrix font): "hh:mm" as dots, lit L100 over unlit L10, cellDp per cell, left-aligned in a wPx-wide bitmap
+     * seven cells tall, so the layout's fitStart + adjustViewBounds shows it at true size.
+     */
+    static Bitmap timeBitmap(Context ctx, int wPx, long nowMs, int cellDp, float dens) {
         Calendar cal = Calendar.getInstance();
         cal.setTimeInMillis(nowMs);
         String t = DotMatrixFont.clockText(cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE),
             DateFormat.is24HourFormat(ctx));
         byte[] cells = DotMatrixFont.cells(t);
         int cols = cells.length / DotMatrixFont.ROWS;
-        float s = Lattice.stepPx(step, dens);
-        float r = Lattice.radiusPx(step, Lattice.Weight.REGULAR, dens);
-        float padPx = Lattice.snap(16f * dens, dens);
-
-        Paint date = text(Fonts.inter(ctx), 15f, dens, DotStyle.L65);
-        float dateH = 20f * dens, gap = 8f * dens;
-        float gridH = DotMatrixFont.ROWS * s;
-        float top = Lattice.snap(Math.max(0f, (hPx - (gridH + gap + dateH)) / 2f), dens);
-
+        float s = cellDp * dens;
+        float r = s * Lattice.Weight.REGULAR.ratio / 2f;
+        Bitmap bmp = Bitmap.createBitmap(Math.max(1, Math.max(wPx, Math.round(cols * s))),
+            Math.max(1, Math.round(DotMatrixFont.ROWS * s)), Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(bmp);
         Paint lit = fill(DotStyle.L100), unlit = fill(DotStyle.L10);
         for (int row = 0; row < DotMatrixFont.ROWS; row++) {
             for (int col = 0; col < cols; col++) {
                 byte v = cells[row * cols + col];
                 if (v < 0) continue;
-                dot(c, padPx, top, s, col, row, r, v == 1 ? lit : unlit);
+                dot(c, 0, 0, s, col, row, r, v == 1 ? lit : unlit);
             }
         }
-
-        String d = new SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(new Date(nowMs));
-        d = TextFit.fit(d, wPx - padPx - 4f * dens, date::measureText);
-        c.drawText(d, padPx, baseline(date, top + gridH + gap, dateH), date);
         return bmp;
     }
 
-    static Bitmap weather(Context ctx, int wPx, int hPx, Weather w, long nowMs, float dens, int xOff, int totalW,
-                          float radiusDp) {
-        Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
-        Canvas c = new Canvas(bmp);
-        backdrop(ctx, c, bmp.getHeight(), dens, xOff, totalW, radiusDp);
+    /** The date as the clock's bottom row shows it (TextClock "EEEE, MMMM d", Inter 15 dp): its width in dp. */
+    static float dateWidthDp(Context ctx, long nowMs) {
+        Paint p = text(Fonts.inter(ctx), DATE_SIZE_DP, 1f, DotStyle.L65);
+        return p.measureText(new SimpleDateFormat(DATE_PATTERN, Locale.getDefault()).format(new Date(nowMs)));
+    }
 
+    /**
+     * The weather for the clock's bottom row, one line rowDp tall, as wide as its content and at most maxWDp: the
+     * line-art icon, the temperature as matrix dots (lit only, L65) at the step whose seven rows fill the row, then
+     * the condition (Inter 13, L65; an active alert replaces it in L100) and the place and data age (L46). Text is
+     * cut with an ellipsis, the place before the condition; with too little room only the icon and temperature
+     * remain. dens is the effective density, so every size is true dp.
+     */
+    static Bitmap weather(Context ctx, Weather w, long nowMs, float rowDp, float maxWDp, float dens) {
+        float h = rowDp * dens;
+        float s = Math.max(1, (int) (rowDp / DotMatrixFont.ROWS)) * dens;
+        float r = s * Lattice.Weight.REGULAR.ratio / 2f;
         String temp = w == null ? "\u2212\u2212\u00B0" : tempText(Math.round(w.tempF));
         byte[] cells = DotMatrixFont.cells(temp);
         int cols = cells.length / DotMatrixFont.ROWS;
-        float wDp = wPx / dens;
-        // S8 when the widest reading ("\u221200\u00B0", 23 columns) fits with a 16 dp margin each side, else S4;
-        // fixed so the size does not flip as the temperature crosses -10
-        Lattice.Step step = WORST_TEMP_COLS * 8f + 2 * 16f <= wDp ? Lattice.Step.S8 : Lattice.Step.S4;
-        float s = Lattice.stepPx(step, dens);
-        float r = Lattice.radiusPx(step, Lattice.Weight.REGULAR, dens);
-        float pad = Lattice.snap((step == Lattice.Step.S8 ? 16f : 8f) * dens, dens);
-        float right = wPx - pad, maxW = Math.max(1f, right - 4f * dens);
 
-        Paint line = text(Fonts.inter(ctx), 13f, dens, DotStyle.L65);
-        line.setTextAlign(Paint.Align.RIGHT);
-        float lineH = 16f * dens, gap = 8f * dens;
+        float icon = w == null ? 0f : WEATHER_ICON_DP * dens;
+        float tempX = w == null ? 0f : icon + 8f * dens;
+        float textX = tempX + cols * s + 12f * dens;
+        float textMax = maxWDp * dens - textX;
 
-        String cond = null, place = "", age = null;
-        String alert = w == null ? null : w.alert;
-        if (w != null) {
-            cond = w.condition + " \u00B7 H " + Math.round(w.highF) + "\u00B0 L " + Math.round(w.lowF) + "\u00B0";
-            place = w.place == null ? "" : w.place;
-            age = ageText(nowMs - w.fetchedAtMs);
+        boolean alert = w != null && w.alert != null && !w.alert.isEmpty();
+        Paint first = w == null ? label(ctx, dens, DotStyle.L46) : text(Fonts.inter(ctx), 13f, dens, alert ? DotStyle.L100 : DotStyle.L65);
+        Paint second = text(Fonts.inter(ctx), 13f, dens, DotStyle.L46);
+        String one = "", two = "";
+        if (textMax >= MIN_TEXT_DP * dens) {
+            if (w == null) {
+                one = TextFit.fit("NO DATA", textMax, first::measureText);
+            } else {
+                one = TextFit.fit(alert ? w.alert : w.condition, textMax, first::measureText);
+                String place = w.place == null ? "" : w.place;
+                String age = ageText(nowMs - w.fetchedAtMs);
+                String suffix = age == null ? "" : (place.isEmpty() ? age : " \u00B7 " + age);
+                float room = textMax - first.measureText(one) - second.measureText(SEP);
+                // the place and age follow the whole condition, and only once three letters of the place fit
+                String least = place.length() > 3 ? place.substring(0, 3) + "\u2026" : place;
+                if (!one.endsWith("\u2026") && !(place.isEmpty() && suffix.isEmpty())
+                        && room >= second.measureText(least + suffix)) {
+                    two = SEP + TextFit.fitWithSuffix(place, suffix, room, second::measureText);
+                }
+            }
         }
-        boolean hasAlert = alert != null && !alert.isEmpty();
-        boolean hasPlace = !place.isEmpty() || age != null;
+        float oneW = first.measureText(one), twoW = second.measureText(two);
+        float right = one.isEmpty() ? tempX + cols * s : textX + oneW + twoW;
 
-        float gridH = DotMatrixFont.ROWS * s;
-        int lines = w == null ? 1 : 1 + (hasPlace ? 1 : 0) + (hasAlert ? 1 : 0);
-        float blockH = gridH + gap + lines * lineH;
-        float y = Lattice.snap(Math.max(0f, (hPx - blockH) / 2f), dens);
-
-        float gx = Lattice.snap(right - cols * s, dens);
+        Bitmap bmp = Bitmap.createBitmap(Math.max(1, (int) Math.ceil(right)), Math.max(1, Math.round(h)),
+            Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(bmp);
+        if (w != null) drawGlyph(c, WeatherCodes.glyph(w.code), 0f, (h - icon) / 2f, icon, dens);
+        float gy = (h - DotMatrixFont.ROWS * s) / 2f;
         Paint dots = fill(DotStyle.L65);
         for (int row = 0; row < DotMatrixFont.ROWS; row++) {
             for (int col = 0; col < cols; col++) {
-                if (cells[row * cols + col] == 1) dot(c, gx, y, s, col, row, r, dots); // lit cells only
+                if (cells[row * cols + col] == 1) dot(c, tempX, gy, s, col, row, r, dots); // lit cells only
             }
         }
-        if (w != null) {
-            float icon = 32f * dens;
-            float ix = Lattice.snap(gx - 8f * dens - icon, dens);
-            if (ix >= 0f) drawGlyph(c, WeatherCodes.glyph(w.code), ix, Lattice.snap(y + (gridH - icon) / 2f, dens), icon, dens);
-        }
-        y += gridH + gap;
-
-        if (w == null) {
-            Paint lab = label(ctx, dens, DotStyle.L46);
-            lab.setTextAlign(Paint.Align.RIGHT);
-            c.drawText("NO DATA", right, baseline(lab, y, lineH), lab);
-            return bmp;
-        }
-        c.drawText(TextFit.fit(cond, maxW, line::measureText), right, baseline(line, y, lineH), line);
-        y += lineH;
-        if (hasPlace) {
-            line.setColor(DotStyle.L46);
-            String suffix = age == null ? "" : (place.isEmpty() ? age : " \u00B7 " + age);
-            c.drawText(TextFit.fitWithSuffix(place, suffix, maxW, line::measureText), right, baseline(line, y, lineH), line);
-            y += lineH;
-        }
-        if (hasAlert) {
-            line.setColor(DotStyle.L100);
-            c.drawText(TextFit.fit(alert, maxW, line::measureText), right, baseline(line, y, lineH), line);
+        if (!one.isEmpty()) {
+            float base = baseline(second, 0f, h);
+            c.drawText(one, textX, w == null ? baseline(first, 0f, h) : base, first);
+            if (!two.isEmpty()) c.drawText(two, textX + oneW, base, second);
         }
         return bmp;
     }
@@ -229,7 +224,7 @@ final class WidgetArt {
     static Bitmap music(Context ctx, int wPx, int hPx, NowPlaying np, float dens, float radiusDp) {
         Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
-        backdrop(ctx, c, bmp.getHeight(), dens, 0, bmp.getWidth(), radiusDp);
+        if (backdropOn(ctx)) drawCard(c, bmp.getWidth(), bmp.getHeight(), dens, radiusDp);
         float s4 = Lattice.stepPx(Lattice.Step.S4, dens);
         float artS = 64f * dens;
         float artX = 16f * dens, artY = Lattice.snap((hPx - artS) / 2f, dens);
@@ -273,18 +268,17 @@ final class WidgetArt {
         return !"false".equals(new PrefsStore(ctx).get("widget.backdrop", "true"));
     }
 
-    /**
-     * Clear glass card for a bitmap that is the part of a totalW-wide widget starting at xOff: the whole card is
-     * drawn in widget coordinates and shifted, so a pair of halves share one tint, sheen and rim gradient, with
-     * no edge at the seam. radiusDp is the launcher's clip radius ({@link CardShape}).
-     */
-    private static void backdrop(Context ctx, Canvas c, int hPx, float dens, int xOff, int totalW, float radiusDp) {
-        if (!backdropOn(ctx)) return;
-        c.save();
-        c.translate(-xOff, 0);
-        c.drawPath(panel(0, 0, totalW, hPx, radiusDp * dens), fill(GLASS_FILL));
-        glassFinish(c, totalW, hPx, dens, radiusDp);
-        c.restore();
+    /** The clear glass card over a whole wPx x hPx widget, corners at the launcher's clip radius ({@link CardShape}). */
+    static Bitmap card(int wPx, int hPx, float dens, float radiusDp) {
+        Bitmap bmp = Bitmap.createBitmap(Math.max(1, wPx), Math.max(1, hPx), Bitmap.Config.ARGB_8888);
+        drawCard(new Canvas(bmp), bmp.getWidth(), bmp.getHeight(), dens, radiusDp);
+        return bmp;
+    }
+
+    /** Clear glass card at the origin: 75% tint, then the sheen and rim. */
+    private static void drawCard(Canvas c, float w, float h, float dens, float radiusDp) {
+        c.drawPath(panel(0, 0, w, h, radiusDp * dens), fill(GLASS_FILL));
+        glassFinish(c, w, h, dens, radiusDp);
     }
 
     /**
