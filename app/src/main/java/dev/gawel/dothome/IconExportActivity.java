@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -11,6 +12,7 @@ import android.graphics.drawable.AdaptiveIconDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.widget.TextView;
 import dev.gawel.dothome.core.AppFilter;
@@ -18,14 +20,19 @@ import dev.gawel.dothome.core.DotStyle;
 import dev.gawel.dothome.core.MonoIcon;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Exports every launcher app's icon as a white glyph PNG (432px, soft white) for the icon pack.
- * Reads icons through PackageManager only; it never starts, binds to, or queries any other app.
+ * Exports every launcher app's icon for the icon pack, as two aligned 432px PNGs per app:
+ * {@code <name>.png}, the glyph shape in soft white (monochrome layer, or extracted from the full
+ * icon), and {@code <name>.tone.png}, the full-colour icon's Rec. 709 luma with alpha = coverage,
+ * drawn with exactly the same geometry as the shape. tools/iconfix.py stipples shape x tone.
+ * Reads the apps' own icon drawables through PackageManager and their resources only; it never
+ * starts, binds to, or queries any other app.
  */
 public class IconExportActivity extends Activity {
     private static final int SIZE = 432;
@@ -65,75 +72,98 @@ public class IconExportActivity extends Activity {
             if (dir == null) return "No external files dir";
             File[] old = dir.listFiles();
             if (old != null) for (File f : old) if (f.getName().endsWith(".png")) f.delete();
-            int count = 0, auto = 0, failed = 0;
+            int mono = 0, auto = 0, failed = 0, fallback = 0;
             Writer index = new OutputStreamWriter(new FileOutputStream(new File(dir, "index.tsv")), "UTF-8");
             try {
                 for (int i = 0; i < apps.size(); i++) {
+                    String name = names.get(i);
                     try {
-                        boolean mono = false;
-                        int[] px;
-                        Drawable icon = apps.get(i).loadIcon(pm);
+                        ResolveInfo ri = apps.get(i);
+                        Drawable icon = unthemedIcon(pm, ri);
+                        if (icon == null) {
+                            icon = ri.loadIcon(pm);
+                            fallback++;
+                        }
                         Drawable monoLayer = null;
                         if (Build.VERSION.SDK_INT >= 33 && icon instanceof AdaptiveIconDrawable) {
                             monoLayer = ((AdaptiveIconDrawable) icon).getMonochrome();
                         }
-                        if (monoLayer != null) {
-                            px = MonoIcon.fromMonochromeLayer(render(new Drawable[] {monoLayer}, false));
-                            mono = true;
-                        } else if (icon instanceof AdaptiveIconDrawable) {
-                            // Unmasked layers, so mask corners are the background colour, not black.
+                        // colour: the full icon on transparent, framed exactly like the shape below,
+                        // so <name>.tone.png lines up with <name>.png pixel for pixel.
+                        int[] shape, colour;
+                        if (icon instanceof AdaptiveIconDrawable) {
+                            // Raw, unmasked layers, so mask corners are the background colour, not black.
                             AdaptiveIconDrawable ad = (AdaptiveIconDrawable) icon;
-                            px = MonoIcon.fromFullIcon(
-                                render(new Drawable[] {ad.getBackground(), ad.getForeground()}, true), SIZE, SIZE);
+                            colour = render(new Drawable[] {ad.getBackground(), ad.getForeground()}, true);
+                            shape = monoLayer != null
+                                ? MonoIcon.fromMonochromeLayer(render(new Drawable[] {monoLayer}, true))
+                                : MonoIcon.fromFullIcon(MonoIcon.overBlack(colour), SIZE, SIZE);
                         } else {
-                            px = MonoIcon.fromFullIcon(render(new Drawable[] {icon}, true, false), SIZE, SIZE);
+                            colour = render(new Drawable[] {icon}, false);
+                            shape = MonoIcon.fromFullIcon(MonoIcon.overBlack(colour), SIZE, SIZE);
                         }
-                        px = MonoIcon.flatten(px, DotStyle.FG);
-                        Bitmap bmp = Bitmap.createBitmap(px, SIZE, SIZE, Bitmap.Config.ARGB_8888);
-                        try {
-                            FileOutputStream out = new FileOutputStream(new File(dir, names.get(i) + ".png"));
-                            try {
-                                bmp.compress(Bitmap.CompressFormat.PNG, 100, out);
-                            } finally {
-                                out.close();
-                            }
-                        } finally {
-                            bmp.recycle();
-                        }
-                        CharSequence lab = apps.get(i).loadLabel(pm);
+                        writePng(new File(dir, name + ".png"), MonoIcon.flatten(shape, DotStyle.FG));
+                        writePng(new File(dir, name + ".tone.png"), MonoIcon.tone(colour));
+                        CharSequence lab = ri.loadLabel(pm);
                         String label = (lab == null ? "" : lab.toString()).replaceAll("[\\t\\r\\n]+", " ").trim();
-                        index.write(components.get(i) + "\t" + names.get(i) + "\t" + (mono ? "mono" : "auto")
+                        index.write(components.get(i) + "\t" + name + "\t" + (monoLayer != null ? "mono" : "auto")
                             + "\t" + label + "\n");
-                        count++;
-                        if (!mono) auto++;
+                        if (monoLayer != null) mono++; else auto++;
                     } catch (Exception e) {
                         failed++;
-                        new File(dir, names.get(i) + ".png").delete();
+                        new File(dir, name + ".png").delete();
+                        new File(dir, name + ".tone.png").delete();
                         Log.w("DotHome", "icon export failed for " + components.get(i), e);
                     }
                 }
             } finally {
                 index.close();
             }
-            return "Exported " + count + " icons (" + auto + " auto, " + failed + " failed)";
+            return MonoIcon.exportStatus(mono, auto, failed, fallback);
         } catch (Exception e) {
             return "Export failed: " + e;
         }
     }
 
-    private static int[] render(Drawable[] layers, boolean opaqueBlack) {
-        return render(layers, opaqueBlack, true);
+    /**
+     * The app's own icon, read from its resources at xxxhdpi. ResolveInfo.loadIcon goes through the
+     * launcher icon theme (Theme Park), which would hand back our own icon pack. Null on any failure;
+     * the caller then falls back to loadIcon.
+     */
+    private static Drawable unthemedIcon(PackageManager pm, ResolveInfo ri) {
+        try {
+            int res = ri.getIconResource();
+            if (res == 0) return null;
+            Resources r = pm.getResourcesForApplication(ri.activityInfo.applicationInfo);
+            return r.getDrawableForDensity(res, DisplayMetrics.DENSITY_XXXHIGH, null);
+        } catch (Exception e) {
+            Log.w("DotHome", "unthemed icon unavailable for " + ri.activityInfo.packageName, e);
+            return null;
+        }
+    }
+
+    private static void writePng(File f, int[] px) throws IOException {
+        Bitmap bmp = Bitmap.createBitmap(px, SIZE, SIZE, Bitmap.Config.ARGB_8888);
+        try {
+            FileOutputStream out = new FileOutputStream(f);
+            try {
+                bmp.compress(Bitmap.CompressFormat.PNG, 100, out);
+            } finally {
+                out.close();
+            }
+        } finally {
+            bmp.recycle();
+        }
     }
 
     /**
-     * Renders to 432x432. Raw adaptive layers live on a 108dp canvas with a 72dp safe zone, so they
-     * are drawn oversize (~1.25x) to fill the tile; legacy icons are drawn 1:1. Opaque mode puts a
-     * black backing under the layers; the monochrome layer keeps its alpha.
+     * Renders to 432x432 on transparent; returns unpremultiplied ARGB. Raw adaptive layers live on a
+     * 108dp canvas with a 72dp safe zone, so they are drawn oversize (~1.25x) to fill the tile; legacy
+     * icons are drawn 1:1. The shape and the tone of one icon always use the same oversize flag.
      */
-    private static int[] render(Drawable[] layers, boolean opaqueBlack, boolean oversize) {
+    private static int[] render(Drawable[] layers, boolean oversize) {
         Bitmap bmp = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
-        if (opaqueBlack) c.drawColor(Color.BLACK);
         int pad = oversize ? -SIZE / 8 : 0;
         for (Drawable d : layers) {
             if (d == null) continue;

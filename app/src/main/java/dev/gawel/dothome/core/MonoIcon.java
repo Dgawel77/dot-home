@@ -2,7 +2,7 @@ package dev.gawel.dothome.core;
 
 import java.util.Arrays;
 
-/** Turns launcher icons into white-on-transparent glyphs. Pure Java; pixels are ARGB ints. */
+/** Turns launcher icons into white-on-transparent glyphs and grey tone layers. Pure Java; pixels are ARGB ints. */
 public final class MonoIcon {
     private MonoIcon() {}
 
@@ -49,6 +49,49 @@ public final class MonoIcon {
             out[i] = (na << 24) | (fg & 0x00FFFFFF);
         }
         return out;
+    }
+
+    /** Composites unpremultiplied ARGB over opaque black (what drawing onto a black canvas gives). */
+    public static int[] overBlack(int[] argb) {
+        int[] out = new int[argb.length];
+        for (int i = 0; i < argb.length; i++) {
+            int p = argb[i], a = p >>> 24;
+            int r = (((p >> 16) & 0xFF) * a + 127) / 255;
+            int g = (((p >> 8) & 0xFF) * a + 127) / 255;
+            int b = ((p & 0xFF) * a + 127) / 255;
+            out[i] = 0xFF000000 | (r << 16) | (g << 8) | b;
+        }
+        return out;
+    }
+
+    /**
+     * Tone layer: each pixel becomes its Rec. 709 luma (0.2126 R + 0.7152 G + 0.0722 B on the sRGB
+     * values) as grey, keeping alpha as the colour icon's coverage. Uncovered pixels are transparent.
+     */
+    public static int[] tone(int[] argb) {
+        int[] out = new int[argb.length];
+        for (int i = 0; i < argb.length; i++) {
+            int p = argb[i], a = p >>> 24;
+            if (a == 0) continue;
+            int y = (2126 * ((p >> 16) & 0xFF) + 7152 * ((p >> 8) & 0xFF) + 722 * (p & 0xFF) + 5000) / 10000;
+            out[i] = (a << 24) | (y << 16) | (y << 8) | y;
+        }
+        return out;
+    }
+
+    /** Shown when an export finds no monochrome layers at all: a launcher icon theme is likely in the way. */
+    public static final String THEME_WARNING =
+        "icon theme may be overriding icons \u2014 set Theme Park icons to Default and re-run";
+
+    /** Export summary: mono, auto and failed counts, loadIcon fallbacks, and the icon-theme warning. */
+    public static String exportStatus(int mono, int auto, int failed, int fallback) {
+        int total = mono + auto;
+        StringBuilder s = new StringBuilder();
+        s.append("Exported ").append(total).append(" icons (").append(mono).append(" mono, ")
+            .append(auto).append(" auto, ").append(failed).append(" failed)");
+        if (fallback > 0) s.append("\n").append(fallback).append(" via loadIcon (themed) fallback");
+        if (mono == 0 && total > 20) s.append("\n\n").append(THEME_WARNING);
+        return s.toString();
     }
 
     static int lum(int p) {

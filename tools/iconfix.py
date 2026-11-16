@@ -1,25 +1,33 @@
 #!/usr/bin/env python3
 """Icon pack post-processor. Run on the NAS: tools/nas tools/iconfix.py
 
-Reads the phone export (build/icons/: <drawable>.png + index.tsv) and writes build/icons-final/
-with the same names. The export is never modified, so re-runs are idempotent.
+Reads the phone export (build/icons/: <drawable>.png shape masks, optional aligned
+<drawable>.tone.png tone layers, index.tsv) and writes build/icons-final/<drawable>.png. The export is
+never modified, so re-runs are idempotent.
+
+Every final icon is a greyscale stipple of a shape: FG dots on a hex grid (pitch P = 432/30), placed
+where the shape covers half of a +-P/4 box, sized by tone. The dot colour is constant; tone is dot size.
 
 Per index.tsv row (component, drawable, mono|auto[, label]):
-  * iconpack/overrides/<drawable>.png        -> kept as is (hand-made wins)
-  * kind mono and fill ratio <= 0.55         -> export PNG copied unchanged
-  * kind auto, or fill ratio > 0.55          -> replaced, first of:
-      1. Simple Icons glyph (explicit PACKAGE_TO_SLUG, then exact normalised label == title),
-         rasterised at 432 px with 14% padding in FG; rejected if it fills > 55%
-      2. dot-matrix initial of the label, soft dots in FG
+  * iconpack/overrides/<drawable>.png             -> kept as is (hand-made wins)
+  * kind mono and 0.01 <= fill ratio <= 0.55     -> stipple of the exported shape, tone per dot from
+                                                     <drawable>.tone.png
+  * kind auto, or fill ratio outside that range   -> shape replaced, first of:
+      1. Simple Icons glyph (explicit PACKAGE_TO_SLUG, then, auto rows only, exact normalised
+         label == title), rasterised at 432 px with 14% padding; rejected if it fills > 55% (or
+         < 1%) of the padded box
+      2. Inter Bold capital initial of the label
+    stippled at the colour icon's mean luminance (0.7 without a tone layer)
 Also writes contact.png (every final icon on BG with label and source marker).
 
-First run creates tools/.venv with pinned wheels (skia-python renders the SVGs; the NAS has no
-system cairo). Simple Icons (CC0) comes from the pinned npm tarball, cached in tools/cache/.
+First run creates tools/.venv with pinned wheels (skia-python draws the anti-aliased dots and renders
+the SVGs; the NAS has no system cairo). Simple Icons (CC0) comes from the pinned npm tarball, cached
+in tools/cache/.
 """
 import base64
 import hashlib
-import io
 import json
+import math
 import os
 import re
 import shutil
@@ -29,11 +37,16 @@ import tarfile
 import unicodedata
 import urllib.request
 
+try:  # the venv provides numpy; under the system python main() bootstraps the venv first
+    import numpy as np
+except ImportError:  # pragma: no cover
+    np = None
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 VENV = os.path.join(HERE, ".venv")
 CACHE = os.path.join(HERE, "cache")
-FONT = os.path.join(ROOT, "app", "src", "main", "assets", "fonts", "Inter-Regular.ttf")
+FONT = os.path.join(ROOT, "app", "src", "main", "assets", "fonts", "Inter-Regular.ttf")  # variable: wght 100-900
 
 REQUIREMENTS = os.path.join(HERE, "iconfix-requirements.txt")  # full freeze incl. transitive deps
 SIMPLE_ICONS_VERSION = "16.36.0"  # published 2026-10-25
@@ -48,9 +61,18 @@ FG2 = (0x8E, 0x8E, 0x8E)
 SIZE = 432
 PAD = 0.14
 MAX_FILL = 0.55
-PITCH = 20  # dot pitch at 432 px; radius = PITCH * 1.35 / 4.5 (shared scale ratio)
-RADIUS = PITCH * 1.35 / 4.5
+MIN_FILL = 0.01
 LETTER_H = 0.60
+
+# Stipple (Task 6): hex grid, dot where the shape covers >= half of a +-P/4 box; tone -> dot radius.
+P = SIZE / 30.0                  # 14.4 px pitch: nearest-neighbour distance on the hex grid
+BOX = P / 4                      # coverage / tone sampling box half-width
+COVER = 0.5
+T_BASE, T_GAIN = 0.38, 0.57      # t = (T_BASE + T_GAIN * L) * g
+G_END = 0.88                     # light gradient g: 1.0 top-left -> G_END bottom-right
+R_FLOOR, R_GAIN = 0.28, 0.47     # r = max(R_FLOOR * P, R_GAIN * P * sqrt(t))
+L_DEFAULT = 0.7                  # luminance without a tone layer
+SS = 4                           # dots are drawn at SS x and area-averaged down (see render_dots)
 
 # Checked against simple-icons 16.36.0 (test_iconfix asserts every slug resolves). Packages from
 # this phone's auto list whose brand is in Simple Icons; the rest get a dot initial.
@@ -111,15 +133,17 @@ def resolve_slug(pkg, label, table, titles, kind="auto"):
 
 
 def fill_ratio(alphas):
-    """Share of pixels with alpha >= 128 (same definition as MonoIcon.fillRatio)."""
-    alphas = list(alphas)
-    if not alphas:
-        return 0.0
-    return sum(1 for a in alphas if a >= 128) / len(alphas)
+    """Share of pixels with alpha >= 128 (same definition as MonoIcon.fillRatio); 0..255 values."""
+    a = np.asarray(alphas)
+    return float(np.count_nonzero(a >= 128)) / a.size if a.size else 0.0
 
 
 def too_filled(ratio):
     return ratio > MAX_FILL
+
+
+def too_empty(ratio):
+    return ratio < MIN_FILL
 
 
 def parse_index(path):
@@ -218,17 +242,24 @@ def load_titles(pkg_dir):
     return out
 
 
-def check_table(pkg_dir):
-    for pkg, slug in PACKAGE_TO_SLUG.items():
+def check_table(pkg_dir, table=None):
+    """Every slug has an icon file in the pinned release (titles can collide; file names cannot)."""
+    for pkg, slug in (PACKAGE_TO_SLUG if table is None else table).items():
         if not os.path.isfile(os.path.join(pkg_dir, "icons", slug + ".svg")):
             raise AssertionError("PACKAGE_TO_SLUG: %s -> %s not in simple-icons %s"
                                  % (pkg, slug, SIMPLE_ICONS_VERSION))
 
 
-# ---------------------------------------------------------------- rasterising
+# ---------------------------------------------------------------- shapes
+
+def _padded_box():
+    """(offset, size) of the 14% padded box that brand glyphs are drawn into."""
+    inner = round(SIZE * (1 - 2 * PAD))
+    return (SIZE - inner) // 2, inner
+
 
 def brand_icon(svg_bytes):
-    """Simple Icons SVG -> 432 px RGBA, FG on transparent, 14% padding."""
+    """Simple Icons SVG -> 432 px RGBA, FG on transparent, inside the padded box."""
     import skia
     from PIL import Image
     svg = re.sub(rb"<svg ", b'<svg fill="#000" ', svg_bytes, count=1)
@@ -236,15 +267,27 @@ def brand_icon(svg_bytes):
     dom = skia.SVGDOM.MakeFromStream(stream)
     if dom is None:
         return None
-    inner = round(SIZE * (1 - 2 * PAD))
-    off = (SIZE - inner) // 2
+    off, inner = _padded_box()
     surface = skia.Surface(SIZE, SIZE)
     canvas = surface.getCanvas()
     canvas.translate(off, off)
     dom.setContainerSize(skia.Size(inner, inner))
     dom.render(canvas)
     arr = surface.makeImageSnapshot().toarray()
-    return glyph_from_alpha(Image.fromarray(arr[:, :, 3], "L"))
+    return glyph_from_alpha(Image.fromarray(np.ascontiguousarray(arr[:, :, 3])))
+
+
+def brand_fill(img):
+    """Fill ratio of a brand glyph inside its padded box (the tile-wide ratio can never exceed ~0.52)."""
+    off, inner = _padded_box()
+    return fill_ratio(np.asarray(img.getchannel("A"))[off:off + inner, off:off + inner])
+
+
+def brand_ok(img):
+    if img is None:
+        return False
+    f = brand_fill(img)
+    return not too_filled(f) and not too_empty(f)
 
 
 def glyph_from_alpha(alpha):
@@ -254,50 +297,196 @@ def glyph_from_alpha(alpha):
     return img
 
 
-def dot_initial(letter):
-    """Dot-matrix initial: soft dots on a PITCH grid, letter ~60% of the tile height."""
-    import numpy as np
+def letter_mask(letter):
+    """Inter Bold capital of the label's first letter (or digit; '?' if none): LETTER_H of the tile
+    tall, centred. uint8 alpha, SIZE x SIZE."""
     from PIL import Image, ImageDraw, ImageFont
     ch = unicodedata.normalize("NFKD", letter or "?")
     ch = next((c for c in ch if c.isascii() and c.isalnum()), "?").upper()
+
+    def bold(size):
+        font = ImageFont.truetype(FONT, size)
+        font.set_variation_by_name("Bold")
+        return font
+
     target = SIZE * LETTER_H
     size = 300
     for _ in range(2):
-        font = ImageFont.truetype(FONT, size)
-        l, t, r, b = font.getbbox(ch)
+        l, t, r, b = bold(size).getbbox(ch)
         size = max(8, round(size * target / max(1, b - t)))
-    font = ImageFont.truetype(FONT, size)
+    font = bold(size)
     l, t, r, b = font.getbbox(ch)
     mask = Image.new("L", (SIZE, SIZE), 0)
-    ImageDraw.Draw(mask).text((SIZE / 2 - (l + r) / 2, SIZE / 2 - (t + b) / 2), ch, fill=255, font=font, stroke_width=7, stroke_fill=255)
-    m = np.asarray(mask, dtype=np.float32) / 255.0
-    n = SIZE // PITCH
-    off = (SIZE - n * PITCH) // 2
-    cells = m[off:off + n * PITCH, off:off + n * PITCH].reshape(n, PITCH, n, PITCH).mean(axis=(1, 3))
-    # one soft dot: solid core, ~1.5 px feathered rim
-    k = int(RADIUS) + 3
-    yy, xx = np.mgrid[-k:k + 1, -k:k + 1].astype(np.float32)
-    d = np.sqrt(xx * xx + yy * yy)
-    stamp = np.clip((RADIUS + 0.75 - d) / 1.5, 0.0, 1.0)
-    alpha = np.zeros((SIZE, SIZE), dtype=np.float32)
-    for cy in range(n):
-        for cx in range(n):
-            if cells[cy, cx] > 0.45:
-                px = off + cx * PITCH + PITCH // 2
-                py = off + cy * PITCH + PITCH // 2
-                alpha[py - k:py + k + 1, px - k:px + k + 1] = np.maximum(
-                    alpha[py - k:py + k + 1, px - k:px + k + 1], stamp)
-    return glyph_from_alpha(Image.fromarray((alpha * 255).round().astype("uint8"), "L"))
+    ImageDraw.Draw(mask).text((SIZE / 2 - (l + r) / 2, SIZE / 2 - (t + b) / 2), ch, fill=255, font=font)
+    return np.array(mask, np.uint8)
+
+
+def _read_rgba(path):
+    """RGBA uint8 array at SIZE; other sizes (the old 192 px export) are resampled smoothly."""
+    from PIL import Image
+    img = Image.open(path).convert("RGBA")
+    if img.size != (SIZE, SIZE):
+        img = img.resize((SIZE, SIZE), Image.LANCZOS)  # premultiplied by Pillow; never nearest
+    return np.asarray(img)
+
+
+def load_shape(path):
+    """Shape mask of an exported <name>.png: its alpha, uint8 SIZE x SIZE."""
+    return np.array(_read_rgba(path)[:, :, 3])
+
+
+def load_tone(path):
+    """<name>.tone.png as a Tone (Rec. 709 luminance of its RGB, coverage = alpha), or None."""
+    if not os.path.isfile(path):
+        return None
+    a = _read_rgba(path).astype(np.float64) / 255.0
+    return Tone(0.2126 * a[:, :, 0] + 0.7152 * a[:, :, 1] + 0.0722 * a[:, :, 2], a[:, :, 3])
+
+
+# ---------------------------------------------------------------- stipple
+
+def hex_grid(size=SIZE, pitch=P):
+    """Dot centres [(x, y)]: rows pitch*sqrt(3)/2 apart and centred vertically; even rows at P/2 + i P,
+    odd rows shifted by P/2, so all six neighbours are P away. Every centre is >= P/2 from the edge."""
+    row = pitch * math.sqrt(3) / 2
+    rows = int((size - pitch) / row + 1e-9) + 1
+    y0 = (size - (rows - 1) * row) / 2.0
+    pts = []
+    for j in range(rows):
+        x0 = pitch / 2.0 * (2 if j % 2 else 1)
+        n = int((size - pitch / 2.0 - x0) / pitch + 1e-9) + 1
+        pts.extend((x0 + i * pitch, y0 + j * row) for i in range(n))
+    return pts
+
+
+def gradient(cx, cy):
+    """Light gradient g: 1.0 at the top-left corner, G_END at the bottom-right, linear in x + y."""
+    return 1.0 - (1.0 - G_END) * (cx + cy) / (2.0 * SIZE)
+
+
+def tone_t(lum, cx, cy):
+    return (T_BASE + T_GAIN * lum) * gradient(cx, cy)
+
+
+def dot_radius(t):
+    return np.maximum(R_FLOOR * P, R_GAIN * P * np.sqrt(np.maximum(t, 0.0)))
+
+
+def _integral(a):
+    ii = np.zeros((a.shape[0] + 1, a.shape[1] + 1), np.float64)
+    ii[1:, 1:] = np.asarray(a, np.float64).cumsum(0).cumsum(1)
+    return ii
+
+
+def _box_sums(ii, xs, ys):
+    """Sum over the pixels whose centres lie in the +-BOX square around each (x, y), and its pixel count."""
+    h, w = ii.shape[0] - 1, ii.shape[1] - 1
+    x0 = np.clip(np.ceil(xs - BOX - 0.5), 0, w).astype(int)
+    x1 = np.clip(np.floor(xs + BOX - 0.5) + 1, 0, w).astype(int)
+    y0 = np.clip(np.ceil(ys - BOX - 0.5), 0, h).astype(int)
+    y1 = np.clip(np.floor(ys + BOX - 0.5) + 1, 0, h).astype(int)
+    return ii[y1, x1] - ii[y0, x1] - ii[y1, x0] + ii[y0, x0], np.maximum(1, (x1 - x0) * (y1 - y0))
+
+
+class Tone(object):
+    """The colour icon: luminance (0..1) and coverage (0..1) at SIZE, aligned pixel for pixel with the shape."""
+
+    def __init__(self, lum, cov):
+        lum, cov = np.asarray(lum, np.float64), np.asarray(cov, np.float64)
+        self._lum_cov = _integral(lum * cov)
+        self._cov = _integral(cov)
+
+    def mean(self):
+        """Coverage-weighted mean luminance; None when nothing is covered."""
+        a = self._cov[-1, -1]
+        return float(self._lum_cov[-1, -1] / a) if a > 1e-9 else None
+
+    def at(self, xs, ys, default):
+        """Coverage-weighted luminance in the +-P/4 box of each centre; `default` where it is uncovered."""
+        la, n = _box_sums(self._lum_cov, xs, ys)
+        a, _ = _box_sums(self._cov, xs, ys)
+        ok = a > 0.01 * n
+        return np.where(ok, la / np.where(ok, a, 1.0), default)
+
+
+def place_dots(shape, t_of):
+    """[(cx, cy, r)]: a dot on every hex grid point whose +-P/4 box has mean shape alpha >= 0.5; its
+    radius comes from the tone t_of(xs, ys) (scalar or one per centre)."""
+    pts = np.array(hex_grid(), np.float64)
+    xs, ys = pts[:, 0], pts[:, 1]
+    cover, n = _box_sums(_integral(np.asarray(shape, np.float64) / 255.0), xs, ys)
+    on = cover / n >= COVER
+    xs, ys = xs[on], ys[on]
+    if not len(xs):
+        return []
+    r = dot_radius(np.broadcast_to(np.asarray(t_of(xs, ys), np.float64), xs.shape))
+    return [(float(x), float(y), float(q)) for x, y, q in zip(xs, ys, r)]
+
+
+def stipple_dots(shape, lum=None):
+    """Dots for a shape. lum: a Tone (luminance sampled per dot), one luminance, or None (L_DEFAULT)."""
+    if isinstance(lum, Tone):
+        mean = lum.mean()
+        fallback = L_DEFAULT if mean is None else mean
+        level = lambda xs, ys: lum.at(xs, ys, fallback)  # noqa: E731
+    else:
+        const = L_DEFAULT if lum is None else float(lum)
+        level = lambda xs, ys: const  # noqa: E731
+    return place_dots(shape, lambda xs, ys: tone_t(level(xs, ys), xs, ys))
+
+
+def render_dots(dots, size=SIZE):
+    """Anti-aliased circles drawn by skia, output at `size`: RGBA with rgb = FG everywhere and alpha =
+    dot coverage. Skia's raster AA alone is off by up to ~20% coverage on edge pixels (polygonised
+    circles), so it draws at SS x and each output pixel is the exact mean of its SS x SS block (an area
+    average: no nearest-neighbour step, edges within ~6% of exact coverage)."""
+    import skia
+    from PIL import Image
+    surface = skia.Surface(size * SS, size * SS)
+    canvas = surface.getCanvas()
+    canvas.clear(skia.ColorTRANSPARENT)
+    canvas.scale(SS, SS)
+    paint = skia.Paint(AntiAlias=True, Color=skia.ColorWHITE)
+    for cx, cy, r in dots:
+        canvas.drawCircle(cx, cy, r, paint)
+    a = surface.makeImageSnapshot().toarray()[:, :, 3].reshape(size, SS, size, SS).mean(axis=(1, 3))
+    return glyph_from_alpha(Image.fromarray(np.round(a).astype(np.uint8)))
+
+
+def stipple(shape, lum=None):
+    return render_dots(stipple_dots(shape, lum))
 
 
 # ---------------------------------------------------------------- pipeline
 
-def alphas_of(img):
-    return list(img.getchannel("A").tobytes())
+def final_icon(in_dir, name, pkg, kind, label, shown, pkg_dir, titles, log):
+    """Stippled final icon and its source (mono | brand | initial) for one index row."""
+    shape = load_shape(os.path.join(in_dir, name + ".png"))
+    tone = load_tone(os.path.join(in_dir, name + ".tone.png"))
+    ratio = fill_ratio(shape)
+    if kind == "mono" and not too_filled(ratio) and not too_empty(ratio):
+        return stipple(shape, tone), "mono"
+    why = "auto" if kind != "mono" else "fill %.2f" % ratio
+    mean = tone.mean() if tone is not None else None
+    level = L_DEFAULT if mean is None else mean
+    out = source = None
+    slug = resolve_slug(pkg, label, PACKAGE_TO_SLUG, titles, kind)
+    if slug:
+        svg = os.path.join(pkg_dir, "icons", slug + ".svg")
+        if os.path.isfile(svg):
+            with open(svg, "rb") as f:
+                cand = brand_icon(f.read())
+            if brand_ok(cand):
+                out, source = stipple(np.asarray(cand.getchannel("A")), level), "brand"
+            else:
+                log("  %s: brand %s rejected (blob/empty)" % (pkg, slug))
+    if out is None:
+        out, source = stipple(letter_mask(shown[:1]), level), "initial"
+    log("%-45s %-10s -> %s" % (pkg, why, source))
+    return out, source
 
 
 def fix(in_dir, out_dir, overrides_dir=None, log=print):
-    from PIL import Image
     pkg_dir = ensure_simple_icons()
     check_table(pkg_dir)
     titles = load_titles(pkg_dir)
@@ -314,36 +503,13 @@ def fix(in_dir, out_dir, overrides_dir=None, log=print):
         pkg = comp.split("/")[0]
         shown = label or label_from_package(pkg)
         dst = os.path.join(out_dir, name + ".png")
-        src = os.path.join(in_dir, name + ".png")
         ov = os.path.join(overrides_dir, name + ".png") if overrides_dir else None
-        source = None
         if ov and os.path.isfile(ov):
             shutil.copyfile(ov, dst)
             source = "override"
         else:
-            img = Image.open(src).convert("RGBA")
-            ratio = fill_ratio(alphas_of(img))
-            if kind == "mono" and not too_filled(ratio):
-                shutil.copyfile(src, dst)
-                source = "mono"
-            else:
-                why = "auto" if kind != "mono" else "fill %.2f" % ratio
-                out = None
-                slug = resolve_slug(pkg, label, PACKAGE_TO_SLUG, titles, kind)
-                if slug:
-                    svg = os.path.join(pkg_dir, "icons", slug + ".svg")
-                    if os.path.isfile(svg):
-                        with open(svg, "rb") as f:
-                            cand = brand_icon(f.read())
-                        if cand is not None and not too_filled(fill_ratio(alphas_of(cand))) \
-                                and max(alphas_of(cand)) > 0:
-                            out, source = cand, "brand"
-                        else:
-                            log("  %s: brand %s rejected (blob/empty)" % (pkg, slug))
-                if out is None:
-                    out, source = dot_initial(shown[:1]), "initial"
-                out.save(dst)
-                log("%-45s %-10s -> %s" % (pkg, why, source))
+            out, source = final_icon(in_dir, name, pkg, kind, label, shown, pkg_dir, titles, log)
+            out.save(dst)
         sheet.append((dst, shown, source))
     contact_sheet(sheet, os.path.join(out_dir, "contact.png"))
     counts = {}
@@ -377,21 +543,40 @@ def contact_sheet(items, path, width=2400, cols=16):
 
 # ---------------------------------------------------------------- bootstrap + main
 
-def _bootstrap():
-    """Create tools/.venv with the pinned wheels (first run) and re-run inside it."""
+def _in_venv():
+    return os.path.realpath(sys.prefix) == os.path.realpath(VENV)
+
+
+def _bootstrap(err=None):
+    """Create tools/.venv with the pinned wheels (first run) and re-run inside it, once.
+
+    Inside the venv a failed import means the venv itself is broken: exit rather than re-exec forever.
+    A failed venv/pip step removes the half-built venv so the next run starts clean."""
+    if _in_venv():
+        sys.exit("iconfix: %s inside %s; the venv is incomplete: delete tools/.venv and re-run"
+                 % (err or "imports failed", VENV))
     py = os.path.join(VENV, "bin", "python")
     if not os.path.isfile(py):
-        subprocess.check_call([sys.executable, "-m", "venv", VENV])
-        subprocess.check_call([py, "-m", "pip", "-q", "install", "-r", REQUIREMENTS])
+        ok = False
+        try:
+            subprocess.check_call([sys.executable, "-m", "venv", VENV])
+            subprocess.check_call([py, "-m", "pip", "-q", "install", "-r", REQUIREMENTS])
+            ok = True
+        except (subprocess.CalledProcessError, OSError) as e:
+            sys.exit("iconfix: building tools/.venv failed (%s); removed it, fix the cause and re-run" % e)
+        finally:
+            if not ok:
+                shutil.rmtree(VENV, ignore_errors=True)
     os.execv(py, [py, os.path.abspath(__file__)] + sys.argv[1:])
 
 
 def main(argv):
     try:
+        import numpy  # noqa: F401
         import PIL  # noqa: F401
         import skia  # noqa: F401
-    except ImportError:
-        _bootstrap()
+    except ImportError as e:
+        _bootstrap(e)
     in_dir = argv[1] if len(argv) > 1 else os.path.join(ROOT, "build", "icons")
     out_dir = argv[2] if len(argv) > 2 else os.path.join(ROOT, "build", "icons-final")
     ov = os.path.join(ROOT, "iconpack", "overrides")

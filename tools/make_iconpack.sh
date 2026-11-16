@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Builds iconpack.apk from exported icons. Run on the NAS: tools/nas tools/make_iconpack.sh
-# Input: $ICONS_DIR (default build/icons) is run through tools/iconfix.py into build/icons-final/,
-#        which is what gets packaged. It holds <drawable>.png files and index.tsv
-#        (component<TAB>drawable<TAB>mono|auto). Hand-made iconpack/overrides/<drawable>.png win.
+# Input: $ICONS_DIR (default build/icons), the phone export: <drawable>.png shape masks,
+#        <drawable>.tone.png tone layers and index.tsv (component<TAB>drawable<TAB>mono|auto<TAB>label).
+#        tools/iconfix.py turns it into stippled build/icons-final/<drawable>.png, and only those final
+#        PNGs (one per index.tsv row) are packaged; tone layers never are.
+#        Hand-made iconpack/overrides/<drawable>.png win.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 TOOLS=${TOOLS:-$HOME/androidtools}
@@ -16,7 +18,7 @@ python3 tools/iconfix.py "$SRC" "$IN"
 RES=iconpack/res
 rm -rf $RES && mkdir -p $RES/drawable-nodpi $RES/xml
 # Only PNGs listed in index.tsv are packaged; stale files from earlier exports are ignored.
-while IFS=$'\t' read -r comp name kind; do
+while IFS=$'\t' read -r comp name _kind _label; do
   [ -n "$name" ] || continue
   [ -f "$IN/$name.png" ] || { echo "missing $IN/$name.png for $comp" >&2; exit 1; }
   cp "$IN/$name.png" $RES/drawable-nodpi/

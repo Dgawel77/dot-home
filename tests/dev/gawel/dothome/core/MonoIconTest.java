@@ -60,4 +60,41 @@ public final class MonoIconTest {
         T.eq(0x00DDDDDD, out[3], "alpha 90 is 0");
         T.eq(0xFFDDDDDD, out[4], "alpha 165 is solid");
     }
+
+    public static void testToneIsRec709LumaKeepingCoverage() {
+        int[] out = MonoIcon.tone(new int[] {
+            0xFFFF0000, 0xFF00FF00, 0xFF0000FF, 0xFFFFFFFF, 0x80FFFFFF, 0x00123456, 0x40808080});
+        T.eq(0xFF363636, out[0], "red -> 0.2126 * 255 = 54");
+        T.eq(0xFFB6B6B6, out[1], "green -> 0.7152 * 255 = 182");
+        T.eq(0xFF121212, out[2], "blue -> 0.0722 * 255 = 18");
+        T.eq(0xFFFFFFFF, out[3], "white stays white");
+        T.eq(0x80FFFFFF, out[4], "alpha (coverage) kept");
+        T.eq(0, out[5], "uncovered pixel is transparent");
+        T.eq(0x40808080, out[6], "grey keeps its level and coverage");
+    }
+
+    public static void testOverBlackMatchesBlackBacking() {
+        int[] out = MonoIcon.overBlack(new int[] {0xFF123456, 0x80FFFFFF, 0x00FFFFFF, 0x40FF8000});
+        T.eq(0xFF123456, out[0], "opaque unchanged");
+        T.eq(0xFF808080, out[1], "half white over black is mid grey");
+        T.eq(0xFF000000, out[2], "transparent is black");
+        T.eq(0xFF402000, out[3], "quarter orange");
+    }
+
+    public static void testExportStatusCounts() {
+        String s = MonoIcon.exportStatus(122, 80, 1, 3);
+        T.check(s.startsWith("Exported 202 icons (122 mono, 80 auto, 1 failed)"), s);
+        T.check(s.contains("3 via loadIcon"), s);
+        T.check(!s.contains(MonoIcon.THEME_WARNING), "no warning when mono icons exist: " + s);
+        T.check(!MonoIcon.exportStatus(5, 80, 0, 0).contains("via loadIcon"), "no fallback line when 0");
+    }
+
+    public static void testExportStatusWarnsWhenAThemeHidesMonoLayers() {
+        T.eq("icon theme may be overriding icons — set Theme Park icons to Default and re-run",
+            MonoIcon.THEME_WARNING, "exact warning text");
+        T.check(MonoIcon.exportStatus(0, 202, 0, 0).contains(MonoIcon.THEME_WARNING), "all auto warns");
+        T.check(MonoIcon.exportStatus(0, 21, 0, 0).contains(MonoIcon.THEME_WARNING), "21 icons warns");
+        T.check(!MonoIcon.exportStatus(0, 20, 5, 0).contains(MonoIcon.THEME_WARNING), "20 or fewer: no warning");
+        T.check(!MonoIcon.exportStatus(1, 201, 0, 0).contains(MonoIcon.THEME_WARNING), "one mono: no warning");
+    }
 }
