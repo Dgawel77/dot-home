@@ -18,9 +18,6 @@ import dev.gawel.dothome.core.Weather;
 final class WidgetUpdater {
     private static final String TAG = "DotHome";
     private static final String CLOCK_PKG = "com.sec.android.app.clockpackage";
-    /** What a tap on the weather half opens. The live radar screen. */
-    private static final Class<?> WEATHER_TARGET = RadarActivity.class;
-
     private static final int DEFAULT_W_DP = 250, DEFAULT_H_DP = 110;
     static final int MAX_SIDE_PX = 1200; // keeps each RemoteViews bitmap far below the binder/memory limit
     private static final float CLOCK_WEIGHT = 1.4f, WEATHER_WEIGHT = 1f;
@@ -74,8 +71,7 @@ final class WidgetUpdater {
         rv.setImageViewBitmap(R.id.clock_img, clock);
         rv.setImageViewBitmap(R.id.weather_img, weather);
         rv.setOnClickPendingIntent(R.id.clock_img, PendingIntent.getActivity(ctx, 1, clockIntent(ctx), flags()));
-        rv.setOnClickPendingIntent(R.id.weather_img,
-            PendingIntent.getActivity(ctx, 2, new Intent(ctx, WEATHER_TARGET).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), flags()));
+        rv.setOnClickPendingIntent(R.id.weather_img, radarTap(ctx));
         return rv;
     }
 
@@ -134,7 +130,7 @@ final class WidgetUpdater {
 
     /** What a tap on the radar widget opens: RadarActivity (singleTask, so taps never stack copies). */
     static PendingIntent radarTap(Context ctx) {
-        return PendingIntent.getActivity(ctx, 2, new Intent(ctx, WEATHER_TARGET).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), flags());
+        return PendingIntent.getActivity(ctx, 2, new Intent(ctx, RadarActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), flags());
     }
 
     private static int flags() {

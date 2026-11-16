@@ -71,7 +71,7 @@ public class WeatherJob extends JobService {
                 if (!w.stopped) WidgetUpdater.updateAll(app);
                 if (!w.stopped) {
                     try {
-                        RadarWidget.updateAll(app); // network on this worker thread; a radar failure never fails the job
+                        RadarWidget.updateAll(app, () -> w.stopped); // network on this worker thread; a radar failure never fails the job
                     } catch (Throwable e) {
                         Log.w("DotHome", "radar widget error: " + e);
                     }

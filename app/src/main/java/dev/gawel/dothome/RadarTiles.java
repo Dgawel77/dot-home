@@ -108,8 +108,8 @@ final class RadarTiles {
     }
 
     /** Blocking: only the newest frame (minutesAgo 0), for the widget: about one frame's tiles. */
-    static List<Frame> loadLatest(GeoProjection p, int zoom) {
-        return load(p, zoom, 1, () -> false);
+    static List<Frame> loadLatest(GeoProjection p, int zoom, BooleanSupplier cancelled) {
+        return load(p, zoom, 1, cancelled);
     }
 
     /** The newest {@code frameCount} frames, 5 minutes apart, oldest first. */

@@ -111,9 +111,9 @@ final class RadarPainter {
             }
             bb[k] = new float[] {minx, miny, maxx, maxy};
         }
-        // land speckle first, so lake points are excluded from it. About one speckle per 4 pitch cells.
+        // land speckle first, so lake points are excluded from it. About one per 20 pitch cells, the old density (1400 per screen).
         Random rnd = new Random(region ? 9 : 5);
-        int speckles = (int) Math.min(6000, w * (double) h / (4.0 * pitch * pitch));
+        int speckles = (int) Math.min(6000, w * (double) h / (20.0 * pitch * pitch));
         for (int i = 0; i < speckles; i++) {
             float x = rnd.nextFloat() * w, y = rnd.nextFloat() * h, a = 0.05f + rnd.nextFloat() * 0.1f;
             if (!inLake(px, py, bb, x, y)) dot.draw(c, x, y, 0.35f * dotR, a);

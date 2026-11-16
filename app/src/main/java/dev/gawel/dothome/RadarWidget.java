@@ -17,6 +17,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.BooleanSupplier;
 
 import dev.gawel.dothome.core.DotStyle;
 import dev.gawel.dothome.core.GeoProjection;
@@ -30,6 +31,7 @@ import dev.gawel.dothome.core.Place;
 public class RadarWidget extends AppWidgetProvider {
     private static final String TAG = "DotHome";
     private static final int DEFAULT_W_DP = 250, DEFAULT_H_DP = 190;
+    private static final float CORNER_DP = 18f; // same value as res/drawable/radar_placeholder.xml
     private static final int ZOOM = 9; // as the full-screen area view
     private static final String NO_DATA = "RADAR · no data";
 
@@ -50,7 +52,7 @@ public class RadarWidget extends AppWidgetProvider {
     }
 
     /** Blocking (network). Call from a worker thread. Never throws; clears the tile cache when done. */
-    static void updateAll(Context ctx) {
+    static void updateAll(Context ctx, BooleanSupplier cancelled) {
         try {
             AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
             int[] ids = mgr.getAppWidgetIds(new ComponentName(ctx, RadarWidget.class));
@@ -59,7 +61,9 @@ public class RadarWidget extends AppWidgetProvider {
                 Place place = LocationSource.cached(ctx);
                 for (int id : ids) {
                     try {
-                        mgr.updateAppWidget(id, views(ctx, mgr, id, place));
+                        RemoteViews rv = views(ctx, mgr, id, place, cancelled);
+                        if (cancelled.getAsBoolean()) return; // keep the last good image rather than a "no data" one
+                        mgr.updateAppWidget(id, rv);
                     } catch (RuntimeException | OutOfMemoryError e) {
                         Log.w(TAG, "radar widget " + id + " update failed: " + e);
                     }
@@ -72,7 +76,8 @@ public class RadarWidget extends AppWidgetProvider {
         }
     }
 
-    private static RemoteViews views(Context ctx, AppWidgetManager mgr, int id, Place place) {
+    private static RemoteViews views(Context ctx, AppWidgetManager mgr, int id, Place place,
+                                      BooleanSupplier cancelled) {
         float density = ctx.getResources().getDisplayMetrics().density;
         Bundle o = mgr.getAppWidgetOptions(id);
         int wDp = o == null ? 0 : o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0);
@@ -86,7 +91,7 @@ public class RadarWidget extends AppWidgetProvider {
 
         Bitmap bmp;
         try {
-            bmp = render(ctx, w, h, eff, place);
+            bmp = render(ctx, w, h, eff, place, cancelled);
         } catch (RuntimeException | OutOfMemoryError e) {
             Log.w(TAG, "radar widget art failed: " + e);
             bmp = Bitmap.createBitmap(Math.max(1, Math.min(w, 64)), Math.max(1, Math.min(h, 64)), Bitmap.Config.ARGB_8888);
@@ -98,10 +103,10 @@ public class RadarWidget extends AppWidgetProvider {
     }
 
     /** The map bitmap; any failure along the way degrades to less (map only, then blank BG), never to a throw. */
-    static Bitmap render(Context ctx, int w, int h, float eff, Place place) {
+    static Bitmap render(Context ctx, int w, int h, float eff, Place place, BooleanSupplier cancelled) {
         Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
-        float r = 24f * h / 150f; // the clock/weather panel radius (WidgetArt: 24 on a 150-unit height)
+        float r = CORNER_DP * eff; // the clock/weather panel radius: 24 x (110 dp / 150) at the clock widget's default height
         Path clip = new Path();
         clip.addRoundRect(new RectF(0, 0, w, h), r, r, Path.Direction.CW);
         c.clipPath(clip);
@@ -114,7 +119,7 @@ public class RadarWidget extends AppWidgetProvider {
         GeoProjection p = GeoProjection.area(place.lat, place.lon, w, h);
         RadarTiles.Frame frame = null;
         try {
-            List<RadarTiles.Frame> frames = RadarTiles.loadLatest(p, ZOOM);
+            List<RadarTiles.Frame> frames = RadarTiles.loadLatest(p, ZOOM, cancelled);
             if (!frames.isEmpty()) frame = frames.get(frames.size() - 1);
         } catch (RuntimeException | OutOfMemoryError e) {
             Log.w(TAG, "radar widget tiles failed: " + e);
@@ -123,9 +128,15 @@ public class RadarWidget extends AppWidgetProvider {
         try {
             rp.paint(c, w, h, p, Basemap.get(ctx), frame, readout, place.lat, place.lon);
         } catch (RuntimeException | OutOfMemoryError e) {
-            Log.w(TAG, "radar widget map failed: " + e);
-            c.drawColor(DotStyle.BG);
-            rp.drawReadout(c, h, NO_DATA);
+            Log.w(TAG, "radar widget paint failed, retrying map only: " + e);
+            try {
+                c.drawColor(DotStyle.BG);
+                rp.paint(c, w, h, p, Basemap.get(ctx), null, NO_DATA, place.lat, place.lon);
+            } catch (RuntimeException | OutOfMemoryError e2) {
+                Log.w(TAG, "radar widget map failed: " + e2);
+                c.drawColor(DotStyle.BG);
+                rp.drawReadout(c, h, NO_DATA);
+            }
         }
         return bmp;
     }

@@ -10,7 +10,6 @@ import android.util.Log;
 import android.view.View;
 
 import java.util.List;
-import java.util.Random;
 
 import dev.gawel.dothome.core.DotStyle;
 import dev.gawel.dothome.core.GeoProjection;
@@ -42,6 +41,9 @@ final class RadarView extends View {
     private GeoProjection proj;
     private Bitmap base, overlay;
     private float[][] grids;
+    private Bitmap layer; // the current frame's halftone, redrawn only when the frame changes
+    private Canvas layerCanvas;
+    private float[] layerSrc;
     private int[] minutes;
     private int cols, rows;
     private boolean loading, unavailable;
@@ -183,7 +185,17 @@ final class RadarView extends View {
         if (gr != null && gr.length > 0) {
             float cycle = gr.length * FRAME_S + HOLD_S;
             frame = Math.min(gr.length - 1, (int) ((t % cycle) / FRAME_S));
-            ui.drawHalftone(c, gr[frame], cols, rows);
+            if (layer == null || layer.getWidth() != w || layer.getHeight() != h) {
+                layer = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+                layerCanvas = new Canvas(layer);
+                layerSrc = null;
+            }
+            if (layerSrc != gr[frame]) {
+                layer.eraseColor(0);
+                ui.drawHalftone(layerCanvas, gr[frame], cols, rows);
+                layerSrc = gr[frame];
+            }
+            c.drawBitmap(layer, 0, 0, bmpPaint);
         }
         if (overlay != null) c.drawBitmap(overlay, 0, 0, bmpPaint);
 

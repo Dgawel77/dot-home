@@ -73,8 +73,8 @@ public class RadarActivity extends Activity {
 
         LinearLayout seg = new LinearLayout(this);
         GradientDrawable segBg = new GradientDrawable();
-        segBg.setColor(0xFF101010);
-        segBg.setStroke(Math.max(1, px(1)), 0xFF2B2B2B);
+        segBg.setColor(DotStyle.PANEL);
+        segBg.setStroke(Math.max(1, px(1)), DotStyle.FAINT);
         segBg.setCornerRadius(px(22));
         seg.setBackground(segBg);
         seg.setPadding(px(3), px(3), px(3), px(3));
@@ -92,7 +92,7 @@ public class RadarActivity extends Activity {
         radar.setOnClickListener(v -> setRegion(!radar.isRegion()));
         root.addView(radar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        TextView credits = text(CREDITS, 10, 0xFF808080, Fonts.inter(this));
+        TextView credits = text(CREDITS, 10, DotStyle.FG2, Fonts.inter(this));
         credits.setPadding(px(20), px(8), px(20), px(10));
         root.addView(credits, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -194,11 +194,11 @@ public class RadarActivity extends Activity {
         bg.setCornerRadius(px(19));
         bg.setColor(on ? DotStyle.FG : Color.TRANSPARENT);
         t.setBackground(bg);
-        t.setTextColor(on ? DotStyle.BG : 0xFFBDBDBD);
+        t.setTextColor(on ? DotStyle.BG : DotStyle.FG2);
     }
 
     private TextView pill(String label) {
-        TextView t = text(label, 13, 0xFFBDBDBD, Fonts.interMedium(this));
+        TextView t = text(label, 13, DotStyle.FG2, Fonts.interMedium(this));
         t.setGravity(Gravity.CENTER);
         t.setMinWidth(px(78));
         t.setMinHeight(px(38));
