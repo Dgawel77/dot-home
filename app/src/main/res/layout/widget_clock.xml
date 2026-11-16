@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Clock widget: the glass card bitmap fills the widget; on it the time spans the full width as two stacked
-     TextClocks in the dot-matrix font (every cell in L10 underneath, lit cells in L100 on top), which tick the
-     seconds themselves. The bottom row has the date and the weather bitmap. WidgetUpdater sets both time text
-     sizes (cell x 10 dp, core/ClockFit) and, in the bitmap fallback (pref widget.clockMode = bitmap), swaps the
-     TextClocks for the per-minute time_img. -->
+<!-- Clock widget: the glass card bitmap fills the widget; on it a block centred vertically (equal top and bottom
+     margins, 16 dp minimum): the per-minute dot-bitmap time (One UI ignores custom fonts in widgets, so it is
+     never a TextClock), a 12 dp gap and the text row with the date and the weather, both bitmaps in Inter.
+     WidgetUpdater sets all the bitmaps; sizes come from core/ClockFit. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/clock_root"
     android:layout_width="match_parent"
@@ -20,65 +19,36 @@
         android:gravity="center_vertical"
         android:orientation="vertical"
         android:padding="16dp">
-        <FrameLayout
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content">
-            <TextClock
-                android:id="@+id/time_grid"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="@font/dot_matrix_grid"
-                android:format12Hour="hh:mm:ss"
-                android:format24Hour="HH:mm:ss"
-                android:gravity="start"
-                android:importantForAccessibility="no"
-                android:includeFontPadding="false"
-                android:maxLines="1"
-                android:scrollHorizontally="true"
-                android:textColor="@color/dot_l10"
-                android:textSize="50dp" />
-            <TextClock
-                android:id="@+id/time_lit"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="@font/dot_matrix"
-                android:format12Hour="hh:mm:ss"
-                android:format24Hour="HH:mm:ss"
-                android:gravity="start"
-                android:includeFontPadding="false"
-                android:maxLines="1"
-                android:scrollHorizontally="true"
-                android:textColor="@color/dot_l100"
-                android:textSize="50dp" />
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
             <ImageView
                 android:id="@+id/time_img"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:adjustViewBounds="true"
-                android:scaleType="fitStart"
-                android:visibility="gone"
                 android:contentDescription="@string/widget_clock_desc" />
-        </FrameLayout>
+            <ImageView
+                android:id="@+id/secs_img"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom"
+                android:layout_marginStart="12dp"
+                android:importantForAccessibility="no" />
+        </LinearLayout>
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="28dp"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="12dp"
             android:gravity="center_vertical"
             android:orientation="horizontal">
-            <TextClock
-                android:id="@+id/date"
+            <ImageView
+                android:id="@+id/date_img"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:ellipsize="end"
-                android:fontFamily="@font/inter"
-                android:format12Hour="EEEE, MMMM d"
-                android:format24Hour="EEEE, MMMM d"
-                android:gravity="start|center_vertical"
-                android:includeFontPadding="false"
-                android:maxLines="1"
-                android:textColor="@color/dot_l65"
-                android:textSize="15dp" />
+                android:scaleType="fitStart"
+                android:importantForAccessibility="no" />
             <ImageView
                 android:id="@+id/weather_img"
                 android:layout_width="wrap_content"

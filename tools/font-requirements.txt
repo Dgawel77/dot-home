@@ -1,3 +1,0 @@
-# Full pip freeze of tools/.fontvenv (build_matrix_font.py). fontTools has no required deps.
-# 4.68.0 was released 2026-10-27, more than two weeks before it was pinned (2026-11-16).
-fonttools==4.68.0

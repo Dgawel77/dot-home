@@ -16,4 +16,3 @@ tools/cache/
 iconpack/res/
 tools/.venv/
 __pycache__/
-tools/.fontvenv/

@@ -145,6 +145,7 @@ public class DotWallpaperService extends WallpaperService {
         private boolean visible, surfaceValid, rendering;
         private int width, height;
         private long lastNanos;
+        private long lastSecond;
         private long lastRefreshNanos, lastErrLogMs;
         private float downX, downY;
         private long downMs;
@@ -295,6 +296,7 @@ public class DotWallpaperService extends WallpaperService {
             if (rendering || !visible || !surfaceValid || width <= 0 || height <= 0) return;
             rendering = true;
             lastNanos = 0;
+            lastSecond = 0;
             Log.i(TAG, "render on " + width + "x" + height);
             Choreographer.getInstance().postFrameCallback(this);
         }
@@ -311,6 +313,11 @@ public class DotWallpaperService extends WallpaperService {
             if (!rendering) return;
             float dt = lastNanos == 0 ? 0f : (frameTimeNanos - lastNanos) / 1e9f;
             lastNanos = frameTimeNanos;
+            long sec = System.currentTimeMillis() / 1000;
+            if (sec != lastSecond) { // the clock widget's seconds tick while the home screen shows
+                lastSecond = sec;
+                WidgetUpdater.updateSeconds(getApplicationContext());
+            }
             GameWorld world = hub.world();
             fitWorld(); // covers control passing back to this engine when another one hides
             if (world.width() > 0) {

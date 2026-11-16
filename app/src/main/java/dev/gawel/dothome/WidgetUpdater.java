@@ -9,7 +9,6 @@ import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.provider.AlarmClock;
 import android.util.Log;
-import android.util.TypedValue;
 import android.view.View;
 import android.widget.RemoteViews;
 
@@ -37,6 +36,7 @@ final class WidgetUpdater {
         try {
             AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
             int[] ids = mgr.getAppWidgetIds(new ComponentName(ctx, ClockWidget.class));
+            clockIds = ids == null ? new int[0] : ids;
             if (ids == null || ids.length == 0) return;
             Weather wx = WeatherRepo.cached(ctx);
             long now = System.currentTimeMillis();
@@ -72,29 +72,19 @@ final class WidgetUpdater {
             rv.setViewVisibility(R.id.card_img, View.GONE);
         }
 
-        // the time: TextClocks in the matrix font (they tick the seconds themselves), or the per-minute fallback
+        // the time: the per-minute dot bitmap (step 12 dp, 8 on the cover) and the seconds beside it
         int innerDp = wDp - 2 * ClockFit.PAD_DP;
-        if (new PrefsStore(ctx).bitmapClock()) {
-            int cell = ClockFit.cellDp(wDp, hDp, ClockFit.MINUTES_COLS);
-            float eff = density * shrink(Math.max(1, innerDp) * density);
-            int w = Math.max(1, Math.round(innerDp * eff));
-            int h = Math.max(1, Math.round(ClockFit.timeHeightDp(cell) * eff));
-            rv.setViewVisibility(R.id.time_grid, View.GONE);
-            rv.setViewVisibility(R.id.time_lit, View.GONE);
-            rv.setViewVisibility(R.id.time_img, View.VISIBLE);
-            rv.setImageViewBitmap(R.id.time_img, safe(h, w, () -> WidgetArt.timeBitmap(ctx, w, now, cell, eff)));
-        } else {
-            int cell = ClockFit.cellDp(wDp, hDp, ClockFit.SECONDS_COLS);
-            float size = ClockFit.textSizeDp(cell); // both layers get the same size, so the dots stay registered
-            rv.setTextViewTextSize(R.id.time_grid, TypedValue.COMPLEX_UNIT_DIP, size);
-            rv.setTextViewTextSize(R.id.time_lit, TypedValue.COMPLEX_UNIT_DIP, size);
-            rv.setViewVisibility(R.id.time_grid, View.VISIBLE);
-            rv.setViewVisibility(R.id.time_lit, View.VISIBLE);
-            rv.setViewVisibility(R.id.time_img, View.GONE);
-        }
+        int cell = ClockFit.cellDp(innerDp);
+        int th = Math.max(1, Math.round(ClockFit.timeHeightDp(cell) * density));
+        int tw = Math.max(1, Math.round(ClockFit.timeWidthDp(cell, ClockFit.MINUTES_COLS) * density));
+        rv.setImageViewBitmap(R.id.time_img, safe(th, tw, () -> WidgetArt.timeBitmap(ctx, now, cell, density)));
+        rv.setImageViewBitmap(R.id.secs_img, secondsBitmap(density, (int) (now / 1000 % 60)));
 
-        // the weather, right of the date: whatever the date leaves, so the date stays whole
+        // the bottom row, text only: the date (Inter) left, the weather right, whatever the date leaves
         float dateDp = WidgetArt.dateWidthDp(ctx, now) + DATE_SLACK_DP;
+        float effD = density * shrink(dateDp * density);
+        int dw = Math.max(1, Math.round(dateDp * effD)), dh = Math.max(1, Math.round(ClockFit.ROW_DP * effD));
+        rv.setImageViewBitmap(R.id.date_img, safe(dh, dw, () -> WidgetArt.date(ctx, now, ClockFit.ROW_DP, dateDp, effD)));
         float maxDp = Math.max(MIN_WEATHER_DP, innerDp - WEATHER_MARGIN_DP - dateDp);
         float effRow = density * shrink(maxDp * density);
         int rowH = Math.max(1, Math.round(ClockFit.ROW_DP * effRow));
@@ -104,6 +94,46 @@ final class WidgetUpdater {
         rv.setOnClickPendingIntent(R.id.clock_root, PendingIntent.getActivity(ctx, 1, clockIntent(ctx), flags()));
         rv.setOnClickPendingIntent(R.id.weather_img, radarTap(ctx));
         return rv;
+    }
+
+    private static final Bitmap[] SECS = new Bitmap[60];
+    private static float secsDensity;
+    private static volatile int[] clockIds;
+
+    /** The seconds bitmap for second 0..59 at this density: a 60-entry cache, rebuilt when the density changes. */
+    private static synchronized Bitmap secondsBitmap(float density, int sec) {
+        if (density != secsDensity) {
+            java.util.Arrays.fill(SECS, null);
+            secsDensity = density;
+        }
+        Bitmap b = SECS[sec];
+        if (b == null || b.isRecycled()) {
+            b = safe(1, 1, () -> WidgetArt.secondsBitmap(sec, density));
+            SECS[sec] = b;
+        }
+        return b;
+    }
+
+    /**
+     * Ticks the clock's seconds alone: called by the live wallpaper (visible exactly while the home screen shows)
+     * each time the wall-clock second changes. Only the tiny seconds bitmap is pushed, with a partial update.
+     */
+    static void updateSeconds(Context ctx) {
+        try {
+            int[] ids = clockIds;
+            AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
+            if (ids == null) {
+                ids = mgr.getAppWidgetIds(new ComponentName(ctx, ClockWidget.class));
+                clockIds = ids;
+            }
+            if (ids.length == 0) return;
+            float density = ctx.getResources().getDisplayMetrics().density;
+            RemoteViews rv = new RemoteViews(ctx.getPackageName(), R.layout.widget_clock);
+            rv.setImageViewBitmap(R.id.secs_img, secondsBitmap(density, (int) (System.currentTimeMillis() / 1000 % 60)));
+            mgr.partiallyUpdateAppWidget(ids, rv);
+        } catch (RuntimeException e) {
+            Log.w(TAG, "seconds update failed: " + e);
+        }
     }
 
     /** Scale that keeps a bitmap side of sidePx within MAX_SIDE_PX (1 when it already fits). */
@@ -142,7 +172,7 @@ final class WidgetUpdater {
     }
 
     /**
-     * The launcher's clip radius for this widget in dp: One UI's "semShapeRadius" option (a float), 24 dp when it
+     * The launcher's clip radius for this widget in dp: One UI's "semShapeRadius" option (a float), 40 dp when it
      * is absent. See {@link CardShape}.
      */
     static float shapeRadiusDp(Bundle o, float wDp, float hDp) {

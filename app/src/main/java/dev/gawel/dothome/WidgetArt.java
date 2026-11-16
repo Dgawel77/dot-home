@@ -20,6 +20,7 @@ import java.util.Date;
 import java.util.Locale;
 
 import dev.gawel.dothome.core.CardShape;
+import dev.gawel.dothome.core.ClockFit;
 import dev.gawel.dothome.core.DotMatrixFont;
 import dev.gawel.dothome.core.DotStyle;
 import dev.gawel.dothome.core.Halftone;
@@ -30,15 +31,15 @@ import dev.gawel.dothome.core.Weather;
 import dev.gawel.dothome.core.WeatherCodes;
 
 /**
- * Draws the widget bitmaps on the 4 dp lattice: the clear glass card, the clock's weather row (and its bitmap time
- * fallback), the music widget and the radar's glass finish. Every function takes the
+ * Draws the widget bitmaps on the 4 dp lattice: the clear glass card, the clock's time and text row,
+ * the music widget and the radar's glass finish. Every function takes the
  * effective density (display density times the shrink applied to the bitmap), so sizes come out as true dp once
  * the launcher stretches the bitmap back. Content offsets snap to multiples of the step; no containers, glows or
  * gradients.
  */
 final class WidgetArt {
     private static final long STALE_MS = 90L * 60 * 1000;
-    static final String DATE_PATTERN = "EEEE, MMMM d"; // as the date TextClock in widget_clock.xml
+    static final String DATE_PATTERN = "EEEE, MMMM d"; // the clock's date, drawn by date()
     static final float DATE_SIZE_DP = 15f;
     private static final float WEATHER_ICON_DP = 20f;
     /** Below this much room the weather row drops its text and keeps the icon and temperature. */
@@ -90,11 +91,10 @@ final class WidgetArt {
     }
 
     /**
-     * The per-minute bitmap fallback for the time (pref widget.clockMode = bitmap, for a launcher that cannot render
-     * the matrix font): "hh:mm" as dots, lit L100 over unlit L10, cellDp per cell, left-aligned in a wPx-wide bitmap
-     * seven cells tall, so the layout's fitStart + adjustViewBounds shows it at true size.
+     * The clock's time (One UI ignores custom fonts in widgets, so it is always a bitmap): "hh:mm" as dots, lit L100 over unlit L10, cellDp per cell, in a bitmap exactly as wide
+     * as the text and seven cells tall, so the layout shows it at true size.
      */
-    static Bitmap timeBitmap(Context ctx, int wPx, long nowMs, int cellDp, float dens) {
+    static Bitmap timeBitmap(Context ctx, long nowMs, int cellDp, float dens) {
         Calendar cal = Calendar.getInstance();
         cal.setTimeInMillis(nowMs);
         String t = DotMatrixFont.clockText(cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE),
@@ -103,7 +103,7 @@ final class WidgetArt {
         int cols = cells.length / DotMatrixFont.ROWS;
         float s = cellDp * dens;
         float r = s * Lattice.Weight.REGULAR.ratio / 2f;
-        Bitmap bmp = Bitmap.createBitmap(Math.max(1, Math.max(wPx, Math.round(cols * s))),
+        Bitmap bmp = Bitmap.createBitmap(Math.max(1, Math.round(cols * s)),
             Math.max(1, Math.round(DotMatrixFont.ROWS * s)), Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
         Paint lit = fill(DotStyle.L100), unlit = fill(DotStyle.L10);
@@ -117,30 +117,58 @@ final class WidgetArt {
         return bmp;
     }
 
-    /** The date as the clock's bottom row shows it (TextClock "EEEE, MMMM d", Inter 15 dp): its width in dp. */
+    /** The seconds beside the time: "ss" as dots at step SECS_STEP_DP, lit L65 over unlit L10, SECS_W_DP x SECS_H_DP. */
+    static Bitmap secondsBitmap(int second, float dens) {
+        byte[] cells = DotMatrixFont.cells((second < 10 ? "0" : "") + second);
+        int cols = cells.length / DotMatrixFont.ROWS;
+        float s = ClockFit.SECS_STEP_DP * dens;
+        float r = s * Lattice.Weight.REGULAR.ratio / 2f;
+        Bitmap bmp = Bitmap.createBitmap(Math.max(1, Math.round(ClockFit.SECS_W_DP * dens)),
+            Math.max(1, Math.round(ClockFit.SECS_H_DP * dens)), Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(bmp);
+        Paint lit = fill(DotStyle.L65), unlit = fill(DotStyle.L10);
+        for (int row = 0; row < DotMatrixFont.ROWS; row++) {
+            for (int col = 0; col < cols; col++) {
+                byte v = cells[row * cols + col];
+                if (v < 0) continue;
+                dot(c, 0, 0, s, col, row, r, v == 1 ? lit : unlit);
+            }
+        }
+        return bmp;
+    }
+
+    /** The date as the clock's bottom row shows it ("EEEE, MMMM d", Inter 15 dp): its width in dp. */
     static float dateWidthDp(Context ctx, long nowMs) {
         Paint p = text(Fonts.inter(ctx), DATE_SIZE_DP, 1f, DotStyle.L65);
         return p.measureText(new SimpleDateFormat(DATE_PATTERN, Locale.getDefault()).format(new Date(nowMs)));
     }
 
+    /** The date text, Inter 15 at L65, vertically centred in a rowDp-tall bitmap of wDp (true dp at density dens). */
+    static Bitmap date(Context ctx, long nowMs, float rowDp, float wDp, float dens) {
+        Bitmap bmp = Bitmap.createBitmap(Math.max(1, Math.round(wDp * dens)), Math.max(1, Math.round(rowDp * dens)),
+            Bitmap.Config.ARGB_8888);
+        Paint p = text(Fonts.inter(ctx), DATE_SIZE_DP, dens, DotStyle.L65);
+        new Canvas(bmp).drawText(new SimpleDateFormat(DATE_PATTERN, Locale.getDefault()).format(new Date(nowMs)),
+            0f, baseline(p, 0f, rowDp * dens), p);
+        return bmp;
+    }
+
     /**
      * The weather for the clock's bottom row, one line rowDp tall, as wide as its content and at most maxWDp: the
-     * line-art icon, the temperature as matrix dots (lit only, L65) at the step whose seven rows fill the row, then
+     * line-art icon, the temperature (Inter 15, L100), then
      * the condition (Inter 13, L65; an active alert replaces it in L100) and the place and data age (L46). Text is
      * cut with an ellipsis, the place before the condition; with too little room only the icon and temperature
      * remain. dens is the effective density, so every size is true dp.
      */
     static Bitmap weather(Context ctx, Weather w, long nowMs, float rowDp, float maxWDp, float dens) {
         float h = rowDp * dens;
-        float s = Math.max(1, (int) (rowDp / DotMatrixFont.ROWS)) * dens;
-        float r = s * Lattice.Weight.REGULAR.ratio / 2f;
         String temp = w == null ? "\u2212\u2212\u00B0" : tempText(Math.round(w.tempF));
-        byte[] cells = DotMatrixFont.cells(temp);
-        int cols = cells.length / DotMatrixFont.ROWS;
+        Paint tempPaint = text(Fonts.inter(ctx), 15f, dens, DotStyle.L100);
+        float tempW = tempPaint.measureText(temp);
 
         float icon = w == null ? 0f : WEATHER_ICON_DP * dens;
         float tempX = w == null ? 0f : icon + 8f * dens;
-        float textX = tempX + cols * s + 12f * dens;
+        float textX = tempX + tempW + 12f * dens;
         float textMax = maxWDp * dens - textX;
 
         boolean alert = w != null && w.alert != null && !w.alert.isEmpty();
@@ -165,19 +193,13 @@ final class WidgetArt {
             }
         }
         float oneW = first.measureText(one), twoW = second.measureText(two);
-        float right = one.isEmpty() ? tempX + cols * s : textX + oneW + twoW;
+        float right = one.isEmpty() ? tempX + tempW : textX + oneW + twoW;
 
         Bitmap bmp = Bitmap.createBitmap(Math.max(1, (int) Math.ceil(right)), Math.max(1, Math.round(h)),
             Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
         if (w != null) drawGlyph(c, WeatherCodes.glyph(w.code), 0f, (h - icon) / 2f, icon, dens);
-        float gy = (h - DotMatrixFont.ROWS * s) / 2f;
-        Paint dots = fill(DotStyle.L65);
-        for (int row = 0; row < DotMatrixFont.ROWS; row++) {
-            for (int col = 0; col < cols; col++) {
-                if (cells[row * cols + col] == 1) dot(c, tempX, gy, s, col, row, r, dots); // lit cells only
-            }
-        }
+        c.drawText(temp, tempX, baseline(tempPaint, 0f, h), tempPaint);
         if (!one.isEmpty()) {
             float base = baseline(second, 0f, h);
             c.drawText(one, textX, w == null ? baseline(first, 0f, h) : base, first);
@@ -186,7 +208,7 @@ final class WidgetArt {
         return bmp;
     }
 
-    /** "41\u00B0" or "\u22125\u00B0": the matrix font has a true minus, not a hyphen. */
+    /** "41\u00B0" or "\u22125\u00B0": Inter has a true minus, not a hyphen. */
     private static String tempText(long t) {
         return (t < 0 ? "\u2212" + (-t) : String.valueOf(t)) + "\u00B0";
     }

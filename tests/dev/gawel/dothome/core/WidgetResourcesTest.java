@@ -53,35 +53,15 @@ public final class WidgetResourcesTest {
         }
     }
 
-    public static void testTimeClocksAreStackedTwins() {
-        List<String> clocks = elements(read("layout/widget_clock.xml"), "TextClock");
-        String grid = byId(clocks, "time_grid"), lit = byId(clocks, "time_lit");
-        T.eq("@font/dot_matrix_grid", attr(grid, "fontFamily"), "grid font");
-        T.eq("@font/dot_matrix", attr(lit, "fontFamily"), "lit font");
-        T.eq("@color/dot_l10", attr(grid, "textColor"), "grid colour");
-        T.eq("@color/dot_l100", attr(lit, "textColor"), "lit colour");
-        for (String c : new String[] {grid, lit}) {
-            T.eq("hh:mm:ss", attr(c, "format12Hour"), "12 h");
-            T.eq("HH:mm:ss", attr(c, "format24Hour"), "24 h");
-            T.eq("false", attr(c, "includeFontPadding"), "no font padding");
-            T.eq("start", attr(c, "gravity"), "gravity");
-            T.eq("1", attr(c, "maxLines"), "one line");
-            T.eq("true", attr(c, "scrollHorizontally"), "never wraps (the trailing gap may overhang)");
-        }
-        T.check(clocks.indexOf(grid) < clocks.indexOf(lit), "grid layer below the lit layer");
-    }
-
-    public static void testBottomRowAndPaddingMatchClockFit() {
+    public static void testClockIsBitmapsOnly() {
         String xml = read("layout/widget_clock.xml");
+        T.check(!xml.contains("<TextClock"), "One UI ignores widget fonts: no TextClock");
+        for (String id : new String[] {"time_img", "date_img", "weather_img"}) byId(elements(xml, "ImageView"), id);
         T.check(xml.contains("android:padding=\"" + ClockFit.PAD_DP + "dp\""), "pad");
+        T.check(xml.contains("android:gravity=\"center_vertical\""), "block centred vertically");
         T.check(xml.contains("android:layout_height=\"" + ClockFit.ROW_DP + "dp\""), "row height");
         T.check(xml.contains("android:layout_marginTop=\"" + ClockFit.GAP_DP + "dp\""), "gap");
-        String date = byId(elements(xml, "TextClock"), "date");
-        T.eq("EEEE, MMMM d", attr(date, "format12Hour"), "date 12 h");
-        T.eq("EEEE, MMMM d", attr(date, "format24Hour"), "date 24 h");
-        T.eq("@font/inter", attr(date, "fontFamily"), "Inter");
-        T.eq("@color/dot_l65", attr(date, "textColor"), "date colour");
-        T.eq("15dp", attr(date, "textSize"), "date size");
+        T.eq(12, ClockFit.GAP_DP, "gap is 12 dp");
     }
 
     public static void testMusicBlankWhenNothingPlays() {
@@ -115,11 +95,5 @@ public final class WidgetResourcesTest {
         String toggle = byId(elements(read("layout/widget_radar.xml"), "ImageView"), "radar_toggle");
         T.eq("48dp", attr(toggle, "layout_height"), "48 dp touch target");
         T.eq("top|end", attr(toggle, "layout_gravity"), "top right");
-    }
-
-    public static void testFontResourcesExist() {
-        for (String f : new String[] {"dot_matrix.ttf", "dot_matrix_grid.ttf", "inter.ttf"}) {
-            T.check(Files.isRegularFile(Paths.get(RES + "font/" + f)), "res/font/" + f);
-        }
     }
 }
