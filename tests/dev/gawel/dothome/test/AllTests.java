@@ -23,6 +23,8 @@ public final class AllTests {
         dev.gawel.dothome.core.TileMathTest.class,
         dev.gawel.dothome.core.RadarScaleTest.class,
         dev.gawel.dothome.core.HalftoneTest.class,
+        dev.gawel.dothome.core.MonoIconTest.class,
+        dev.gawel.dothome.core.AppFilterTest.class,
     };
 
     public static void main(String[] args) throws Exception {

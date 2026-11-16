@@ -6,6 +6,10 @@
     <uses-feature android:name="android.software.live_wallpaper" android:required="true" />
     <queries>
         <package android:name="com.sec.android.app.clockpackage" />
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
     </queries>
     <application
         android:label="@string/app_name"
@@ -23,6 +27,9 @@
             android:name=".RadarActivity"
             android:exported="false"
             android:theme="@style/RadarTheme" />
+        <activity
+            android:name=".IconExportActivity"
+            android:exported="true" />
         <service
             android:name=".DotWallpaperService"
             android:exported="true"
