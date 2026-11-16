@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Random;
 
-import dev.gawel.dothome.core.BoxSet;
 import dev.gawel.dothome.core.ClearZones;
 import dev.gawel.dothome.core.DotMatrixFont;
 import dev.gawel.dothome.core.DotStyle;
@@ -21,7 +20,7 @@ import dev.gawel.dothome.core.RadarScale;
 
 /**
  * Draws the dotted radar map on the 4 dp lattice anchored at the canvas origin: land speckle and lake texture at
- * light weight, borders, roads and shore as dot rows at regular weight, route numbers in dot-row boxes, mono caps
+ * light weight, borders, roads and shore as dot rows at regular weight, mono caps
  * labels, and the echo storm as a {@link Halftone} of the intensity grid. Shared by the full-screen
  * {@link RadarView} and the radar widget. Not thread-safe (it owns Paints and a bitset): one per thread.
  */
@@ -212,35 +211,6 @@ final class RadarPainter {
             if (!keepRect(x - hw, y - 9 * u, x + hw, y + 3 * u)) continue;
             c.drawText(name, x, y, text);
         }
-        BoxSet drawn = new BoxSet();
-        for (Basemap.Road r : bm.roads) {
-            if (r.pts.length == 0) continue;
-            double[] q = r.pts[r.pts.length / 2];
-            float x = p.x(q[0]), y = p.y(q[1]);
-            if (x < 16 * u || x > w - 16 * u || y < topPad || y > h - bottomPad) continue;
-            routeBox(c, r.ref, x, y, drawn);
-        }
-    }
-
-    /** A route number: a 5-row rectangle outline of S4 regular L46 dots (snapped to the lattice) around an L65 mono label. */
-    private void routeBox(Canvas c, String ref, float x, float y, BoxSet drawn) {
-        ref = ref.toUpperCase(Locale.ROOT);
-        float tw = labelWidth(ref);
-        int nc = (int) Math.ceil((tw + 8 * u) / step) + 1;
-        float left = cell(x - (nc - 1) * step / 2f), top = cell(y - 2 * step);
-        float cx = left + (nc - 1) * step / 2f, cy = top + 2 * step;
-        if (!keepRect(left - step, top - step, left + nc * step, top + 5 * step)) return;
-        if (!drawn.tryAdd(left - step, top - step, left + nc * step, top + 5 * step)) return; // overlaps another box
-        dot.setColor(DotStyle.L46);
-        for (int i = 0; i < nc; i++) {
-            c.drawCircle(left + i * step, top, rReg, dot);
-            c.drawCircle(left + i * step, top + 4 * step, rReg, dot);
-        }
-        for (int j = 1; j <= 3; j++) {
-            c.drawCircle(left, top + j * step, rReg, dot);
-            c.drawCircle(left + (nc - 1) * step, top + j * step, rReg, dot);
-        }
-        label(c, ref, cx, capBase(cy), Paint.Align.CENTER, DotStyle.L65);
     }
 
     void drawPlaces(Canvas c, GeoProjection p, Basemap bm, int w, int h, double userLat, double userLon) {
