@@ -759,6 +759,19 @@ class RealIcon(ExportFixture):
         self.assertEqual(m[(S - 200) // 2 + 1, (S - 200) // 2 + 1], 0.0)  # rounded corner
         self.assertTrue(((m > 0) & (m < 1)).any())  # anti-aliased
 
+    def test_content_is_resampled_not_cropped(self):
+        lum = np.zeros((S, S))
+        lum[:, 82:350] = 0.0
+        lum[200:232, 82:90] = 1.0   # marks on the left and right edges of the central 268 px square
+        lum[200:232, 342:350] = 1.0
+        t = ix.fit_tone(self.tone_obj(lum), (200, 160))
+        xs = np.nonzero(t.lum.max(axis=0) > 0.3)[0]
+        self.assertGreaterEqual(xs.min(), (S - 200) // 2 - 1)
+        self.assertLessEqual(xs.max(), (S - 200) // 2 + 200)
+        self.assertLess(xs.min(), (S - 200) // 2 + 6)  # the edge marks survive, at the tile's edges
+        self.assertGreater(xs.max(), (S - 200) // 2 + 193)
+        self.assertEqual(float(t.cov[0, 0]), 0.0)
+
     def test_polarity_flips_on_bright_tile(self):
         mask = ix.tile_mask()
         bright = np.full((S, S), 0.9)

@@ -645,9 +645,32 @@ def real_levels(tone, mask):
     return np.clip((lum - lo) / (hi - lo), 0.0, 1.0)
 
 
+def fit_tone(tone, box=None):
+    """The central TILE_FALLBACK x SIZE square of the tone layer (nothing cropped from it), resampled
+    (Lanczos) into the tile side (the median mono glyph box side) and centred; luminance and coverage
+    both. Zero outside the tile."""
+    from PIL import Image
+    side = max(box) if box else TILE_FALLBACK * SIZE
+    n = int(round(side))
+    src = int(round(TILE_FALLBACK * SIZE))
+    o = (SIZE - src) // 2
+    p = (SIZE - n) // 2
+
+    def one(a):
+        im = Image.fromarray(np.asarray(a, np.float32)[o:o + src, o:o + src], "F")
+        if n != src:
+            im = im.resize((n, n), Image.LANCZOS)
+        out = np.zeros((SIZE, SIZE), np.float64)
+        out[p:p + n, p:p + n] = np.clip(np.asarray(im, np.float64), 0.0, 1.0)
+        return out
+
+    return Tone(one(tone.lum), one(tone.cov))
+
+
 def real_dots(tone, box=None):
     """[(cx, cy, r)] halftone of the real icon: one dot per cell, radius from the stretched luminance
     (brightness) and the tile coverage; cells below REAL_COV_MIN coverage or REAL_B_MIN brightness skip."""
+    tone = fit_tone(tone, box)
     mask = tile_mask(box) * tone.cov
     level = real_levels(tone, mask)
     if level is None:
