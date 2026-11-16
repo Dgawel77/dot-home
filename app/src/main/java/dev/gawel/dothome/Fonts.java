@@ -11,6 +11,7 @@ import java.util.Map;
 /** Loads the bundled fonts from assets (variable 'wght' axis), cached per path+weight. */
 final class Fonts {
     static final String DOTO = "fonts/Doto-Regular.ttf";
+    static final String MONO = "fonts/JetBrainsMono-Regular.ttf";
     static final String INTER = "fonts/Inter-Regular.ttf";
     static final String INTER_MEDIUM = "fonts/Inter-Medium.ttf";
 
@@ -19,6 +20,8 @@ final class Fonts {
     private Fonts() {}
 
     static Typeface doto(Context c) { return load(c.getAssets(), DOTO, 400); }
+
+    static Typeface mono(Context c) { return load(c.getAssets(), MONO, 400); }
 
     static Typeface inter(Context c) { return load(c.getAssets(), INTER, 400); }
 

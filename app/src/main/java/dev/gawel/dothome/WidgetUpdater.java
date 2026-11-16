@@ -65,9 +65,8 @@ final class WidgetUpdater {
         int h = Math.max(1, Math.round(hPx));
 
         RemoteViews rv = new RemoteViews(ctx.getPackageName(), R.layout.widget_clock);
-        boolean bd = WidgetArt.backdropOn(ctx);
-        Bitmap clock = safe(h, clockW, () -> WidgetArt.clock(ctx, clockW, h, now, bd, eff));
-        Bitmap weather = safe(h, weatherW, () -> WidgetArt.weather(ctx, weatherW, h, wx, now, bd, eff));
+        Bitmap clock = safe(h, clockW, () -> WidgetArt.clock(ctx, clockW, h, now, eff));
+        Bitmap weather = safe(h, weatherW, () -> WidgetArt.weather(ctx, weatherW, h, wx, now, eff));
         rv.setImageViewBitmap(R.id.clock_img, clock);
         rv.setImageViewBitmap(R.id.weather_img, weather);
         rv.setOnClickPendingIntent(R.id.clock_img, PendingIntent.getActivity(ctx, 1, clockIntent(ctx), flags()));
@@ -94,8 +93,7 @@ final class WidgetUpdater {
         float shrink = Math.min(1f, MAX_SIDE_PX / Math.max(wPx, hPx));
         int w = Math.max(1, Math.round(wPx * shrink)), h = Math.max(1, Math.round(hPx * shrink));
         float eff = density * shrink;
-        boolean bd = WidgetArt.backdropOn(ctx);
-        Bitmap art = safe(h, w, () -> WidgetArt.music(ctx, w, h, np, bd, eff));
+        Bitmap art = safe(h, w, () -> WidgetArt.music(ctx, w, h, np, eff));
         rv.setViewVisibility(R.id.music_root, android.view.View.VISIBLE);
         rv.setImageViewBitmap(R.id.music_img, art);
         rv.setImageViewResource(R.id.music_play, np.playing ? R.drawable.ic_pause : R.drawable.ic_play);
