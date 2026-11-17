@@ -8,8 +8,10 @@ import java.util.List;
  *
  * <p>The ship flies Newtonian (Ship v2, design/mockups/ShipV2.dc.html): it has a heading, a spin and a velocity
  * with near-zero drag, accelerates only along its heading with the main engines and turns only by firing its RCS.
- * A PD autopilot picks a desired velocity (wander target, rock avoidance, screen edges), turns toward the heading
- * that velocity error needs, burns only within 20 degrees of it, and so flips and burns to brake.
+ * A PD autopilot picks a desired velocity (wander target, screen edges), turns toward the heading that velocity
+ * error needs, burns only within 20 degrees of it, and so flips and burns to brake. Rocks are dodged only in an
+ * emergency: when one is on a collision course within the next 1 s (0.5 s in manual mode) the ship burns sideways
+ * for a moment, then flies on. Nothing else about the rocks steers it; a rock it does hit just bumps it.
  *
  * <p>Guns: four (ShipShape), the under-nose twin and the wingtip pair, taking turns in a crossing order. Each bolt
  * leaves its barrel's tip along the barrel's axis (within 1.5 degrees of the heading); each gun's time since its
@@ -17,10 +19,12 @@ import java.util.List;
  *
  * <p>Tap-to-fly: a tap fires one bolt at once from the next gun along the current heading, toed in toward the tap
  * only when the tap lies within 3 degrees of it (the fire cooldown still applies). The tap point also becomes the
- * waypoint and starts manual mode, until the later of 4 s after the last tap and 2 s after arrival (12 s cap): the same flight computer flies the ship to the
- * waypoint instead of a wander target (up to 1.25x the cruise speed, slowing within 120k px of it), still dodging
- * rocks, and once there holds station facing the way it came. A newer tap retargets at once. Then the autopilot
- * resumes from the current state with a fresh wander target.
+ * waypoint and starts manual mode, until the later of 4 s after the last tap and 2 s after arrival (12 s cap): the
+ * same flight computer flies the ship straight to the waypoint instead of a wander target (up to 1.25x the cruise
+ * speed, slowing within 120k px of it), dodging only a rock about to hit, and once there holds station facing the
+ * way it came. A newer tap retargets at once: the flight computer drops what it was doing for the old point (a turn,
+ * a braking flip, a dodge) and flies to the new one. Then the autopilot resumes from the current state with a fresh
+ * wander target.
  *
  * <p>The spin barrage (a shake, 30 s cooldown): for 1.6 s the ship spins on the spot, a random way, its spin
  * easing in to 3 rev/s over 0.3 s and out to 0 over the last 0.4 s, with the RCS firing hard on both ramps. The
@@ -129,10 +133,13 @@ public final class GameWorld {
     private float wanderX, wanderY, wanderT;
 
     // flight computer: the RCS angular acceleration and engine command it set this step, its low-passed desired
-    // velocity, the heading it holds when there is nothing to correct, its pointing and burning latches, and
-    // whether a rock about to hit has it dodging instead of aiming
+    // velocity, the heading it holds when there is nothing to correct, and its pointing and burning latches
     private float angAccel, thrustCmd, desVx, desVy, holdAngle, headingErr;
-    private boolean pointing, burning, evading;
+    private boolean pointing, burning;
+    /** An emergency dodge: seconds left of it (0 when none) and its sideways direction (a unit vector). */
+    private float dodgeT, dodgeX, dodgeY;
+    /** The next pilot step takes its desired velocity at once, unfiltered (a new waypoint, or a dodge just over). */
+    private boolean snap;
 
     // thruster events of the last step (fixed arrays: nothing is allocated per step)
     private final float[] nozzleThrust = new float[ShipShape.NOZZLES];
@@ -363,7 +370,8 @@ public final class GameWorld {
     private void resetFlight() {
         angAccel = thrustCmd = desVx = desVy = headingErr = 0f;
         holdAngle = ship.angle;
-        pointing = burning = evading = false;
+        pointing = burning = snap = false;
+        dodgeT = 0f;
         java.util.Arrays.fill(nozzleThrust, 0f);
         rcsFirings = 0;
     }
@@ -381,8 +389,8 @@ public final class GameWorld {
     /** The autopilot's last main-engine command, 0..1 (tests). */
     float engineCommand() { return thrustCmd; }
 
-    /** True while a rock about to hit has the autopilot dodging instead of aiming (tests). */
-    boolean evading() { return evading; }
+    /** True while a rock on a collision course has the ship dodging (tests). */
+    boolean evading() { return dodgeT > 0f; }
 
     /** True while a recent tap has the ship flying to its waypoint (not during a barrage, which suspends it). */
     public boolean isManual() { return manualT > 0f && barrageT < 0f; }
@@ -439,6 +447,9 @@ public final class GameWorld {
         wpBearing = (float) Math.atan2(wpY - ship.y, wpX - ship.x);
         arrived = false;
         endFacing();
+        // retarget at once: the desired velocity (and the turn, flip or burn it drives) and any dodge were for the old goal
+        snap = true;
+        dodgeT = 0f;
         manualT = cfg.manualHoldSeconds;
         manualAge = 0f;
         arrivedAge = -1f;
@@ -776,7 +787,7 @@ public final class GameWorld {
                 float dx = s.x - r.x, dy = s.y - r.y;
                 float d = hypot(dx, dy);
                 if (d == 0) d = 1;
-                float lim = r.r * 0.82f + cfg.shipRadius;
+                float lim = hitRadius(r);
                 if (d < lim) {
                     float nx = dx / d, ny = dy / d;
                     s.x = r.x + nx * (lim + 1);
@@ -825,16 +836,16 @@ public final class GameWorld {
     /**
      * The flight computer, a PD controller. Sets angAccel (RCS) and thrustCmd (main engines, 0..1).
      * 1. Desired velocity: toward the goal (the wander target, or in manual mode the waypoint) no faster than the
-     * ship can still flip and brake in time, away from where nearby rocks will be at closest approach, and in from
-     * the screen edges; low-passed over 0.4 s (MANUAL_FILTER in manual mode).
-     * 2. The velocity error sets the wanted heading, so slowing down points the ship against its motion.
-     * 3. RCS: PD on the heading error, the turn rate capped at maxSpin and at what it can still stop from.
-     * 4. Main engines only while the nose is within 20 degrees of the wanted heading.
-     * While facing a target the wanted heading is its bearing and the engines stay off, unless a rock is about to
-     * hit (its path comes within the avoidance clearance in the next 1.6 s): then it flies as above until clear.
+     * ship can still flip and brake in time, and in from the screen edges; low-passed over 0.4 s (MANUAL_FILTER in
+     * manual mode), or taken at once after a new waypoint or a dodge.
+     * 2. Emergency avoidance: while a rock is on a collision course (collisionCourse) the desired velocity is the
+     * current one plus a sideways burn instead; DODGE_SECONDS after the last such step it flies on to the goal.
+     * 3. The velocity error sets the wanted heading, so slowing down points the ship against its motion.
+     * 4. RCS: PD on the heading error, the turn rate capped at maxSpin and at what it can still stop from.
+     * 5. Main engines only while the nose is within 20 degrees of the wanted heading.
+     * While facing a target the wanted heading is its bearing and the engines stay off, unless it is dodging.
      * Manual mode flies up to MANUAL_SPEED x faster with MANUAL_LEAD more braking lead, slows in proportion within
-     * ARRIVE_SLOW of the waypoint, aims along the tangent that clears a rock lying across its straight line, turns a
-     * dodge that would hold it back into a swerve, and once arrived faces the way it came.
+     * ARRIVE_SLOW of the waypoint, dodges on a shorter horizon, and once arrived faces the way it came.
      */
     private void pilot(float dt) {
         float k = cfg.k;
@@ -858,85 +869,14 @@ public final class GameWorld {
         float dx = gx - s.x, dy = gy - s.y, d = hypot(dx, dy);
         if (manual && !arrived && d < ARRIVE_NEAR * k && hypot(s.vx, s.vy) < ARRIVE_SPEED * k) arrived = true;
         float vx = 0f, vy = 0f;
-        boolean threat = false;
         if (d > 1e-3f) {
             // manual mode allows for the filter's lag on top of the flip, so it brakes in time instead of overshooting
             float ab = 0.8f * cfg.thrust, tf = cfg.flipTime + (manual ? MANUAL_LEAD : 0f), dd = Math.max(0f, d - 10f * k);
             float sp = Math.min(vmax, ab * ((float) Math.sqrt(tf * tf + 2f * dd / ab) - tf));
-            float ux = dx / d, uy = dy / d;
-            if (manual) {
-                sp = Math.min(sp, vmax * d / (ARRIVE_SLOW * k)); // arrival: ease in, do not overshoot
-                // a rock across the straight line to the waypoint: aim along the tangent that clears it instead
-                Rock block = null;
-                float bestAlong = d;
-                for (int i = 0; i < rocks.size(); i++) {
-                    Rock r = rocks.get(i);
-                    float rx = r.x - s.x, ry = r.y - s.y, along = rx * ux + ry * uy;
-                    float clear = r.r + 40f * k;
-                    if (along <= 0f || along >= bestAlong || hypot(rx, ry) > r.r + 260f * k) continue;
-                    if (Math.abs(rx * uy - ry * ux) < clear) {
-                        block = r;
-                        bestAlong = along;
-                    }
-                }
-                if (block != null) {
-                    float rx = block.x - s.x, ry = block.y - s.y, rd = hypot(rx, ry), clear = block.r + 40f * k;
-                    // pass on the side the ship already sits off the rock's centre line (to starboard if dead on)
-                    float side = rx * uy - ry * ux >= 0f ? 1f : -1f;
-                    float off = rd > clear ? (float) Math.asin(clear / rd) : (float) (Math.PI / 2);
-                    float ta = (float) Math.atan2(ry, rx) + side * off;
-                    ux = (float) Math.cos(ta);
-                    uy = (float) Math.sin(ta);
-                }
-            }
-            vx = ux * sp;
-            vy = uy * sp;
+            if (manual) sp = Math.min(sp, vmax * d / (ARRIVE_SLOW * k)); // arrival: ease in, do not overshoot
+            vx = dx / d * sp;
+            vy = dy / d * sp;
         }
-        float ax = 0f, ay = 0f, avoid = cfg.maxSpeed * 1.4f;
-        for (int i = 0; i < rocks.size(); i++) {
-            Rock r = rocks.get(i);
-            float rx = r.x - s.x, ry = r.y - s.y, nowD = hypot(rx, ry);
-            if (nowD > r.r + 260f * k) continue;
-            float rvx = r.vx - s.vx, rvy = r.vy - s.vy, rv2 = rvx * rvx + rvy * rvy;
-            float tc = rv2 > 1e-6f ? clamp(-(rx * rvx + ry * rvy) / rv2, 0f, 1.6f) : 0f;
-            float cx = rx + rvx * tc, cy = ry + rvy * tc, cd = hypot(cx, cy);
-            float clear = r.r + 40f * k;
-            float u = cd < clear ? (1f - cd / clear) * (1f - 0.5f * tc / 1.6f) : 0f;
-            if (tc > 0 && cd < clear) threat = true; // closing, and its path comes within the clearance
-            float near = 1f - nowD / (r.r + 50f * k);
-            if (near > u) {
-                u = near;
-                cx = rx;
-                cy = ry;
-                cd = nowD;
-            }
-            if (u <= 0) continue;
-            if (cd < 1e-3f) {
-                float rv = (float) Math.sqrt(rv2);
-                if (rv == 0) rv = 1;
-                cx = -rvy / rv;
-                cy = rvx / rv;
-                cd = 1;
-            }
-            ax -= cx / cd * u * avoid;
-            ay -= cy / cd * u * avoid;
-        }
-        if (manual && d > 1e-3f) { // swerve, do not stall: most of a push back against the goal goes sideways
-            float ux = dx / d, uy = dy / d, along = ax * ux + ay * uy;
-            if (along < 0f) {
-                float lx = ax - along * ux, ly = ay - along * uy, lm = hypot(lx, ly);
-                if (lm < 1e-3f) { // head-on: pass on the side the ship already sits off the line to the goal
-                    float side = (-uy) * (s.x - gx) + ux * (s.y - gy) >= 0f ? 1f : -1f;
-                    lx = -uy * side;
-                    ly = ux * side;
-                    lm = 1f;
-                }
-                ax = lx + lx / lm * -along * SWERVE + ux * along * (1f - SWERVE);
-                ay = ly + ly / lm * -along * SWERVE + uy * along * (1f - SWERVE);
-            }
-        }
-        vx += ax;
-        vy += ay;
         float m = EDGE_BAND * k, ev = cfg.maxSpeed;
         if (s.x < m) vx += (m - s.x) / m * ev;
         if (s.x > w - m) vx -= (s.x - w + m) / m * ev;
@@ -947,9 +887,24 @@ public final class GameWorld {
             vx *= vmax / vm;
             vy *= vmax / vm;
         }
-        float lp = 1f - (float) Math.exp(-dt / (manual ? MANUAL_FILTER : 0.4f));
-        desVx += (vx - desVx) * lp;
-        desVy += (vy - desVy) * lp;
+        if (collisionCourse(manual ? DODGE_HORIZON_MANUAL : DODGE_HORIZON)) {
+            dodgeT = DODGE_SECONDS;
+        } else if (dodgeT > 0f) {
+            dodgeT -= dt;
+            if (dodgeT <= 0f) { // the dodge is over: straight back to the goal, no filter lag
+                dodgeT = 0f;
+                snap = true;
+            }
+        }
+        if (dodgeT > 0f) { // keep the velocity it has and burn sideways
+            desVx = s.vx + dodgeX * DODGE_SPEED * cfg.maxSpeed;
+            desVy = s.vy + dodgeY * DODGE_SPEED * cfg.maxSpeed;
+        } else {
+            float lp = snap ? 1f : 1f - (float) Math.exp(-dt / (manual ? MANUAL_FILTER : 0.4f));
+            snap = false;
+            desVx += (vx - desVx) * lp;
+            desVy += (vy - desVy) * lp;
+        }
 
         float ex = desVx - s.vx, ey = desVy - s.vy, em = hypot(ex, ey);
         if (pointing) {
@@ -961,8 +916,7 @@ public final class GameWorld {
             pointing = true;
         }
         float want = pointing ? (float) Math.atan2(ey, ex) : manual && arrived ? wpBearing : holdAngle;
-        evading = facing && threat;
-        boolean aiming = facing && !threat;
+        boolean aiming = facing && dodgeT <= 0f;
         if (aiming) {
             want = (float) Math.atan2(aimTargetY() - s.y, aimTargetX() - s.x);
             holdAngle = s.angle; // a dodge that starts mid-turn holds this heading, not a stale one
@@ -985,6 +939,49 @@ public final class GameWorld {
         thrustCmd = burning ? clamp(em / (0.25f * cfg.thrust), 0.3f, 1f) * (float) Math.cos(ae) : 0f;
     }
 
+    /**
+     * True when a rock is on a collision course: with both holding their velocities, it comes within the hit radius
+     * plus DODGE_MARGIN of the ship within the next `horizon` seconds. Then (dodgeX, dodgeY) is the way to dodge the
+     * soonest such rock: away from where it will pass (on the side a dodge already under way took, or for a rock dead
+     * on, the side the nose is already turned to), within DODGE_CONE of square to their relative motion and as near
+     * the nose as that allows, so the turn is short and the burn starts soon.
+     */
+    private boolean collisionCourse(float horizon) {
+        Ship s = ship;
+        float margin = DODGE_MARGIN * cfg.k, soonest = horizon;
+        Rock threat = null;
+        float cx = 0f, cy = 0f, rvx = 0f, rvy = 0f;
+        for (int i = 0; i < rocks.size(); i++) {
+            Rock r = rocks.get(i);
+            float rx = r.x - s.x, ry = r.y - s.y, ux = r.vx - s.vx, uy = r.vy - s.vy, u2 = ux * ux + uy * uy;
+            if (u2 < 1e-6f) continue; // not closing
+            float tc = -(rx * ux + ry * uy) / u2; // time of closest approach
+            if (tc <= 0f) continue; // moving apart (one already touching is the bump's business)
+            float t = Math.min(tc, horizon), px = rx + ux * t, py = ry + uy * t;
+            if (hypot(px, py) >= hitRadius(r) + margin || (threat != null && t >= soonest)) continue;
+            soonest = t;
+            threat = r;
+            cx = rx + ux * tc;
+            cy = ry + uy * tc;
+            rvx = ux;
+            rvy = uy;
+        }
+        if (threat == null) return false;
+        float u = hypot(rvx, rvy), nx = -rvy / u, ny = rvx / u; // square to the relative motion
+        float side;
+        if (dodgeT > 0f) side = nx * dodgeX + ny * dodgeY;
+        else if (hypot(cx, cy) > DODGE_DEAD_ON * hitRadius(threat)) side = -(nx * cx + ny * cy);
+        else side = nx * (float) Math.cos(s.angle) + ny * (float) Math.sin(s.angle);
+        float a = (float) Math.atan2(side < 0f ? -ny : ny, side < 0f ? -nx : nx);
+        a += clamp(wrapAngle(s.angle - a), -DODGE_CONE, DODGE_CONE);
+        dodgeX = (float) Math.cos(a);
+        dodgeY = (float) Math.sin(a);
+        return true;
+    }
+
+    /** The ship and a rock touch when their centres are closer than this. */
+    private float hitRadius(Rock r) { return r.r * 0.82f + cfg.shipRadius; }
+
     /** RCS event: a nose and a tail jet on opposite sides, turning the ship dir (+1 clockwise) at strength 0..1. */
     private void fireRcs(int dir, float strength) {
         rcsPort[0] = ShipShape.RCS_NOSE;
@@ -1006,8 +1003,16 @@ public final class GameWorld {
     static final float ARRIVE_SLOW = 120f, ARRIVE_NEAR = 40f, ARRIVE_SPEED = 20f;
     /** Manual mode's desired-velocity filter, s (the autopilot's is 0.4), and the extra braking lead it allows for, s. */
     static final float MANUAL_FILTER = 0.25f, MANUAL_LEAD = 0.3f;
-    /** The share of a manual-mode dodge that would push back against the goal turned into a sideways swerve. */
-    private static final float SWERVE = 0.7f;
+    /**
+     * Emergency avoidance: the ship dodges only a rock that will come within its hit radius plus DODGE_MARGIN (mockup
+     * px) within DODGE_HORIZON seconds (DODGE_HORIZON_MANUAL in manual mode, so a tap is obeyed), burning sideways
+     * (within DODGE_CONE of square to the rock's relative motion) for DODGE_SECONDS after the last such step, up to
+     * DODGE_SPEED x the cruise speed on top of the velocity it has. A rock passing within DODGE_DEAD_ON of its hit
+     * radius is dead on: the dodge then goes the way the nose is already turned.
+     */
+    static final float DODGE_HORIZON = 1f, DODGE_HORIZON_MANUAL = 0.5f, DODGE_MARGIN = 8f;
+    static final float DODGE_SECONDS = 0.25f, DODGE_SPEED = 1f, DODGE_DEAD_ON = 0.25f;
+    static final float DODGE_CONE = (float) Math.toRadians(45);
 
     /** Auto-fire: the nearest rock within 0.6 of the short side, or null. */
     private Rock nearestRock() {

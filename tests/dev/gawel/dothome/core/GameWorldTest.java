@@ -238,17 +238,63 @@ public final class GameWorldTest {
             g.rocks().clear();
             stepClear(g, 1.3f);
             GameWorld.Ship s = g.ship();
-            GameWorld.Rock keep = g.addRock(3, s.x, s.y - 200, 0, 40);
-            // pin the wander target on the far side of the rock so only avoidance keeps the ship clear
-            g.setWanderTargetForTest(s.x, s.y - 280);
+            // its path would pass 25 px from the ship's centre, well inside the 38.5 px hit radius
+            GameWorld.Rock keep = g.addRock(3, s.x + 25, s.y - 200, 0, 40);
+            boolean dodged = false;
             for (int i = 0; i < 313; i++) {
                 for (int j = g.rocks().size() - 1; j >= 0; j--) if (g.rocks().get(j) != keep) g.rocks().remove(j);
+                // pin the wander target on the far side of the rock so only the dodge keeps the ship clear
                 g.setWanderTargetForTest(310, 100);
+                float gap = (float) Math.hypot(s.x - keep.x, s.y - keep.y) - 46.5f;
+                float rvx = keep.vx - s.vx, rvy = keep.vy - s.vy, toTouch = gap / Math.max(1f, (float) Math.hypot(rvx, rvy));
                 g.step(0.016f);
+                if (g.evading() && !dodged) {
+                    dodged = true;
+                    T.check(toTouch <= 1f + 0.016f, "seed " + seed + ": no dodge earlier than 1 s out: " + toTouch);
+                }
             }
+            T.check(dodged, "seed " + seed + ": it dodged");
             if (c.hits == 0) clean++;
         }
         T.check(clean >= 4, "clean dodges " + clean + " of 5");
+    }
+
+    /** Idle (station-keeping), the ship is not pushed around by a rock drifting past; one about to hit it is dodged. */
+    public static void testIdleAutopilotIgnoresARockThatWillMiss() {
+        for (int pass = 0; pass < 2; pass++) {
+            boolean hit = pass == 1;
+            GameWorld g = world(new Count());
+            stepClear(g, 1.3f);
+            GameWorld.Ship s = g.ship();
+            s.vx = s.vy = s.spin = 0f;
+            float x0 = s.x, y0 = s.y, a0 = s.angle;
+            // a big rock drifting right at 28 px/s, passing 60 px below the ship (outside 38.5 + 8) or straight at it
+            GameWorld.Rock keep = g.addRock(3, x0 - 150, y0 + (hit ? 0 : 60), 28, 0);
+            boolean dodged = false;
+            float moved = 0f, turned = 0f;
+            for (int i = 0; i < Math.round(9f / 0.016f); i++) {
+                for (int j = g.rocks().size() - 1; j >= 0; j--) if (g.rocks().get(j) != keep) g.rocks().remove(j);
+                g.setWanderTargetForTest(x0, y0);
+                float toTouch = ((float) Math.hypot(s.x - keep.x, s.y - keep.y) - 46.5f) / 28f;
+                g.step(0.016f);
+                if (g.evading() && !dodged) {
+                    dodged = true;
+                    T.check(toTouch <= 1f + 0.016f, "no dodge earlier than 1 s out: " + toTouch);
+                }
+                if (!dodged) {
+                    moved = Math.max(moved, (float) Math.hypot(s.x - x0, s.y - y0));
+                    turned = Math.max(turned, Math.abs(GameWorld.wrapAngle(s.angle - a0)));
+                }
+            }
+            if (hit) {
+                T.check(dodged, "a rock about to hit it is dodged");
+            } else {
+                T.check(!dodged, "a rock that will miss is not dodged");
+                T.check(keep.x > x0 + 100, "the rock went by");
+            }
+            T.check(moved < 1f, "not pushed before any dodge: " + moved + " px");
+            T.check(turned < 1 * (float) Math.PI / 180, "not turned before any dodge: " + turned);
+        }
     }
 
     public static void testAutopilotNotStuckInCorner() {

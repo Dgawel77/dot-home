@@ -3,8 +3,10 @@ package dev.gawel.dothome.core;
 import dev.gawel.dothome.test.T;
 
 /**
- * A tap is a waypoint: until the later of 4 s after the last tap and 2 s after it arrives (12 s cap) the flight computer flies the ship there (Newtonian, flip and
- * burn, still dodging rocks) and holds station once it arrives; then the autopilot wanders again.
+ * A tap is a waypoint: until the later of 4 s after the last tap and 2 s after it arrives (12 s cap) the flight
+ * computer flies the ship straight there (Newtonian, flip and burn) and holds station once it arrives; then the
+ * autopilot wanders again. Rocks it would merely pass are ignored; only one on a collision course within 0.5 s makes
+ * it dodge, briefly. A newer tap retargets at once.
  */
 public final class ManualModeTest {
     private ManualModeTest() {}
@@ -39,6 +41,53 @@ public final class ManualModeTest {
     private static float dist(GameWorld g, float x, float y) { return (float) Math.hypot(g.ship().x - x, g.ship().y - y); }
 
     private static float speed(GameWorld.Ship s) { return (float) Math.sqrt(s.vx * s.vx + s.vy * s.vy); }
+
+    /** Removes every rock but the kept ones (the spawner's, and the pieces of one a stray bolt splits). */
+    private static void keepOnly(GameWorld g, GameWorld.Rock... keep) {
+        outer:
+        for (int j = g.rocks().size() - 1; j >= 0; j--) {
+            for (GameWorld.Rock r : keep) if (g.rocks().get(j) == r) continue outer;
+            g.rocks().remove(j);
+        }
+    }
+
+    /** The ship's velocity toward (x, y), px/s. */
+    private static float closing(GameWorld g, float x, float y) {
+        GameWorld.Ship s = g.ship();
+        float dx = x - s.x, dy = y - s.y, d = (float) Math.hypot(dx, dy);
+        return (s.vx * dx + s.vy * dy) / d;
+    }
+
+    /** Seconds a clean 300 px trip (from rest, the tap 90 degrees off the heading) takes to arrive, measured. */
+    private static final float TRIP_300 = 3.89f;
+
+    /**
+     * The ship at rest at (110, 560) heading up, a tap 300 px to its right, and, when rocks is set, rocks it passes
+     * without touching: two still big ones 70 px either side of the straight line and a small one drifting down
+     * across it well ahead. The old avoidance (73.5 px clearance around a big rock) would have swerved round all
+     * three. Returns the heading at each step until arrival (NaN after), and the arrival time in [0].
+     */
+    private static float[] tripPastRocks(boolean rocks) {
+        GameWorld g = live(13);
+        place(g, 110, 560);
+        GameWorld.Rock[] keep = rocks
+            ? new GameWorld.Rock[] {g.addRock(3, 230, 490, 0, 0), g.addRock(3, 330, 630, 0, 0), g.addRock(2, 300, 380, 0, 40)}
+            : new GameWorld.Rock[0];
+        g.aim(410, 560);
+        int n = Math.round(6f / DT);
+        float[] out = new float[n + 1];
+        java.util.Arrays.fill(out, Float.NaN);
+        out[0] = -1;
+        for (int i = 1; i <= n && out[0] < 0; i++) {
+            g.step(DT);
+            g.shots().clear();
+            keepOnly(g, keep);
+            T.check(!g.evading(), "no dodge: nothing is on a collision course (" + i * DT + " s)");
+            out[i] = g.ship().angle;
+            if (g.arrived()) out[0] = i * DT;
+        }
+        return out;
+    }
 
     /** Ship start and tap point, 400 px apart: to the right, straight ahead, behind, and on a diagonal. */
     private static final float[][] FLIGHTS = {{110, 560, 510, 560}, {310, 600, 310, 200}, {310, 200, 310, 600}, {500, 200, 180, 440}};
@@ -105,7 +154,62 @@ public final class ManualModeTest {
         T.check(burns > 30, "the engines fire: " + burns);
     }
 
-    public static void testRockOnTheStraightPathIsAvoided() {
+    public static void testTapIsObeyedPastRocksItWillNotHit() {
+        float[] clean = tripPastRocks(false), rocky = tripPastRocks(true);
+        T.near(TRIP_300, clean[0], 0.1, "a clean 300 px trip takes what it measured");
+        T.check(rocky[0] > 0 && rocky[0] <= TRIP_300 * 1.2f, "arrives as fast as the physics allows (+20%): " + rocky[0] + " s");
+        float worst = 0f, facing = -1f;
+        for (int i = 1; i < clean.length && !Float.isNaN(clean[i]) && !Float.isNaN(rocky[i]); i++) {
+            worst = Math.max(worst, Math.abs(GameWorld.wrapAngle(rocky[i] - clean[i])));
+            if (facing < 0 && Math.abs(rocky[i]) < 10 * DEG) facing = i * DT; // the waypoint bears 0 degrees
+        }
+        T.check(worst <= 5 * DEG, "the rocks do not deflect the heading: " + worst / DEG + " degrees");
+        T.check(facing > 0 && facing <= 1f, "it turns onto the waypoint's bearing within 1 s: " + facing);
+    }
+
+    public static void testDodgesOnlyARockOnACollisionCourseWithinHalfASecond() {
+        // in flight to the right at 140 px/s; a big rock dead ahead touches (hit radius 38.5 px, +8 margin) 1 s out
+        for (int pass = 0; pass < 2; pass++) {
+            boolean hit = pass == 0;
+            GameWorld g = live(14);
+            place(g, 110, 560);
+            GameWorld.Ship s = g.ship();
+            s.angle = 0f;
+            s.vx = 140f;
+            float rx = 110 + 46.5f + 140, ry = hit ? 560 : 560 + 60; // the miss passes 60 px off, outside 46.5
+            GameWorld.Rock rock = g.addRock(3, rx, ry, 0, 0);
+            g.aim(510, 560);
+            GameWorld twin = live(14);
+            place(twin, 110, 560);
+            twin.ship().angle = 0f;
+            twin.ship().vx = 140f;
+            twin.aim(510, 560);
+            float dodgedAt = -1, worst = 0;
+            for (int i = 1; i <= Math.round(2f / DT); i++) {
+                float gap = (float) Math.hypot(s.x - rx, s.y - ry) - 46.5f, toTouch = gap / Math.max(1f, closing(g, rx, ry));
+                g.step(DT);
+                twin.step(DT);
+                g.shots().clear();
+                twin.shots().clear();
+                keepOnly(g, rock);
+                keepOnly(twin);
+                if (g.evading() && dodgedAt < 0) {
+                    dodgedAt = i * DT;
+                    T.check(toTouch <= 0.5f + DT, "no dodge earlier than 0.5 s out: " + toTouch + " s");
+                }
+                if (dodgedAt < 0) worst = Math.max(worst, Math.abs(GameWorld.wrapAngle(s.angle - twin.ship().angle)));
+            }
+            if (hit) {
+                T.check(dodgedAt > 0, "a rock about to hit makes it dodge");
+                T.check(worst <= 1e-6f, "and nothing before then: " + worst / DEG);
+            } else {
+                T.eq(-1f, dodgedAt, "a rock it will pass is no reason to dodge");
+                T.check(worst <= 5 * DEG, "nor to turn: " + worst / DEG + " degrees");
+            }
+        }
+    }
+
+    public static void testRockOnTheStraightPathOnlyBumpsIt() {
         for (float[] f : FLIGHTS) {
             Count c = new Count();
             GameWorld g = live(4);
@@ -114,15 +218,17 @@ public final class ManualModeTest {
             float tx = f[2], ty = f[3];
             GameWorld.Rock keep = g.addRock(3, (f[0] + tx) / 2, (f[1] + ty) / 2, 0, 0);
             g.aim(tx, ty);
-            float reached = -1, clearance = 1e9f;
+            float reached = -1;
+            boolean dodged = false;
             for (int i = 1; i <= Math.round(7f / DT); i++) {
                 g.step(DT);
-                g.shots().clear(); // only the dodge is under test, not the guns
-                for (int j = g.rocks().size() - 1; j >= 0; j--) if (g.rocks().get(j) != keep) g.rocks().remove(j);
-                clearance = Math.min(clearance, (float) Math.hypot(g.ship().x - keep.x, g.ship().y - keep.y));
+                g.shots().clear(); // only the flight is under test, not the guns
+                keepOnly(g, keep);
+                dodged |= g.evading();
                 if (reached < 0 && dist(g, tx, ty) < 60) reached = i * DT;
             }
-            T.eq(0, c.hits, f[0] + "," + f[1] + ": no collision (closest " + clearance + " px from the centre)");
+            T.check(dodged, f[0] + "," + f[1] + ": the emergency dodge fires");
+            T.check(c.hits <= 1, f[0] + "," + f[1] + ": at most a bump: " + c.hits);
             T.check(reached > 0, f[0] + "," + f[1] + ": still reaches the waypoint, now " + dist(g, tx, ty) + " px off");
         }
     }
@@ -144,6 +250,50 @@ public final class ManualModeTest {
         }
         T.check(best < d0 - 200, "it heads for the newer tap: " + best + " from " + d0);
         T.check(dist(g, 510, 560) > 150, "not the old one");
+    }
+
+    /** Seconds a reversal (flying right at about 130 px/s, then a tap 90 px behind) takes to close on the new point, measured. */
+    private static final float REVERSE = 2.03f;
+
+    public static void testOppositeTapReversesAtOnce() {
+        GameWorld g = live(5);
+        place(g, 110, 560);
+        g.aim(510, 560);
+        for (int i = 0; i < Math.round(1.5f / DT); i++) {
+            g.step(DT);
+            g.shots().clear();
+        }
+        T.check(g.ship().vx > 120 && g.engineCommand() > 0, "burning right: " + g.ship().vx);
+        g.aim(80, 560);
+        g.step(DT);
+        g.shots().clear();
+        T.eq(0f, g.engineCommand(), "the burn for the old point stops at once");
+        T.check(Math.abs(g.headingError()) > 150 * DEG, "and it wants to face the new one: " + g.headingError() / DEG);
+        float toward = -1;
+        for (int i = 2; i <= Math.round(4f / DT) && toward < 0; i++) {
+            g.step(DT);
+            g.shots().clear();
+            if (closing(g, 80, 560) > 0) toward = i * DT;
+        }
+        T.check(toward > 0 && toward <= REVERSE * 1.2f, "closing on the new point within " + REVERSE * 1.2f + " s: " + toward);
+    }
+
+    public static void testTapAheadDropsABrakingFlip() {
+        GameWorld g = live(5);
+        place(g, 110, 560);
+        g.aim(330, 560);
+        boolean braking = false;
+        for (int i = 0; i < Math.round(4f / DT) && !braking; i++) {
+            g.step(DT);
+            g.shots().clear();
+            braking = g.engineCommand() > 0 && Math.cos(g.ship().angle) < -0.9 && g.ship().vx > 30;
+        }
+        T.check(braking, "flipped and braking for the first tap");
+        g.aim(540, 560); // further on: no more braking
+        g.step(DT);
+        g.shots().clear();
+        T.eq(0f, g.engineCommand(), "the braking burn stops at once");
+        T.check(Math.abs(g.headingError()) > 150 * DEG, "it wants to face forward again: " + g.headingError() / DEG);
     }
 
     public static void testEachTapFiresExactlyOneBoltAlongTheHeading() {
@@ -274,15 +424,20 @@ public final class ManualModeTest {
 
     public static void testDeterministic() {
         float[] out = new float[2];
+        int[] dodges = new int[2];
         for (int r = 0; r < 2; r++) {
             GameWorld g = live(12);
-            g.addRock(3, 400, 450, -8, 5);
+            g.addRock(3, 400, 450, -8, 5); // across the first leg: an emergency dodge
             g.aim(510, 590);
-            for (int i = 0; i < 100; i++) g.step(DT);
-            g.aim(60, 200);
-            for (int i = 0; i < 600; i++) g.step(DT);
+            for (int i = 0; i < 700; i++) {
+                if (i == 100) g.aim(60, 200);
+                g.step(DT);
+                if (g.evading()) dodges[r]++;
+            }
             out[r] = g.ship().x * 1000f + g.ship().y + g.ship().angle;
         }
+        T.check(dodges[0] > 0, "the flight includes a dodge");
+        T.eq(dodges[0], dodges[1], "the same dodges");
         T.eq(out[0], out[1], "same seed, same flight");
     }
 }
