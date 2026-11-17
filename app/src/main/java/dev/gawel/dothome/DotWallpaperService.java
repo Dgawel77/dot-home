@@ -332,6 +332,7 @@ public class DotWallpaperService extends WallpaperService {
                     }
                     world.step(dt);
                     renderer.advance(world, dt);
+                    renderer.setBeat(hub.beatLevel(android.os.SystemClock.elapsedRealtime()));
                 }
                 drawFrame(world);
             }

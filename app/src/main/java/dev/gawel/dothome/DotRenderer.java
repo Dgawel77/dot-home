@@ -140,6 +140,7 @@ final class DotRenderer {
     private final float[] barrelX = new float[8], barrelY = new float[8];
     private float lastIntroT;
 
+    private float beat;
     private float parTx, parTy, parX, parY;
 
     private int lastToday = -1, lastBest = -1;
@@ -184,6 +185,9 @@ final class DotRenderer {
 
     /** Outline rocks (free outline dots and stipple) instead of lattice silhouettes; the Setup "Rock style" pick. */
     void setOutlineRocks(boolean on) { outlineRocks = on; }
+
+    /** The music's bass pulse, 0..1; live frames only. */
+    void setBeat(float pulse) { beat = pulse == pulse ? clamp(pulse, 0f, 1f) : 0f; }
 
     /** Target parallax tilt in [-1, 1]; the drawn offset eases toward it. */
     void setParallax(float tx, float ty) {
@@ -514,6 +518,8 @@ final class DotRenderer {
             float twinkle = 0.35f + 0.65f * (0.5f + 0.5f * (float) Math.sin(TAU * t / st.period + st.phase));
             float r = st.depth >= NEAR_DEPTH ? rLight * NEAR_SCALE : rLight;
             if (st.bright) r = rLight * BRIGHT_SCALE;
+            float pulse = still ? 0f : beat;
+            r *= 1f + cfg.beatScale * pulse;
             float a = st.alpha * twinkle;
             SoftDot sd = st.bright ? user : dot65;
             if (!still && st.glint > 0f) {
@@ -525,7 +531,7 @@ final class DotRenderer {
                 float[] cx = {cs, -cs, 0, 0}, cy = {0, 0, cs, -cs};
                 for (int q = 0; q < 4; q++) dot65.draw(c, qx + cx[q], qy + cy[q], cr, e * g * fade);
             }
-            sd.draw(c, qx, qy, r, a * fog * dayDim * fade);
+            sd.draw(c, qx, qy, r, Math.min(1f, a * fog * dayDim * fade + cfg.beatAlpha * pulse * fade));
         }
         drawMoon(c, w, cfg, fade);
         drawPrecip(c, w, fade);

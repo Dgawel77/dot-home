@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.util.Log;
@@ -19,6 +20,7 @@ import dev.gawel.dothome.core.GameWorld;
 import dev.gawel.dothome.core.IntroGate;
 import dev.gawel.dothome.core.MilestoneShapes;
 import dev.gawel.dothome.core.Milestones;
+import dev.gawel.dothome.core.NowPlaying;
 import dev.gawel.dothome.core.Rng;
 import dev.gawel.dothome.core.Sky;
 import dev.gawel.dothome.core.Weather;
@@ -49,6 +51,7 @@ final class GameHub {
     private FireMode fireMode;
     private DotRenderer renderer;
     private long hiddenAtMs = -1;
+    private final BeatPulse beat = new BeatPulse();
     private final KeyguardManager keyguard;
     /** When the opening dot plays: the first show after a screen-off and unlock; folds and flips skip it. */
     private final IntroGate introGate = new IntroGate();
@@ -200,7 +203,21 @@ final class GameHub {
         scoreBook.refresh(); // rolls the day over at midnight while visible
         if (nowMs - weatherFxAtMs >= WEATHER_REFRESH_MS) refreshWeatherFx(nowMs);
         world.setDayness(Sky.dayness(nowMs, sunriseMs, sunsetMs));
+        updateBeat();
     }
+
+    /** Capture runs only while the pref is on, the permission is granted, something shows and music plays. */
+    private void updateBeat() {
+        NowPlaying np = MusicWidget.last();
+        boolean want = "true".equals(prefs.get(PrefsStore.KEY_BEAT, "false"))
+                && appContext.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+                    == PackageManager.PERMISSION_GRANTED
+                && !visible.isEmpty() && np != null && np.playing;
+        if (want) beat.start(); else beat.stop();
+    }
+
+    /** The current beat pulse, 0..1 (0 when not capturing). */
+    float beatLevel(long nowMs) { return beat.level(nowMs); }
 
     /** Recomputes the game's weather from the cache (it allocates, so only on a refresh, never per frame). */
     private void refreshWeatherFx(long nowMs) {
@@ -234,6 +251,7 @@ final class GameHub {
         scoreBook.refresh(); // score writes are already applied to prefs; this just rolls the day over
         if (visible.isEmpty()) {
             tilt.stop();
+            beat.stop();
             setBattery(false);
             world.setTilt(0f, 0f);
             if (renderer != null) renderer.resetParallax();

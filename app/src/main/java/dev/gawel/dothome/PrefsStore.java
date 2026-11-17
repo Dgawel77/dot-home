@@ -12,6 +12,8 @@ final class PrefsStore implements KeyValueStore {
     static final String ROCK_LATTICE = "lattice";
     /** Beta: set the lock wallpaper to a dimmed still of the game on screen-off ("true"/"false", default off). */
     static final String KEY_LOCK_LIVE = "lock.live";
+    /** Opt-in: stars pulse to the music ("true"/"false", default off); needs RECORD_AUDIO. */
+    static final String KEY_BEAT = "beat.on";
     static final String ROCK_OUTLINE = "outline";
 
     private final SharedPreferences prefs;

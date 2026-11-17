@@ -51,6 +51,7 @@ public final class AllTests {
         dev.gawel.dothome.core.PrecipTest.class,
         dev.gawel.dothome.core.ChargeStreamTest.class,
         dev.gawel.dothome.core.MilestonesTest.class,
+        dev.gawel.dothome.core.BeatDetectorTest.class,
     };
 
     public static void main(String[] args) throws Exception {

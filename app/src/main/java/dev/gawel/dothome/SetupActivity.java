@@ -30,7 +30,9 @@ import dev.gawel.dothome.core.FireMode;
  * in onResume.
  */
 public class SetupActivity extends Activity {
-    private static final int REQ_LOCATION = 1;
+    private static final int REQ_LOCATION = 1, REQ_AUDIO = 2;
+
+    private Switch beatSwitch;
 
     private TextView stepLocation, stepBackground, stepNotifications, stepWallpaper;
 
@@ -128,6 +130,20 @@ public class SetupActivity extends Activity {
         lockLive.setOnCheckedChangeListener((b, on) -> prefs.put(PrefsStore.KEY_LOCK_LIVE, on ? "true" : "false"));
         parent.addView(lockLive, parent.indexOfChild(backdrop) + 1);
 
+        beatSwitch = new Switch(this);
+        beatSwitch.setText("Stars pulse to music (uses the microphone permission)");
+        beatSwitch.setTextColor(0xFFFFFFFF);
+        beatSwitch.setChecked("true".equals(prefs.get(PrefsStore.KEY_BEAT, "false"))
+                && hasPermission(Manifest.permission.RECORD_AUDIO));
+        beatSwitch.setOnCheckedChangeListener((b, on) -> {
+            BeatPulse.clearFailure();
+            prefs.put(PrefsStore.KEY_BEAT, on ? "true" : "false");
+            if (on && !hasPermission(Manifest.permission.RECORD_AUDIO)) {
+                requestPermissions(new String[] {Manifest.permission.RECORD_AUDIO}, REQ_AUDIO);
+            }
+        });
+        parent.addView(beatSwitch, parent.indexOfChild(lockLive) + 1);
+
         setupBlueLine();
 
         WeatherJob.schedule(this);
@@ -198,6 +214,12 @@ public class SetupActivity extends Activity {
         if (requestCode == REQ_LOCATION) {
             onResume();
             WeatherJob.refreshSoon(this);
+        } else if (requestCode == REQ_AUDIO) {
+            boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+            if (!granted) {
+                new PrefsStore(this).put(PrefsStore.KEY_BEAT, "false");
+                if (beatSwitch != null) beatSwitch.setChecked(false);
+            }
         }
     }
 

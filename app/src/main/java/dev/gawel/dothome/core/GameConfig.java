@@ -87,6 +87,8 @@ public final class GameConfig {
 
     /** By day the stars thin to this fraction of their count and dim to this fraction of their alpha. */
     public final float dayStarCount = 0.6f, dayStarBright = 0.75f;
+    /** Beat pulse: star radius grows by up to this fraction, and alpha rises by up to this, at full pulse. */
+    public final float beatScale = 0.3f, beatAlpha = 0.15f;
     /** The night moon's radius, dp (a 40 dp disc). */
     public final float moonRadiusDp = 20f;
 
