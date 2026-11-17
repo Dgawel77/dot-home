@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Builds app-release.apk without Gradle (JDK + Android SDK under ~/androidtools; run on the NAS).
+# MODULE/PKG/APK pick another module, e.g. `MODULE=torch PKG=dev.gawel.dottorch APK=torch-release.apk ./build.sh`.
 set -euo pipefail
 TOOLS=${TOOLS:-$HOME/androidtools}
 export JAVA_HOME=${JAVA_HOME:-$TOOLS/jdk}
@@ -8,9 +9,12 @@ SDK=$TOOLS/sdk
 BT=$SDK/build-tools/34.0.0
 JAR=$SDK/platforms/android-34/android.jar
 
-OUT=build/apk && rm -rf $OUT && mkdir -p $OUT/classes $OUT/dex
-M=app/src/main
-sed 's#<manifest #<manifest package="dev.gawel.dothome" #' $M/AndroidManifest.xml > $OUT/AndroidManifest.xml
+MODULE=${MODULE:-app}
+PKG=${PKG:-dev.gawel.dothome}
+APK=${APK:-app-release.apk}
+OUT=build/apk-$MODULE && rm -rf $OUT && mkdir -p $OUT/classes $OUT/dex
+M=$MODULE/src/main
+sed "s#<manifest #<manifest package=\"$PKG\" #" $M/AndroidManifest.xml > $OUT/AndroidManifest.xml
 "$BT/aapt2" compile --dir $M/res -o $OUT/res.zip
 ASSETS=()
 [ -d $M/assets ] && ASSETS=(-A $M/assets)
@@ -29,5 +33,5 @@ if [ ! -f "$KS" ]; then
   keytool -genkeypair -keystore "$KS" -storepass android -keypass android -alias dothome \
     -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Dot Home"
 fi
-"$BT/apksigner" sign --ks "$KS" --ks-pass pass:android --out app-release.apk $OUT/aligned.apk
-echo "Built $(pwd)/app-release.apk"
+"$BT/apksigner" sign --ks "$KS" --ks-pass pass:android --out "$APK" $OUT/aligned.apk
+echo "Built $(pwd)/$APK"
