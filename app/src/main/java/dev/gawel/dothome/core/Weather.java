@@ -8,9 +8,18 @@ public final class Weather {
     public final String alert; // nullable
     public final long sunriseMs, sunsetMs, fetchedAtMs;
     public final String place;
+    public final double precipMm;    // 0 if absent
+    public final double visibilityM; // NaN if absent
 
     public Weather(double tempF, double highF, double lowF, double windMph, double windDirDeg, int code,
                    String condition, String alert, long sunriseMs, long sunsetMs, long fetchedAtMs, String place) {
+        this(tempF, highF, lowF, windMph, windDirDeg, code, condition, alert, sunriseMs, sunsetMs, fetchedAtMs,
+            place, 0, Double.NaN);
+    }
+
+    public Weather(double tempF, double highF, double lowF, double windMph, double windDirDeg, int code,
+                   String condition, String alert, long sunriseMs, long sunsetMs, long fetchedAtMs, String place,
+                   double precipMm, double visibilityM) {
         this.tempF = tempF;
         this.highF = highF;
         this.lowF = lowF;
@@ -23,15 +32,17 @@ public final class Weather {
         this.sunsetMs = sunsetMs;
         this.fetchedAtMs = fetchedAtMs;
         this.place = place;
+        this.precipMm = precipMm;
+        this.visibilityM = visibilityM;
     }
 
     public Weather withAlert(String a) {
         return new Weather(tempF, highF, lowF, windMph, windDirDeg, code, condition, a, sunriseMs, sunsetMs,
-            fetchedAtMs, place);
+            fetchedAtMs, place, precipMm, visibilityM);
     }
 
     public Weather withPlace(String p) {
         return new Weather(tempF, highF, lowF, windMph, windDirDeg, code, condition, alert, sunriseMs, sunsetMs,
-            fetchedAtMs, p);
+            fetchedAtMs, p, precipMm, visibilityM);
     }
 }

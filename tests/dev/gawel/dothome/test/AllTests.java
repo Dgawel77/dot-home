@@ -38,6 +38,7 @@ public final class AllTests {
         dev.gawel.dothome.core.ShipFlightTest.class,
         dev.gawel.dothome.core.AimTest.class,
         dev.gawel.dothome.core.ManualModeTest.class,
+        dev.gawel.dothome.core.WeatherFxTest.class,
         dev.gawel.dothome.core.BarrageTest.class,
         dev.gawel.dothome.core.StarsTest.class,
         dev.gawel.dothome.core.MusicSeekTest.class,

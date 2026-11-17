@@ -10,7 +10,7 @@ public final class WeatherUrls {
 
     public static String openMeteo(double lat, double lon) {
         return "https://api.open-meteo.com/v1/forecast?latitude=" + f2(lat) + "&longitude=" + f2(lon)
-            + "&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,precipitation"
+            + "&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,precipitation,visibility"
             + "&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset"
             + "&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=1";
     }

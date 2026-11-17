@@ -29,7 +29,9 @@ public final class OpenMeteoParser {
                 code, WeatherCodes.label(code), null,
                 epochMs(MiniJson.str(first(daily, "sunrise"), null), offset),
                 epochMs(MiniJson.str(first(daily, "sunset"), null), offset),
-                nowMs, null);
+                nowMs, null,
+                MiniJson.num(cur.get("precipitation"), 0),
+                MiniJson.num(cur.get("visibility"), Double.NaN));
         } catch (IllegalArgumentException | java.time.DateTimeException e) {
             return null;
         }

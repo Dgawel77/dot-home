@@ -62,6 +62,33 @@ public final class WeatherTest {
         T.eq(null, w.alert, "original unchanged");
     }
 
+    public static void testParsesVisibilityAndPrecip() {
+        Weather w = OpenMeteoParser.parse(fixture("open-meteo.json"), 1L);
+        T.near(24140, w.visibilityM, 1e-9, "visibility");
+        T.near(0, w.precipMm, 1e-9, "precip");
+        T.near(2.5, OpenMeteoParser.parse("{\"current\":{\"temperature_2m\":1,\"precipitation\":2.5}}", 1L).precipMm,
+            1e-9, "precip value");
+    }
+
+    public static void testMissingVisibilityIsNaN() {
+        Weather w = OpenMeteoParser.parse("{\"current\":{\"temperature_2m\":1}}", 1L);
+        T.check(Double.isNaN(w.visibilityM), "NaN");
+        T.near(0, w.precipMm, 0, "precip default");
+    }
+
+    public static void testUrlRequestsVisibility() {
+        String u = WeatherUrls.openMeteo(41.8781, -87.6298);
+        T.check(u.contains("visibility"), "has visibility");
+        T.eq(1, u.split("api.open-meteo.com", -1).length - 1, "one request");
+    }
+
+    public static void testWithAlertAndPlaceKeepFx() {
+        Weather w = new Weather(1, 2, 0, 3, 4, 61, "x", null, 0, 0, 5, null, 1.5, 900);
+        Weather x = w.withAlert("a").withPlace("p");
+        T.near(1.5, x.precipMm, 0, "precip kept");
+        T.near(900, x.visibilityM, 0, "visibility kept");
+    }
+
     public static void testWeatherCodes() {
         T.eq("Clear", WeatherCodes.label(0), "0");
         T.eq("Mostly clear", WeatherCodes.label(1), "1");
@@ -96,7 +123,7 @@ public final class WeatherTest {
 
     public static void testUrlsExact() {
         T.eq("https://api.open-meteo.com/v1/forecast?latitude=41.88&longitude=-87.63"
-            + "&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,precipitation"
+            + "&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,precipitation,visibility"
             + "&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset"
             + "&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=1",
             WeatherUrls.openMeteo(41.8781, -87.6298), "open-meteo");
