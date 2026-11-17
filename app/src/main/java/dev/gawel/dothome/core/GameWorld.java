@@ -7,9 +7,12 @@ import java.util.List;
  * Pure-Java space-shooter simulation: a self-flying ship, drifting rocks, shots and particles.
  *
  * <p>The ship flies Newtonian (Ship v2, design/mockups/ShipV2.dc.html): it has a heading, a spin and a velocity
- * with near-zero drag, accelerates only along its heading with the main engines and turns only by firing its RCS.
- * A PD autopilot picks a desired velocity (wander target, screen edges), turns toward the heading that velocity
- * error needs, burns only within 20 degrees of it, and so flips and burns to brake. Rocks are dodged only in an
+ * with near-zero drag, accelerates forward with its main engines, backward with its two nose retros (0.45x the
+ * thrust) and turns only by firing its RCS. A PD autopilot picks a desired velocity (wander target, screen edges)
+ * and turns toward the heading that velocity error needs, burning the main engines only within 20 degrees of it.
+ * To brake it does not flip: while the needed acceleration points back along the goal's bearing it keeps its nose
+ * on the goal and slows on the retros, which fire within 30 degrees of straight behind it, alongside any RCS turn.
+ * A goal behind it is still a turn (the retros brake while it turns). Rocks are dodged only in an
  * emergency: when one is on a collision course within the next 1 s (0.5 s in manual mode) the ship burns sideways
  * for a moment, then flies on. Nothing else about the rocks steers it; a rock it does hit just bumps it.
  *
@@ -23,7 +26,7 @@ import java.util.List;
  * same flight computer flies the ship straight to the waypoint instead of a wander target (up to 1.25x the cruise
  * speed, slowing within 120k px of it), dodging only a rock about to hit, and once there holds station facing the
  * way it came. A newer tap retargets at once: the flight computer drops what it was doing for the old point (a turn,
- * a braking flip, a dodge) and flies to the new one. Then the autopilot resumes from the current state with a fresh
+ * a retro brake, a dodge) and flies to the new one. Then the autopilot resumes from the current state with a fresh
  * wander target.
  *
  * <p>The spin barrage (a shake, 30 s cooldown): for 1.6 s the ship spins on the spot, a random way, its spin
@@ -33,9 +36,9 @@ import java.util.List;
  * other bolt. Then manual mode flies on if a tap's 4 s are not yet up (its clock keeps running through the spin),
  * otherwise the autopilot takes over with a fresh wander target, keeping the final heading.
  *
- * <p>Thrusters are reported as per-step events the renderer reads (nozzle thrust levels, RCS firings), kept in
- * fixed arrays so a step allocates nothing for them. Angles are screen angles (y down): a growing angle turns
- * clockwise on screen.
+ * <p>Thrusters are reported as per-step events the renderer reads (nozzle thrust levels, the retro level, RCS
+ * firings), kept in fixed arrays so a step allocates nothing for them. Angles are screen angles (y down): a
+ * growing angle turns clockwise on screen.
  */
 public final class GameWorld {
     public interface Listener {
@@ -136,6 +139,12 @@ public final class GameWorld {
     // velocity, the heading it holds when there is nothing to correct, and its pointing and burning latches
     private float angAccel, thrustCmd, desVx, desVy, holdAngle, headingErr;
     private boolean pointing, burning;
+    /**
+     * The nose retros: the pilot's command and the level it eases to (0..1), its firing latch, and whether it is
+     * braking (the wanted heading keeps the nose on the goal and the retros take the needed acceleration).
+     */
+    private float retroCmd, retroLvl;
+    private boolean retroing, braking;
     /** An emergency dodge: seconds left of it (0 when none) and its sideways direction (a unit vector). */
     private float dodgeT, dodgeX, dodgeY;
     /** The next pilot step takes its desired velocity at once, unfiltered (a new waypoint, or a dodge just over). */
@@ -225,6 +234,9 @@ public final class GameWorld {
 
     /** Main-engine thrust of nozzle i (ShipShape: 0 port, 1 starboard) after the last step, 0..1. */
     public float nozzleThrust(int i) { return nozzleThrust[i]; }
+
+    /** Nose retro level after the last step, 0..1 (both retros fire together). */
+    public float retroThrust() { return retroLvl; }
 
     /** RCS jets fired in the last step: 0, or 2 (a nose and a tail jet on opposite sides, a couple that only turns). */
     public int rcsFirings() { return rcsFirings; }
@@ -368,9 +380,9 @@ public final class GameWorld {
 
     /** The flight computer starts over: nothing to correct, holding the current heading, engines idle. */
     private void resetFlight() {
-        angAccel = thrustCmd = desVx = desVy = headingErr = 0f;
+        angAccel = thrustCmd = desVx = desVy = headingErr = retroCmd = retroLvl = 0f;
         holdAngle = ship.angle;
-        pointing = burning = snap = false;
+        pointing = burning = snap = retroing = braking = false;
         dodgeT = 0f;
         java.util.Arrays.fill(nozzleThrust, 0f);
         rcsFirings = 0;
@@ -388,6 +400,9 @@ public final class GameWorld {
 
     /** The autopilot's last main-engine command, 0..1 (tests). */
     float engineCommand() { return thrustCmd; }
+
+    /** The autopilot's last retro command, 0..1 (tests). */
+    float retroCommand() { return retroCmd; }
 
     /** True while a rock on a collision course has the ship dodging (tests). */
     boolean evading() { return dodgeT > 0f; }
@@ -447,7 +462,7 @@ public final class GameWorld {
         wpBearing = (float) Math.atan2(wpY - ship.y, wpX - ship.x);
         arrived = false;
         endFacing();
-        // retarget at once: the desired velocity (and the turn, flip or burn it drives) and any dodge were for the old goal
+        // retarget at once: the desired velocity (and the turn, burn or retro braking it drives) and any dodge were for the old goal
         snap = true;
         dodgeT = 0f;
         manualT = cfg.manualHoldSeconds;
@@ -686,11 +701,16 @@ public final class GameWorld {
         else {
             angAccel = 0f;
             thrustCmd = 0f;
+            retroCmd = 0f;
         }
-        // Newtonian step: the engines push along the heading only; the RCS couple only changes the spin
-        s.thrust += (thrustCmd - s.thrust) * (1f - (float) Math.exp(-dt / 0.07f));
+        // Newtonian step: the main engines push along the heading, the nose retros against it; the RCS couple
+        // only changes the spin
+        float ease = 1f - (float) Math.exp(-dt / 0.07f);
+        s.thrust += (thrustCmd - s.thrust) * ease;
         if (s.thrust < 0.003f) s.thrust = 0f;
-        float acc = s.thrust * cfg.thrust;
+        retroLvl += (retroCmd - retroLvl) * ease;
+        if (retroLvl < 0.003f) retroLvl = 0f;
+        float acc = s.thrust * cfg.thrust - retroLvl * cfg.retroThrust;
         s.vx += (float) Math.cos(s.angle) * acc * dt;
         s.vy += (float) Math.sin(s.angle) * acc * dt;
         float dr = (float) Math.exp(-cfg.drag * dt), dv = dr;
@@ -834,15 +854,19 @@ public final class GameWorld {
     }
 
     /**
-     * The flight computer, a PD controller. Sets angAccel (RCS) and thrustCmd (main engines, 0..1).
+     * The flight computer, a PD controller. Sets angAccel (RCS), thrustCmd (main engines, 0..1) and retroCmd (nose
+     * retros, 0..1).
      * 1. Desired velocity: toward the goal (the wander target, or in manual mode the waypoint) no faster than the
-     * ship can still flip and brake in time, and in from the screen edges; low-passed over 0.4 s (MANUAL_FILTER in
-     * manual mode), or taken at once after a new waypoint or a dodge.
+     * ship can still brake on its retros in time (cfg.brakeLead of lag), and in from the screen edges; low-passed
+     * over 0.4 s (MANUAL_FILTER in manual mode), or taken at once after a new waypoint or a dodge.
      * 2. Emergency avoidance: while a rock is on a collision course (collisionCourse) the desired velocity is the
      * current one plus a sideways burn instead; DODGE_SECONDS after the last such step it flies on to the goal.
-     * 3. The velocity error sets the wanted heading, so slowing down points the ship against its motion.
+     * 3. The velocity error sets the wanted heading: its direction, or, braking (its reverse within BRAKE_ENTER of
+     * the goal's bearing, or near the goal of the travel direction, and the nose not already nearer the error), its
+     * reverse, so the nose stays on the goal. Braking never flips.
      * 4. RCS: PD on the heading error, the turn rate capped at maxSpin and at what it can still stop from.
-     * 5. Main engines only while the nose is within 20 degrees of the wanted heading.
+     * 5. Main engines only while the nose is within 20 degrees of the velocity error; nose retros only while it is
+     * within RETRO_CONE of straight behind and slows the ship, each scaled by cos of the miss.
      * While facing a target the wanted heading is its bearing and the engines stay off, unless it is dodging.
      * Manual mode flies up to MANUAL_SPEED x faster with MANUAL_LEAD more braking lead, slows in proportion within
      * ARRIVE_SLOW of the waypoint, dodges on a shorter horizon, and once arrived faces the way it came.
@@ -870,8 +894,9 @@ public final class GameWorld {
         if (manual && !arrived && d < ARRIVE_NEAR * k && hypot(s.vx, s.vy) < ARRIVE_SPEED * k) arrived = true;
         float vx = 0f, vy = 0f;
         if (d > 1e-3f) {
-            // manual mode allows for the filter's lag on top of the flip, so it brakes in time instead of overshooting
-            float ab = 0.8f * cfg.thrust, tf = cfg.flipTime + (manual ? MANUAL_LEAD : 0f), dd = Math.max(0f, d - 10f * k);
+            // braking is on the retros (no turn): the lead covers the engine and filter lag, manual mode's filter
+            // more, so it brakes in time instead of overshooting
+            float ab = 0.8f * cfg.retroThrust, tf = cfg.brakeLead + (manual ? MANUAL_LEAD : 0f), dd = Math.max(0f, d - 10f * k);
             float sp = Math.min(vmax, ab * ((float) Math.sqrt(tf * tf + 2f * dd / ab) - tf));
             if (manual) sp = Math.min(sp, vmax * d / (ARRIVE_SLOW * k)); // arrival: ease in, do not overshoot
             vx = dx / d * sp;
@@ -915,7 +940,15 @@ public final class GameWorld {
         } else if (em > 20f * k) {
             pointing = true;
         }
-        float want = pointing ? (float) Math.atan2(ey, ex) : manual && arrived ? wpBearing : holdAngle;
+        // braking: the needed acceleration points back along the goal's bearing (near the goal, along the travel
+        // direction), so the nose stays forward and the retros take it; anything else turns to burn the main engines
+        float need = (float) Math.atan2(ey, ex), back = wrapAngle(need + (float) Math.PI);
+        float ref = d > ARRIVE_NEAR * k ? (float) Math.atan2(dy, dx)
+            : hypot(s.vx, s.vy) > ARRIVE_SPEED * k ? (float) Math.atan2(s.vy, s.vx) : s.angle;
+        float off = Math.abs(wrapAngle(back - ref)), am = wrapAngle(need - s.angle);
+        // a nose already nearer the needed acceleration than its reverse brakes on the main engines instead
+        braking = pointing && dodgeT <= 0f && off < (braking ? BRAKE_EXIT : BRAKE_ENTER) && Math.abs(am) > HALF_TURN;
+        float want = pointing ? braking ? back : need : manual && arrived ? wpBearing : holdAngle;
         boolean aiming = facing && dodgeT <= 0f;
         if (aiming) {
             want = (float) Math.atan2(aimTargetY() - s.y, aimTargetX() - s.x);
@@ -930,13 +963,24 @@ public final class GameWorld {
         angAccel = al;
         headingErr = ae;
 
-        boolean aligned = !aiming && pointing && Math.abs(ae) < MAIN_ENGINE_CONE;
+        // main engines: forward only, within 20 degrees of the needed acceleration
+        boolean aligned = !aiming && pointing && Math.abs(am) < MAIN_ENGINE_CONE;
         if (burning) {
             if (!aligned || em < 5f * k) burning = false;
         } else if (aligned && em > 20f * k) {
             burning = true;
         }
-        thrustCmd = burning ? clamp(em / (0.25f * cfg.thrust), 0.3f, 1f) * (float) Math.cos(ae) : 0f;
+        thrustCmd = burning ? clamp(em / (0.25f * cfg.thrust), 0.3f, 1f) * (float) Math.cos(am) : 0f;
+        // nose retros: backward only, within RETRO_CONE of the needed acceleration, alongside any RCS turn, and
+        // only to brake (the needed acceleration slows the ship): from rest a goal behind is still a turn and a burn
+        float ar = wrapAngle(back - s.angle);
+        boolean behind = !aiming && pointing && Math.abs(ar) < GameConfig.RETRO_CONE && ex * s.vx + ey * s.vy < 0f;
+        if (retroing) {
+            if (!behind || em < 5f * k) retroing = false;
+        } else if (behind && em > 20f * k) {
+            retroing = true;
+        }
+        retroCmd = retroing ? clamp(em / (0.25f * cfg.retroThrust), 0.3f, 1f) * (float) Math.cos(ar) : 0f;
     }
 
     /**
@@ -992,8 +1036,15 @@ public final class GameWorld {
         rcsFirings = 2;
     }
 
-    /** The main engines fire only while the heading is within this of the wanted one (20 degrees). */
+    /** The main engines fire only while the heading is within this of the needed acceleration (20 degrees). */
     static final float MAIN_ENGINE_CONE = (float) Math.toRadians(20);
+    /**
+     * Braking on the retros: the needed acceleration's reverse is within BRAKE_ENTER of the goal's bearing (and
+     * stays braking until it is BRAKE_EXIT off, so it does not swap between facing two ways); further off, the
+     * ship turns to burn its main engines.
+     */
+    static final float BRAKE_ENTER = (float) Math.toRadians(45), BRAKE_EXIT = (float) Math.toRadians(70);
+    private static final float HALF_TURN = (float) (Math.PI / 2);
     /** Manual mode's top speed over the autopilot's (calm, but a tap gets a response). */
     static final float MANUAL_SPEED = 1.25f;
     /**

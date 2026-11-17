@@ -62,23 +62,86 @@ public final class ShipFlightTest {
         }
     }
 
-    public static void testFlipAndBurnToBrake() {
+    public static void testRetrosBrakeWithoutAFlip() {
         GameWorld g = live(1, null);
         GameWorld.Ship s = g.ship();
         float sp0 = g.config().maxSpeed;
         s.y = 560;
         s.vy = -sp0; // flying nose first (heading up) at top speed
-        g.setWanderTargetForTest(s.x, 640); // behind the ship
+        g.setWanderTargetForTest(s.x, 420); // 140 px ahead: too close to coast in
         float a0 = s.angle;
-        float turned = 0;
+        float turned = 0, retro = 0;
         boolean braked = false;
         for (int i = 0; i < Math.round(4f / DT) && !braked; i++) {
             g.step(DT);
             turned = Math.max(turned, Math.abs(GameWorld.wrapAngle(s.angle - a0)));
+            retro = Math.max(retro, g.retroThrust());
             braked = speed(s) < 0.9f * sp0;
         }
         T.check(braked, "it brakes");
-        T.check(turned > 150 * DEG, "flipped " + turned / DEG + " degrees before the speed dropped");
+        T.check(retro > 0.3f, "on the nose retros: " + retro);
+        T.check(turned < 30 * DEG, "without a flip: turned " + turned / DEG + " degrees before the speed dropped");
+    }
+
+    /**
+     * Flies from (x0, y) at rest, heading at the goal, to a goal 300 px to the right (manual: a tap; else a pinned
+     * wander target) and checks the heading never strays more than 60 degrees from the bearing to the goal (while
+     * further than the 40 px arrival radius, where the bearing is defined) and ends within 30 degrees of the travel
+     * direction. Returns {seconds to come to rest near the goal, the strongest retro level}.
+     */
+    private static float[] cleanTrip(boolean manual) {
+        GameWorld g = live(3, null);
+        GameWorld.Ship s = g.ship();
+        float x0 = 160, y = 400, gx = x0 + 300;
+        s.x = x0;
+        s.y = y;
+        s.angle = 0f;
+        if (manual) g.aim(gx, y);
+        else g.setWanderTargetForTest(gx, y);
+        float worst = 0, retro = 0, rest = -1;
+        boolean mode = true;
+        for (int i = 1; i <= Math.round(8f / DT) && (rest < 0 || i * DT < rest + 1f); i++) {
+            g.step(DT);
+            g.shots().clear();
+            g.rocks().clear();
+            retro = Math.max(retro, g.retroThrust());
+            float d = dist(s, gx, y);
+            if (d > 40) worst = Math.max(worst, Math.abs(GameWorld.wrapAngle((float) Math.atan2(y - s.y, gx - s.x) - s.angle)));
+            if (rest < 0) mode &= manual == g.isManual();
+            if (rest < 0 && d < 40 && speed(s) < 20) rest = i * DT;
+        }
+        String m = manual ? "manual: " : "autopilot: ";
+        T.check(mode, m + "the whole way");
+        T.check(rest > 0, m + "comes to rest at the goal, now " + dist(s, gx, y) + " px, " + speed(s) + " px/s");
+        T.check(worst <= 60 * DEG, m + "the nose stays on the goal: strayed " + worst / DEG + " degrees");
+        T.check(Math.abs(GameWorld.wrapAngle(s.angle)) <= 30 * DEG, m + "at rest facing the travel direction: " + s.angle / DEG);
+        T.check(retro > 0.3f, m + "braked on the retros: " + retro);
+        return new float[] {rest, retro};
+    }
+
+    public static void testRetroBrakingNoFlip() { cleanTrip(true); }
+
+    public static void testAutopilotWanderBrakesWithoutFlip() { cleanTrip(false); }
+
+    public static void testRetrosDeterministic() {
+        GameWorld a = live(9, null), b = live(9, null);
+        GameWorld[] gs = {a, b};
+        for (GameWorld g : gs) {
+            g.ship().angle = 0f;
+            g.aim(560, 390);
+        }
+        boolean fired = false;
+        for (int i = 0; i < Math.round(8f / DT); i++) {
+            if (i == 200) { a.aim(80, 300); b.aim(80, 300); }
+            a.step(DT);
+            b.step(DT);
+            GameWorld.Ship p = a.ship(), q = b.ship();
+            T.check(p.x == q.x && p.y == q.y && p.vx == q.vx && p.vy == q.vy && p.angle == q.angle, "ship at step " + i);
+            T.eq(a.retroThrust(), b.retroThrust(), "retros at step " + i);
+            T.check(a.retroThrust() >= 0f && a.retroThrust() <= 1f, "retro level 0..1: " + a.retroThrust());
+            fired |= a.retroThrust() > 0f;
+        }
+        T.check(fired, "the retros fire on this flight");
     }
 
     public static void testMainEngineOnlyNearTheWantedHeading() {

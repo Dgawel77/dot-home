@@ -22,8 +22,8 @@ import dev.gawel.dothome.core.Zones;
  * Draws the game on the 4 dp lattice anchored at the surface origin. Rocks are rasterised every frame into filled
  * lattice silhouettes (regular weight on the edge blending to light in the body, ink by sqrt(coverage)), or, with
  * the outline style, drawn as free outline dots with a body stipple. Hit rings are lattice dot rows. The ship
- * (Ship v2 "forked-5", heavy weight), its two main-engine plumes, its RCS puffs (heavier through a barrage's spin-up
- * and spin-down), debris and stars are free soft dots in the greys. The four gun barrels are L65 dots (the
+ * (Ship v2 "forked-5", heavy weight), its two main-engine plumes, its two small nose-retro plumes (L65 fading to
+ * L46), its RCS puffs (heavier through a barrage's spin-up and spin-down), debris and stars are free soft dots in the greys. The four gun barrels are L65 dots (the
  * under-nose twin under the hull, the wingtip pair over it on a black knockout); each slides back on its shot and
  * springs forward, and every shot kicks the drawn hull back a little (drawing only: the simulation never moves).
  * Laser bolts, the muzzle flash and hit sparks are the one colour, DotStyle.LASER.
@@ -43,6 +43,8 @@ final class DotRenderer {
     private static final float NOZZLE_IDLE = 0.53f;
     /** Plume dots per second per nozzle at full thrust (130 for the pair, as the prototype). */
     private static final float PLUME_RATE = 65f;
+    /** Retro plume dots per second per retro at full level, and their level at birth (L65) and at the end (L46). */
+    private static final float RETRO_RATE = 40f, RETRO_L65 = ShipShape.LEVEL_L65, RETRO_L46 = NOZZLE_IDLE;
     /** RCS firings weaker than this (fine trim) show no puff. */
     private static final float PUFF_MIN = 0.12f;
     /** A barrage's spin-up and spin-down puff this many times as often, a little longer, with two more dots each. */
@@ -109,14 +111,15 @@ final class DotRenderer {
     // thruster dots in world px: both plumes and the RCS puffs (puff marks the faster-damped RCS dots)
     private final float[] fxX = new float[FX_MAX], fxY = new float[FX_MAX], fxVx = new float[FX_MAX];
     private final float[] fxVy = new float[FX_MAX], fxLife = new float[FX_MAX], fxLife0 = new float[FX_MAX];
-    private final float[] fxDia = new float[FX_MAX], fxLevel = new float[FX_MAX];
+    /** A dot's level fades from fxLevel at birth to fxLevelEnd at the end of its life (0 for the plumes and puffs). */
+    private final float[] fxDia = new float[FX_MAX], fxLevel = new float[FX_MAX], fxLevelEnd = new float[FX_MAX];
     private final boolean[] fxPuff = new boolean[FX_MAX];
     private int fxN;
     // red hit sparks in world px
     private final float[] spX = new float[SPARK_MAX], spY = new float[SPARK_MAX], spVx = new float[SPARK_MAX];
     private final float[] spVy = new float[SPARK_MAX], spLife = new float[SPARK_MAX], spLife0 = new float[SPARK_MAX];
     private int spN;
-    private final float[] plumeAcc = new float[ShipShape.NOZZLES];
+    private final float[] plumeAcc = new float[ShipShape.NOZZLES], retroAcc = new float[ShipShape.RETROS];
     private float puffAcc = 0.9f;
     // the ship's pose while emitting (set once per advance)
     private float emX, emY, emVx, emVy, emCs, emSn, emK, emDt;
@@ -197,6 +200,7 @@ final class DotRenderer {
         if (it < lastIntroT) { // the intro restarted: the scene starts from one dot
             fxN = spN = 0;
             java.util.Arrays.fill(plumeAcc, 0f);
+            java.util.Arrays.fill(retroAcc, 0f);
             puffAcc = 0.9f;
         }
         lastIntroT = it;
@@ -206,7 +210,10 @@ final class DotRenderer {
         moveFx(fdt);
     }
 
-    /** Main-engine plume dots from both nozzles (density follows thrust) and RCS puffs out of the firing ports. */
+    /**
+     * Main-engine plume dots from both nozzles (density follows thrust), the smaller forward plumes of the two nose
+     * retros (density follows the retro level) and RCS puffs out of the firing ports.
+     */
     private void emitThrusters(GameWorld w, float dt) {
         GameWorld.Ship s = w.ship();
         emX = s.x;
@@ -226,7 +233,18 @@ final class DotRenderer {
                 float sp = rnd(120f, 200f) * k, spread = rnd(-0.2f, 0.2f);
                 float ly = ShipShape.nozzleY(i) + rnd(-1f, 1f) * ShipShape.NOZZLE_SPREAD;
                 addFx(ShipShape.NOZZLE_X - kick, ly, -(float) Math.cos(spread) * sp, (float) Math.sin(spread) * sp,
-                    rnd(0.24f, 0.34f), 1.8f + thr, 1f, false);
+                    rnd(0.24f, 0.34f), 1.8f + thr, 1f, 0f, false);
+            }
+        }
+        float rl = w.retroThrust();
+        for (int i = 0; i < ShipShape.RETROS; i++) {
+            retroAcc[i] = Math.min(2f, retroAcc[i] + rl * RETRO_RATE * dt);
+            while (retroAcc[i] >= 1f) {
+                retroAcc[i] -= 1f;
+                float sp = rnd(70f, 120f) * k, side = i == 0 ? -1f : 1f;
+                float spread = side * (ShipShape.RETRO_SPLAY + rnd(-0.15f, 0.15f));
+                addFx(ShipShape.RETRO_X - kick, ShipShape.retroY(i), (float) Math.cos(spread) * sp,
+                    (float) Math.sin(spread) * sp, rnd(0.14f, 0.2f), 1.2f + 0.5f * rl, RETRO_L65, RETRO_L46, false);
             }
         }
         int n = w.rcsFirings();
@@ -246,7 +264,7 @@ final class DotRenderer {
                 float px = ShipShape.rcsX(port) - kick, py = ShipShape.rcsY(port, side);
                 for (int m = 2 + fxRng.nextInt(3) + (heavy ? 2 : 0); m > 0; m--) {
                     addFx(px + rnd(-1f, 1f), py + side * 1.5f, rnd(-13f, 13f) * k, side * rnd(60f, 120f) * k,
-                        rnd(0.15f, 0.23f) * life, 2.2f, 0.9f, true);
+                        rnd(0.15f, 0.23f) * life, 2.2f, 0.9f, 0f, true);
                 }
             }
         }
@@ -254,9 +272,11 @@ final class DotRenderer {
 
     /**
      * One thruster dot from ship-local (lx, ly) mockup px, ejected at local (ex, ey) px/s on top of the ship's
-     * velocity, born at a random moment inside the frame so a steady plume does not band.
+     * velocity, born at a random moment inside the frame so a steady plume does not band. Its level fades from
+     * level to levelEnd over its life.
      */
-    private void addFx(float lx, float ly, float ex, float ey, float life, float dia, float level, boolean puff) {
+    private void addFx(float lx, float ly, float ex, float ey, float life, float dia, float level, float levelEnd,
+            boolean puff) {
         if (fxN >= FX_MAX) return;
         float wx = ex * emCs - ey * emSn, wy = ex * emSn + ey * emCs, u = (float) fxRng.next() * emDt;
         int i = fxN++;
@@ -268,6 +288,7 @@ final class DotRenderer {
         fxLife0[i] = life;
         fxDia[i] = dia;
         fxLevel[i] = level;
+        fxLevelEnd[i] = levelEnd;
         fxPuff[i] = puff;
     }
 
@@ -304,6 +325,7 @@ final class DotRenderer {
             fxLife0[n] = fxLife0[i];
             fxDia[n] = fxDia[i];
             fxLevel[n] = fxLevel[i];
+            fxLevelEnd[n] = fxLevelEnd[i];
             fxPuff[n] = fxPuff[i];
             n++;
         }
@@ -452,12 +474,13 @@ final class DotRenderer {
             dot65.draw(c, qx, qy, rReg * (0.45f + 0.55f * lk), p.alpha * lk);
         }
 
-        // the two plumes and the RCS puffs: free dots that shrink and fade over their short life
+        // the plumes, retro plumes and RCS puffs: free dots that shrink and fade over their short life
         for (int i = 0; i < fxN; i++) {
             float qx = sx(fxX[i]), qy = sy(fxY[i]);
             if (qy < clearTopY) continue;
             float q = fxLife[i] / fxLife0[i];
-            user.draw(c, qx, qy, (0.7f + (fxDia[i] - 0.7f) * q) * mock / 2f, fxLevel[i] * q);
+            float lv = fxLevelEnd[i] + (fxLevel[i] - fxLevelEnd[i]) * q;
+            user.draw(c, qx, qy, (0.7f + (fxDia[i] - 0.7f) * q) * mock / 2f, lv);
         }
 
         GameWorld.Ship s = w.ship();

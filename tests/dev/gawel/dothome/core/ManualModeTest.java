@@ -4,8 +4,8 @@ import dev.gawel.dothome.test.T;
 
 /**
  * A tap is a waypoint: until the later of 4 s after the last tap and 2 s after it arrives (12 s cap) the flight
- * computer flies the ship straight there (Newtonian, flip and burn) and holds station once it arrives; then the
- * autopilot wanders again. Rocks it would merely pass are ignored; only one on a collision course within 0.5 s makes
+ * computer flies the ship straight there (Newtonian: main engines forward, nose retros to brake, no flip) and holds
+ * station once it arrives; then the autopilot wanders again. Rocks it would merely pass are ignored; only one on a collision course within 0.5 s makes
  * it dodge, briefly. A newer tap retargets at once.
  */
 public final class ManualModeTest {
@@ -59,7 +59,7 @@ public final class ManualModeTest {
     }
 
     /** Seconds a clean 300 px trip (from rest, the tap 90 degrees off the heading) takes to arrive, measured. */
-    private static final float TRIP_300 = 3.89f;
+    private static final float TRIP_300 = 4.37f;
 
     /**
      * The ship at rest at (110, 560) heading up, a tap 300 px to its right, and, when rocks is set, rocks it passes
@@ -252,10 +252,13 @@ public final class ManualModeTest {
         T.check(dist(g, 510, 560) > 150, "not the old one");
     }
 
-    /** Seconds a reversal (flying right at about 130 px/s, then a tap 90 px behind) takes to close on the new point, measured. */
-    private static final float REVERSE = 2.03f;
+    /**
+     * Seconds a reversal (flying right at about 130 px/s, then a tap 90 px behind) takes to close on the new point,
+     * measured: it turns round, the retros braking while it turns.
+     */
+    private static final float REVERSE = 1.90f;
 
-    public static void testOppositeTapReversesAtOnce() {
+    public static void testOppositeTapStillReverses() {
         GameWorld g = live(5);
         place(g, 110, 560);
         g.aim(510, 560);
@@ -268,32 +271,74 @@ public final class ManualModeTest {
         g.step(DT);
         g.shots().clear();
         T.eq(0f, g.engineCommand(), "the burn for the old point stops at once");
-        T.check(Math.abs(g.headingError()) > 150 * DEG, "and it wants to face the new one: " + g.headingError() / DEG);
-        float toward = -1;
+        T.check(Math.abs(g.headingError()) > 150 * DEG, "and it wants to face the new one (a turn): " + g.headingError() / DEG);
+        float toward = -1, turned = 0;
         for (int i = 2; i <= Math.round(4f / DT) && toward < 0; i++) {
             g.step(DT);
             g.shots().clear();
+            turned = Math.max(turned, Math.abs(g.ship().angle));
             if (closing(g, 80, 560) > 0) toward = i * DT;
         }
         T.check(toward > 0 && toward <= REVERSE * 1.2f, "closing on the new point within " + REVERSE * 1.2f + " s: " + toward);
+        for (int i = 0; i < Math.round(1f / DT); i++) {
+            g.step(DT);
+            g.shots().clear();
+            turned = Math.max(turned, Math.abs(g.ship().angle));
+        }
+        T.check(turned > 120 * DEG, "it turned round for the point behind: " + turned / DEG);
     }
 
-    public static void testTapAheadDropsABrakingFlip() {
+    public static void testTapAheadDropsTheRetroBraking() {
         GameWorld g = live(5);
         place(g, 110, 560);
+        g.ship().angle = 0f; // facing the tap: the flight is a burn, a coast and a retro brake
         g.aim(330, 560);
         boolean braking = false;
         for (int i = 0; i < Math.round(4f / DT) && !braking; i++) {
             g.step(DT);
             g.shots().clear();
-            braking = g.engineCommand() > 0 && Math.cos(g.ship().angle) < -0.9 && g.ship().vx > 30;
+            braking = g.retroCommand() > 0 && Math.cos(g.ship().angle) > 0.9 && g.ship().vx > 30;
         }
-        T.check(braking, "flipped and braking for the first tap");
+        T.check(braking, "nose forward and braking on the retros for the first tap");
         g.aim(540, 560); // further on: no more braking
         g.step(DT);
         g.shots().clear();
-        T.eq(0f, g.engineCommand(), "the braking burn stops at once");
-        T.check(Math.abs(g.headingError()) > 150 * DEG, "it wants to face forward again: " + g.headingError() / DEG);
+        T.eq(0f, g.retroCommand(), "the retro braking stops at once");
+        T.check(Math.abs(g.headingError()) < 30 * DEG, "it keeps facing forward: " + g.headingError() / DEG);
+        boolean burn = false;
+        for (int i = 0; i < Math.round(0.5f / DT) && !burn; i++) {
+            g.step(DT);
+            g.shots().clear();
+            burn = g.engineCommand() > 0;
+        }
+        T.check(burn, "and burns on for the newer tap");
+    }
+
+    /** Seconds a clean 300 px trip (from rest, facing the tap) takes to settle on the waypoint, measured. */
+    private static final float ARRIVE_300 = 3.78f;
+
+    public static void testArrivesWithRetros() {
+        GameWorld g = live(15);
+        place(g, 110, 560);
+        g.ship().angle = 0f;
+        g.aim(410, 560);
+        float arrivedAt = -1, retro = 0, best = 1e9f, worst = 0;
+        for (int i = 1; i <= Math.round(8f / DT) && g.isManual(); i++) { // until manual mode lets go, 2 s after arrival
+            g.step(DT);
+            g.shots().clear();
+            g.rocks().clear();
+            retro = Math.max(retro, g.retroThrust());
+            float d = dist(g, 410, 560);
+            best = Math.min(best, d);
+            if (best < 20) worst = Math.max(worst, d);
+            if (arrivedAt < 0 && g.arrived()) arrivedAt = i * DT;
+        }
+        T.check(arrivedAt > 0, "arrives: " + dist(g, 410, 560) + " px off");
+        T.check(arrivedAt <= ARRIVE_300 * 1.2f, "within " + ARRIVE_300 * 1.2f + " s (measured +20%): " + arrivedAt);
+        T.check(retro > 0.3f, "braking on the retros: " + retro);
+        T.check(worst < 30, "settles without overshooting: strayed " + worst);
+        T.check(dist(g, 410, 560) < GameWorld.ARRIVE_NEAR && speed(g.ship()) < GameWorld.ARRIVE_SPEED, "holds station there: "
+            + dist(g, 410, 560) + " px, " + speed(g.ship()) + " px/s");
     }
 
     public static void testEachTapFiresExactlyOneBoltAlongTheHeading() {

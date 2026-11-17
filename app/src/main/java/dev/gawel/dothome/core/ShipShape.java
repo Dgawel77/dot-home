@@ -45,6 +45,13 @@ public final class ShipShape {
     public static final int RCS_NOSE = 0, RCS_TAIL = 1;
     public static final float RCS_NOSE_X = 12f, RCS_NOSE_Y = 1.9f, RCS_TAIL_X = -11.5f, RCS_TAIL_Y = 12.5f;
 
+    /**
+     * The two nose retros (they push the ship backwards), retro 0 to port (-y), 1 to starboard, just inside the
+     * nose's outline behind the RCS nose ports; their plumes blow forward, splayed RETRO_SPLAY outward to clear it.
+     */
+    public static final int RETROS = 2;
+    public static final float RETRO_X = 10f, RETRO_Y = 2.4f, RETRO_SPLAY = 0.35f;
+
     private static final float HEAVY = 3.4f;
     /** Dot levels as the prototype's alpha on L100: 1 is L100, 0.75 is L65. */
     public static final float LEVEL_L100 = 1f, LEVEL_L65 = 0.75f;
@@ -110,6 +117,9 @@ public final class ShipShape {
 
     /** Nozzle i's centre y. */
     public static float nozzleY(int i) { return i == 0 ? -NOZZLE_Y : NOZZLE_Y; }
+
+    /** Retro i's centre y: -1 port, +1 starboard side. */
+    public static float retroY(int i) { return i == 0 ? -RETRO_Y : RETRO_Y; }
 
     /** An RCS port's x. */
     public static float rcsX(int port) { return port == RCS_NOSE ? RCS_NOSE_X : RCS_TAIL_X; }

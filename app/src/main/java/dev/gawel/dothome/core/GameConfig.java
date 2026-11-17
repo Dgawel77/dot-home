@@ -19,8 +19,15 @@ public final class GameConfig {
     /** The autopilot's top speed, px/s; a rock knock can push the ship past it, up to SPEED_CAP x. */
     public final float maxSpeed;
     public static final float SPEED_CAP = 1.6f, SPIN_CAP = 1.6f;
-    /** Seconds for a 180-degree flip from rest to rest under the turn-rate cap, plus 15%: the braking planner's lead. */
-    public final float flipTime;
+    /** The two nose retros' deceleration (they push opposite the heading) at full level, px/s²: 0.45 x thrust. */
+    public final float retroThrust;
+    /** The retros fire while the needed acceleration is within this of straight behind the ship (30 degrees). */
+    public static final float RETRO_CONE = (float) Math.toRadians(30);
+    /**
+     * The braking planner's lead, s: braking on the retros needs no turn, only the engine and filter lag; the
+     * planner allows for this before the retros bite.
+     */
+    public final float brakeLead = 0.5f;
     /** Ship hit radius against rocks, px. */
     public final float shipRadius;
 
@@ -52,7 +59,7 @@ public final class GameConfig {
     public static final float INTRO_SECONDS = 1.2f;
     public final float introSeconds = INTRO_SECONDS;
     public final float autoFireEvery = 0.45f;
-    /** A new wander target every 5-8 s: long enough to fly there, flip and brake. */
+    /** A new wander target every 5-8 s: long enough to fly there and brake. */
     public final float autopilotWanderMin = 5f, autopilotWanderMax = 8f;
     /**
      * The spin barrage (a shake): its cooldown and length, s; the spin-up (cubic ease-in) and spin-down (cubic
@@ -89,10 +96,7 @@ public final class GameConfig {
         thrust = 160f * k;
         maxSpeed = 140f * k;
         shipRadius = ShipShape.RADIUS * k;
-        float flip = rcsAccel * Math.PI >= maxSpin * maxSpin
-            ? (float) Math.PI / maxSpin + maxSpin / rcsAccel
-            : 2f * (float) Math.sqrt(Math.PI / rcsAccel);
-        flipTime = flip * 1.15f;
+        retroThrust = 0.45f * thrust;
         shotSpeed = 900f * k;
         shotCull = 40f * k;
         hitKnock = 150f * k;
