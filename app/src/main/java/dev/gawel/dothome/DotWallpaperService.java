@@ -36,6 +36,7 @@ public class DotWallpaperService extends WallpaperService {
         @Override
         public void onReceive(Context context, Intent intent) {
             WidgetUpdater.updateAll(getApplicationContext());
+            LiveFeeds.onMinute(getApplicationContext()); // hands any due fetch to its own executor
         }
     };
 
@@ -46,6 +47,7 @@ public class DotWallpaperService extends WallpaperService {
             if (Intent.ACTION_SCREEN_ON.equals(action)) {
                 setTick(true);
                 WidgetUpdater.updateAll(getApplicationContext());
+                LiveFeeds.onMinute(getApplicationContext()); // a live score is current on wake, not a minute later
             } else if (Intent.ACTION_SCREEN_OFF.equals(action)) {
                 setTick(false);
                 // arm on screen-off, not screen-on: an engine can turn visible before SCREEN_ON arrives

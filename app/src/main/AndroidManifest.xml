@@ -52,6 +52,10 @@
             android:name=".WeatherJob"
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />
+        <service
+            android:name=".FeedJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
         <receiver
             android:name=".ClockWidget"
             android:exported="true"
@@ -84,6 +88,17 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_radar_info" />
+        </receiver>
+        <receiver
+            android:name=".BearsWidget"
+            android:exported="true"
+            android:label="@string/widget_bears_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_bears_info" />
         </receiver>
         <receiver
             android:name=".MediaCommandReceiver"

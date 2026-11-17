@@ -184,6 +184,7 @@ final class GameHub {
         scoreBook = new ScoreBook(prefs, System::currentTimeMillis, TimeZone.getDefault());
         world.setAutoFire(fireMode == FireMode.AUTO);
         WeatherJob.schedule(appContext); // idempotent; restores the periodic job after a reboot
+        FeedJob.schedule(appContext); // likewise for the live feeds (Dot Bears)
         Weather wx = WeatherRepo.cached(appContext);
         if (wx == null || System.currentTimeMillis() - wx.fetchedAtMs > 30L * 60 * 1000) {
             WeatherJob.refreshSoon(appContext);

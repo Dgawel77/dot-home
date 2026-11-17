@@ -96,4 +96,30 @@ public final class WidgetResourcesTest {
         T.eq("48dp", attr(toggle, "layout_height"), "48 dp touch target");
         T.eq("top|end", attr(toggle, "layout_gravity"), "top right");
     }
+    public static void testBearsWidgetResources() {
+        String info = read("xml/widget_bears_info.xml");
+        T.check(info.contains("android:previewImage=\"@drawable/preview_bears\""), "picker preview");
+        T.check(info.contains("android:initialLayout=\"@layout/widget_bears_empty\""), "a new Bears widget starts blank");
+        String empty = read("layout/widget_bears_empty.xml");
+        T.eq(1, elements(empty, "FrameLayout").size(), "one view");
+        T.check(!empty.contains("ImageView"), "no card, no image");
+        T.check(read("values/strings.xml").contains("<string name=\"widget_bears_label\">Dot Bears</string>"), "label");
+        T.check(Files.exists(Paths.get(RES + "drawable-nodpi/preview_bears.png")), "preview png");
+    }
+
+    public static void testNoPlainViewInWidgetLayouts() {
+        try (java.util.stream.Stream<java.nio.file.Path> files = Files.list(Paths.get(RES + "layout"))) {
+            int n = 0;
+            for (java.nio.file.Path f : (Iterable<java.nio.file.Path>) files::iterator) {
+                String name = f.getFileName().toString();
+                if (!name.startsWith("widget_") || !name.endsWith(".xml")) continue;
+                String xml = read("layout/" + name);
+                T.check(!xml.contains("<View ") && !xml.contains("<View>"), name + " has no plain View");
+                n++;
+            }
+            T.check(n >= 5, "widget layouts found");
+        } catch (IOException e) {
+            throw new AssertionError("cannot list layouts: " + e);
+        }
+    }
 }

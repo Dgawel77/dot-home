@@ -14,6 +14,8 @@ public final class BearsView {
     private static final long PRE_LEAD_MS = 10 * 60_000L;
     private static final long LIVE_POLL_MS = 55_000L;
     private static final long IDLE_POLL_MS = 6 * 3_600_000L;
+    /** A cached live board older than this (by kickoff) is stale: the fetches stopped before the game ended. */
+    static final long LIVE_MAX_MS = 12 * 3_600_000L;
 
     private BearsView() {}
 
@@ -28,6 +30,19 @@ public final class BearsView {
         int now = dayKey(nowMs, tz);
         for (BearsGame g : games) if (dayKey(g.kickoffMs, tz) == now) return g;
         return null;
+    }
+
+    /**
+     * The game to show: a live scoreboard game (kicked off within {@link #LIVE_MAX_MS}) even after local midnight, so a
+     * late game never goes blank mid-game; otherwise today's game, the scoreboard's when it is on today's date (one
+     * Bears game a day, so it is the same game as the schedule's, and fresher), else the schedule's. Null: blank.
+     */
+    public static BearsGame pick(List<BearsGame> schedule, BearsGame board, long nowMs, TimeZone tz) {
+        if (board != null) {
+            if (board.state == BearsGame.State.IN && nowMs - board.kickoffMs < LIVE_MAX_MS) return board;
+            if (board.state != BearsGame.State.IN && dayKey(board.kickoffMs, tz) == dayKey(nowMs, tz)) return board;
+        }
+        return today(schedule, nowMs, tz);
     }
 
     public static Mode mode(BearsGame g) {
