@@ -209,21 +209,47 @@ public final class ManualModeTest {
         }
     }
 
+    /**
+     * A big rock crossing the straight path square to it at 220 px/s, timed to cross 20 px ahead of the ship as it
+     * reaches the midpoint: it comes from about 50 degrees off the heading (more than the 40 degrees manual mode
+     * turns to shoot), so it is left to the emergency dodge, which fires; the ship takes at most a bump and still
+     * reaches the waypoint.
+     */
     public static void testRockOnTheStraightPathOnlyBumpsIt() {
         for (float[] f : FLIGHTS) {
             Count c = new Count();
             GameWorld g = live(4);
             g.setListener(c);
             place(g, f[0], f[1]);
-            float tx = f[2], ty = f[3];
-            GameWorld.Rock keep = g.addRock(3, (f[0] + tx) / 2, (f[1] + ty) / 2, 0, 0);
+            float tx = f[2], ty = f[3], mx = (f[0] + tx) / 2, my = (f[1] + ty) / 2;
+            // when the ship reaches the midpoint, from a twin without the rock (the two fly alike until it comes)
+            GameWorld twin = live(4);
+            place(twin, f[0], f[1]);
+            twin.aim(tx, ty);
+            int meet = -1;
+            for (int i = 1; i <= Math.round(7f / DT) && meet < 0; i++) {
+                twin.step(DT);
+                twin.shots().clear();
+                keepOnly(twin);
+                if (dist(twin, mx, my) < 10) meet = i;
+            }
+            T.check(meet > 0, f[0] + "," + f[1] + ": the twin passes the midpoint");
+            // square to the path, on the side toward the screen centre, 1.2 s out, 20 px ahead of the midpoint
+            float px = tx - f[0], py = ty - f[1], pl = (float) Math.hypot(px, py), nx = py / pl, ny = -px / pl;
+            float cx = mx + px / pl * 20, cy = my + py / pl * 20;
+            if (nx * (310 - mx) + ny * (361 - my) < 0) { nx = -nx; ny = -ny; }
+            int start = meet - Math.round(1.2f / DT);
+            GameWorld.Rock keep = null;
             g.aim(tx, ty);
             float reached = -1;
             boolean dodged = false;
             for (int i = 1; i <= Math.round(7f / DT); i++) {
+                if (i == start) keep = g.addRock(3, cx + nx * 220 * 1.2f, cy + ny * 220 * 1.2f, -nx * 220, -ny * 220);
                 g.step(DT);
                 g.shots().clear(); // only the flight is under test, not the guns
-                keepOnly(g, keep);
+                if (keep != null) keepOnly(g, keep);
+                else keepOnly(g);
+                T.eq(0, g.defenceShots(), f[0] + "," + f[1] + ": not shot at");
                 dodged |= g.evading();
                 if (reached < 0 && dist(g, tx, ty) < 60) reached = i * DT;
             }

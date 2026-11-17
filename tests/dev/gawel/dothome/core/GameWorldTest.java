@@ -238,13 +238,16 @@ public final class GameWorldTest {
             g.rocks().clear();
             stepClear(g, 1.3f);
             GameWorld.Ship s = g.ship();
-            // its path would pass 25 px from the ship's centre, well inside the 38.5 px hit radius
-            GameWorld.Rock keep = g.addRock(3, s.x + 25, s.y - 200, 0, 40);
+            // overtaking from straight behind at 150 px/s, its path would pass 25 px from the ship's centre, well
+            // inside the 38.5 px hit radius, touching 1.15 s out: the half turn alone to shoot it takes 1.42 s
+            // (GameWorld.turnTime), so it can only be dodged
+            float hx = (float) Math.cos(s.angle), hy = (float) Math.sin(s.angle), x0 = s.x, y0 = s.y;
+            GameWorld.Rock keep = g.addRock(3, x0 - hx * 211.5f - hy * 25, y0 - hy * 211.5f + hx * 25, s.vx + hx * 150, s.vy + hy * 150);
             boolean dodged = false;
             for (int i = 0; i < 313; i++) {
                 for (int j = g.rocks().size() - 1; j >= 0; j--) if (g.rocks().get(j) != keep) g.rocks().remove(j);
-                // pin the wander target on the far side of the rock so only the dodge keeps the ship clear
-                g.setWanderTargetForTest(310, 100);
+                // pin the wander target where the ship was so only the dodge moves it clear
+                g.setWanderTargetForTest(x0, y0);
                 float gap = (float) Math.hypot(s.x - keep.x, s.y - keep.y) - 46.5f;
                 float rvx = keep.vx - s.vx, rvy = keep.vy - s.vy, toTouch = gap / Math.max(1f, (float) Math.hypot(rvx, rvy));
                 g.step(0.016f);
@@ -268,14 +271,18 @@ public final class GameWorldTest {
             GameWorld.Ship s = g.ship();
             s.vx = s.vy = s.spin = 0f;
             float x0 = s.x, y0 = s.y, a0 = s.angle;
-            // a big rock drifting right at 28 px/s, passing 60 px below the ship (outside 38.5 + 8) or straight at it
-            GameWorld.Rock keep = g.addRock(3, x0 - 150, y0 + (hit ? 0 : 60), 28, 0);
+            // a big rock drifting right at 28 px/s, passing 60 px below the ship (outside 38.5 + 8), or one overtaking
+            // it from straight behind at 150 px/s, touching 1.1 s out: the half turn alone to shoot that one takes
+            // 1.42 s (GameWorld.turnTime), so it can only be dodged
+            float hx = (float) Math.cos(a0), hy = (float) Math.sin(a0), sp = hit ? 150f : 28f;
+            GameWorld.Rock keep = hit ? g.addRock(3, x0 - hx * 211.5f, y0 - hy * 211.5f, hx * sp, hy * sp)
+                : g.addRock(3, x0 - 150, y0 + 60, sp, 0);
             boolean dodged = false;
             float moved = 0f, turned = 0f;
             for (int i = 0; i < Math.round(9f / 0.016f); i++) {
                 for (int j = g.rocks().size() - 1; j >= 0; j--) if (g.rocks().get(j) != keep) g.rocks().remove(j);
                 g.setWanderTargetForTest(x0, y0);
-                float toTouch = ((float) Math.hypot(s.x - keep.x, s.y - keep.y) - 46.5f) / 28f;
+                float toTouch = ((float) Math.hypot(s.x - keep.x, s.y - keep.y) - 46.5f) / sp;
                 g.step(0.016f);
                 if (g.evading() && !dodged) {
                     dodged = true;

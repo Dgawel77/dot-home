@@ -12,7 +12,10 @@ import java.util.List;
  * and turns toward the heading that velocity error needs, burning the main engines only within 20 degrees of it.
  * To brake it does not flip: while the needed acceleration points back along the goal's bearing it keeps its nose
  * on the goal and slows on the retros, which fire within 30 degrees of straight behind it, alongside any RCS turn.
- * A goal behind it is still a turn (the retros brake while it turns). Rocks are dodged only in an
+ * A goal behind it is still a turn (the retros brake while it turns). Defence: the rock soonest on a collision
+ * course within 2 s is shot when the turn to its lead-aim bearing, any cooldown left and the bolt's flight fit before
+ * it arrives with 0.15 s to spare (in manual mode only within a 40 degree turn, so the tap is still followed); the
+ * ship turns to it, engines off, and fires once at the intercept point. Any other rock is dodged only in an
  * emergency: when one is on a collision course within the next 1 s (0.5 s in manual mode) the ship burns sideways
  * for a moment, then flies on. Nothing else about the rocks steers it; a rock it does hit just bumps it.
  *
@@ -166,6 +169,18 @@ public final class GameWorld {
     private boolean retroing, braking;
     /** An emergency dodge: seconds left of it (0 when none) and its sideways direction (a unit vector). */
     private float dodgeT, dodgeX, dodgeY;
+    /**
+     * Defence: whether this step turns to (or fires at) a threat, its lead-aim bearing, intercept point and the
+     * bolt's flight time there, and the bolts it has fired. Each engagement is a rock with a defence bolt in flight
+     * at it and the seconds until that bolt counts as a miss; an engaged rock is left out of the threat scan and the
+     * dodge.
+     */
+    private boolean defending;
+    private Rock defRock;
+    private float defBearing, defX, defY, defFlight;
+    private int defenceShots;
+    private final Rock[] engRock = new Rock[ENGAGEMENTS];
+    private final float[] engT = new float[ENGAGEMENTS];
     /** The next pilot step takes its desired velocity at once, unfiltered (a new waypoint, or a dodge just over). */
     private boolean snap;
 
@@ -463,6 +478,12 @@ public final class GameWorld {
     /** True while a rock on a collision course has the ship dodging (tests). */
     boolean evading() { return dodgeT > 0f; }
 
+    /** True when this step the ship turned to, or fired at, a threat it can shoot in time (tests). */
+    boolean defending() { return defending; }
+
+    /** Bolts fired by the defence so far (tests). */
+    int defenceShots() { return defenceShots; }
+
     /** True while a recent tap has the ship flying to its waypoint (not during a barrage, which suspends it). */
     public boolean isManual() { return manualT > 0f && barrageT < 0f; }
 
@@ -755,8 +776,11 @@ public final class GameWorld {
                 holdAngle = s.angle;
             }
         }
+        ageEngagements(dt);
         if (live && autopilot && !spinning) pilot(dt);
         else {
+            defending = false;
+            defRock = null;
             angAccel = 0f;
             thrustCmd = 0f;
             retroCmd = 0f;
@@ -812,6 +836,7 @@ public final class GameWorld {
             if (barrageT >= cfg.barrageSeconds) endBarrage();
         } else if (live) {
             aimAndFire(dt);
+            defenceFire();
         }
 
         float windX = weather.windX, windY = weather.windY;
@@ -943,6 +968,8 @@ public final class GameWorld {
      * 5. Main engines only while the nose is within 20 degrees of the velocity error; nose retros only while it is
      * within RETRO_CONE of straight behind and slows the ship, each scaled by cos of the miss.
      * While facing a target the wanted heading is its bearing and the engines stay off, unless it is dodging.
+     * Defence (defend), checked before the dodge, overrides that: the wanted heading is the threat's lead-aim
+     * bearing, engines off, and it fires once within cfg.gunCone; a dodge of another rock still wins.
      * Manual mode flies up to MANUAL_SPEED x faster with MANUAL_LEAD more braking lead, slows in proportion within
      * ARRIVE_SLOW of the waypoint, dodges on a shorter horizon, and once arrived faces the way it came.
      */
@@ -987,7 +1014,8 @@ public final class GameWorld {
             vx *= vmax / vm;
             vy *= vmax / vm;
         }
-        if (collisionCourse(manual ? DODGE_HORIZON_MANUAL : DODGE_HORIZON)) {
+        Rock threat = defend(manual);
+        if (collisionCourse(manual ? DODGE_HORIZON_MANUAL : DODGE_HORIZON, threat)) {
             dodgeT = DODGE_SECONDS;
         } else if (dodgeT > 0f) {
             dodgeT -= dt;
@@ -1026,11 +1054,13 @@ public final class GameWorld {
         braking = pointing && dodgeT <= 0f && off < (braking ? BRAKE_EXIT : BRAKE_ENTER) && Math.abs(am) > HALF_TURN
             && ex * s.vx + ey * s.vy < 0f;
         float want = pointing ? braking ? back : need : manual && arrived ? wpBearing : holdAngle;
-        boolean aiming = facing && dodgeT <= 0f;
+        defending = threat != null && dodgeT <= 0f; // a dodge wins: the defence aim is abandoned this step
+        boolean aiming = (facing || defending) && dodgeT <= 0f;
         if (aiming) {
-            want = (float) Math.atan2(aimTargetY() - s.y, aimTargetX() - s.x);
+            want = defending ? defBearing : (float) Math.atan2(aimTargetY() - s.y, aimTargetX() - s.x);
             holdAngle = s.angle; // a dodge that starts mid-turn holds this heading, not a stale one
         }
+        defRock = defending ? threat : null;
 
         float ae = wrapAngle(want - s.angle);
         float lim = Math.min(cfg.maxSpin, (float) Math.sqrt(2f * 0.8f * cfg.rcsAccel * Math.abs(ae)));
@@ -1065,15 +1095,17 @@ public final class GameWorld {
      * plus DODGE_MARGIN of the ship within the next `horizon` seconds. Then (dodgeX, dodgeY) is the way to dodge the
      * soonest such rock: away from where it will pass (on the side a dodge already under way took, or for a rock dead
      * on, the side the nose is already turned to), within DODGE_CONE of square to their relative motion and as near
-     * the nose as that allows, so the turn is short and the burn starts soon.
+     * the nose as that allows, so the turn is short and the burn starts soon. Rocks the defence has a bolt in
+     * flight at, and `shooting` (the threat it is turning to shoot this step, or null), are left to the defence.
      */
-    private boolean collisionCourse(float horizon) {
+    private boolean collisionCourse(float horizon, Rock shooting) {
         Ship s = ship;
         float margin = DODGE_MARGIN * cfg.k, soonest = horizon;
         Rock threat = null;
         float cx = 0f, cy = 0f, rvx = 0f, rvy = 0f;
         for (int i = 0; i < rocks.size(); i++) {
             Rock r = rocks.get(i);
+            if (r == shooting || engaged(r)) continue;
             float rx = r.x - s.x, ry = r.y - s.y, ux = r.vx - s.vx, uy = r.vy - s.vy, u2 = ux * ux + uy * uy;
             if (u2 < 1e-6f) continue; // not closing
             float tc = -(rx * ux + ry * uy) / u2; // time of closest approach
@@ -1102,6 +1134,111 @@ public final class GameWorld {
 
     /** The ship and a rock touch when their centres are closer than this. */
     private float hitRadius(Rock r) { return r.r * 0.82f + cfg.shipRadius; }
+
+    /**
+     * Defence's threat scan: the rock not already engaged that is soonest on a collision course within
+     * DEFEND_HORIZON, its contact time the first root of |r + u t| = hitRadius + DODGE_MARGIN (r and u relative to
+     * the ship, both holding their velocities). Returns it when it can be shot in time, with defBearing and
+     * (defX, defY) its lead aim: the turn to that bearing (turnTime, none within cfg.gunCone), any fire cooldown
+     * left and the bolt's flight (bolts do not inherit the ship's velocity) plus DEFEND_MARGIN_S come before
+     * contact, and in manual mode the turn is at most DEFEND_MANUAL_TURN. Otherwise null: the dodge handles it.
+     */
+    private Rock defend(boolean manual) {
+        Ship s = ship;
+        float margin = DODGE_MARGIN * cfg.k, soonest = DEFEND_HORIZON;
+        Rock threat = null;
+        for (int i = 0; i < rocks.size(); i++) {
+            Rock r = rocks.get(i);
+            if (engaged(r)) continue;
+            float rx = r.x - s.x, ry = r.y - s.y, ux = r.vx - s.vx, uy = r.vy - s.vy, u2 = ux * ux + uy * uy;
+            float b = rx * ux + ry * uy;
+            if (u2 < 1e-6f || b >= 0f) continue; // not closing
+            float reach = hitRadius(r) + margin, c = rx * rx + ry * ry - reach * reach, t;
+            if (c <= 0f) t = 0f; // already within reach
+            else {
+                float disc = b * b - u2 * c;
+                if (disc < 0f) continue; // it passes wide
+                t = (-b - (float) Math.sqrt(disc)) / u2;
+            }
+            if (t > soonest || threat != null && t == soonest) continue;
+            soonest = t;
+            threat = r;
+        }
+        if (threat == null) return null;
+        float px = threat.x - s.x, py = threat.y - s.y;
+        float flight = interceptTime(px, py, threat.vx, threat.vy, cfg.shotSpeed);
+        if (flight < 0f) return null;
+        defX = threat.x + threat.vx * flight;
+        defY = threat.y + threat.vy * flight;
+        defBearing = (float) Math.atan2(defY - s.y, defX - s.x);
+        defFlight = flight;
+        float turn = Math.abs(wrapAngle(defBearing - s.angle));
+        if (manual && turn > DEFEND_MANUAL_TURN) return null;
+        float est = (turn <= cfg.gunCone ? 0f : turnTime(turn, cfg.rcsAccel, cfg.maxSpin)) + Math.max(0f, fireT) + flight;
+        return est + DEFEND_MARGIN_S < soonest ? threat : null;
+    }
+
+    /**
+     * Lead aim: the earliest t > 0 with |p + v t| = speed t (a bolt from the origin at `speed` meets a target at p
+     * moving at v), or -1 when it never does.
+     */
+    private static float interceptTime(float px, float py, float vx, float vy, float speed) {
+        float a = vx * vx + vy * vy - speed * speed, b = px * vx + py * vy, c = px * px + py * py;
+        if (Math.abs(a) < 1e-6f) return b < 0f ? -c / (2f * b) : -1f;
+        float disc = b * b - a * c;
+        if (disc < 0f) return -1f;
+        float q = (float) Math.sqrt(disc), t1 = (-b - q) / a, t2 = (-b + q) / a;
+        float lo = Math.min(t1, t2), hi = Math.max(t1, t2);
+        return lo > 0f ? lo : hi > 0f ? hi : -1f;
+    }
+
+    /**
+     * Seconds to turn through `angle` from rest: bang-bang at 0.8 x rcsAccel, the spin capped at maxSpin.
+     */
+    static float turnTime(float angle, float rcsAccel, float maxSpin) {
+        float a = Math.abs(angle), acc = 0.8f * rcsAccel;
+        if (a < maxSpin * maxSpin / acc) return 2f * (float) Math.sqrt(a / acc);
+        return a / maxSpin + maxSpin / acc;
+    }
+
+    /**
+     * Fires the defence's bolt (after the ship has moved this step, so it leaves the barrel where it now is; after a
+     * tap's bolt, which goes first): once the heading is within cfg.gunCone of the lead-aim bearing and the cooldown
+     * is over, at the intercept point. The rock is then engaged for the bolt's flight plus DEFEND_ENGAGED.
+     */
+    private void defenceFire() {
+        if (defRock == null || fireT > 0f) return;
+        Ship s = ship;
+        if (Math.abs(wrapAngle((float) Math.atan2(defY - s.y, defX - s.x) - s.angle)) > cfg.gunCone) return;
+        int slot = freeEngagement();
+        if (slot < 0) return;
+        shoot(defX, defY, true);
+        defenceShots++;
+        engRock[slot] = defRock;
+        engT[slot] = defFlight + DEFEND_ENGAGED;
+        defRock = null;
+    }
+
+    /** True while the defence has a bolt in flight at r. */
+    private boolean engaged(Rock r) {
+        for (int i = 0; i < ENGAGEMENTS; i++) if (engRock[i] == r) return true;
+        return false;
+    }
+
+    /** A free engagement slot, or -1 when all are in use (the defence then holds fire). */
+    private int freeEngagement() {
+        for (int i = 0; i < ENGAGEMENTS; i++) if (engRock[i] == null) return i;
+        return -1;
+    }
+
+    /** Ends engagements whose bolt has had its time (a miss: the rock is judged again) or whose rock is gone. */
+    private void ageEngagements(float dt) {
+        for (int i = 0; i < ENGAGEMENTS; i++) {
+            if (engRock[i] == null) continue;
+            engT[i] -= dt;
+            if (engT[i] <= 0f || !rocks.contains(engRock[i])) engRock[i] = null;
+        }
+    }
 
     /** RCS event: a nose and a tail jet on opposite sides, turning the ship dir (+1 clockwise) at strength 0..1. */
     private void fireRcs(int dir, float strength) {
@@ -1141,6 +1278,14 @@ public final class GameWorld {
     static final float DODGE_HORIZON = 1f, DODGE_HORIZON_MANUAL = 0.5f, DODGE_MARGIN = 8f;
     static final float DODGE_SECONDS = 0.25f, DODGE_SPEED = 1f, DODGE_DEAD_ON = 0.25f;
     static final float DODGE_CONE = (float) Math.toRadians(45);
+    /**
+     * Defence: it considers rocks on a collision course within DEFEND_HORIZON s and shoots one when the shot's
+     * estimate plus DEFEND_MARGIN_S s comes before contact (in manual mode only within DEFEND_MANUAL_TURN of the
+     * heading); a defence bolt's rock stays engaged for its flight plus DEFEND_ENGAGED s, up to ENGAGEMENTS at once.
+     */
+    static final float DEFEND_HORIZON = 2f, DEFEND_MARGIN_S = 0.15f, DEFEND_ENGAGED = 0.1f;
+    static final float DEFEND_MANUAL_TURN = (float) Math.toRadians(40);
+    private static final int ENGAGEMENTS = 4;
 
     /** Auto-fire: the nearest rock within 0.6 of the short side, or null. */
     private Rock nearestRock() {
