@@ -46,6 +46,7 @@ public final class AllTests {
         dev.gawel.dothome.core.ArtMathTest.class,
         dev.gawel.dothome.core.PrecipTest.class,
         dev.gawel.dothome.core.ChargeStreamTest.class,
+        dev.gawel.dothome.core.MilestonesTest.class,
     };
 
     public static void main(String[] args) throws Exception {

@@ -81,6 +81,10 @@ public final class GameConfig {
     public final float chargeSpeed;
     public final int lowBattery = 15;
 
+    /** A milestone shape: seconds to gather, seconds before release (total), and its width, px. */
+    public final float shapeGather = 0.6f, shapeHold = 3.0f;
+    public final float shapeWidth;
+
     /** By day the stars thin to this fraction of their count and dim to this fraction of their alpha. */
     public final float dayStarCount = 0.6f, dayStarBright = 0.75f;
     /** The night moon's radius, dp (a 40 dp disc). */
@@ -124,6 +128,7 @@ public final class GameConfig {
         rainSlant = 160f * k;
         windRockBias = 6f * k;
         chargeSpeed = 260f * k;
+        shapeWidth = 0.6f * Math.min(w, h);
         thrust = 160f * k;
         maxSpeed = 140f * k;
         shipRadius = ShipShape.RADIUS * k;

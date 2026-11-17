@@ -61,7 +61,13 @@ public final class GameWorld {
     public static final class Shot { public float x, y, px, py, vx, vy, angle, t, trav, life, hit; }
     /** The red muzzle flash: ship-local position (px), the bolt's angle relative to the heading, seconds left. */
     public static final class Flash { public float x, y, angle, t; }
-    public static final class Particle { public float x, y, vx, vy, life, life0, alpha; }
+    public static final class Particle {
+        public float x, y, vx, vy, life, life0, alpha;
+        /** A milestone shape: the target, the start of the gather, the seconds forming (< 0 when not), and whether it draws L100. */
+        public float tx, ty, sx0, sy0;
+        public float formT = -1f;
+        public boolean lit;
+    }
     public static final class Ring { public float x, y, t; }
     public static final class Star {
         public float x, y, alpha, phase, speed, depth;
@@ -127,6 +133,9 @@ public final class GameWorld {
     private final Precip precip = new Precip();
     /** The charging stream has its own stream too. */
     private final Rng chargeRng;
+    /** Where the last kill's debris starts in the particle list (-1: no kill this step) and the kill point. */
+    private int lastKillFirst = -1;
+    private float killX, killY;
     private final ChargeStream chargeStream = new ChargeStream();
     private boolean charging;
     private int batteryPercent = -1;
@@ -378,7 +387,12 @@ public final class GameWorld {
         wpY = clamp(wpY * sy, band, h - band);
         flash.x *= kr;
         flash.y *= kr;
-        for (Particle p : particles) { p.x *= sx; p.y *= sy; }
+        for (Particle p : particles) {
+            p.x *= sx; p.y *= sy;
+            p.tx *= sx; p.ty *= sy; p.sx0 *= sx; p.sy0 *= sy;
+        }
+        killX *= sx;
+        killY *= sy;
         for (Ring g : rings) { g.x *= sx; g.y *= sy; }
         for (Star s : stars) { s.x *= sx; s.y *= sy; }
         computeWanderBand();
@@ -707,6 +721,7 @@ public final class GameWorld {
         if (!introHeld) introT += dt;
         if (barrageCool > 0) barrageCool -= dt;
         laserHits = 0;
+        lastKillFirst = -1;
         boolean live = isLive();
         boolean spinning = barrageT >= 0f; // a barrage: the spin is scripted, the autopilot and manual mode wait
         if (spinning) barrageT += dt;
@@ -866,6 +881,20 @@ public final class GameWorld {
         float gx = tiltX * cfg.gravityAccel * dt, gy = tiltY * cfg.gravityAccel * dt;
         for (int i = 0; i < particles.size(); i++) {
             Particle p = particles.get(i);
+            if (p.formT >= 0f) {
+                p.formT += dt;
+                if (p.formT < cfg.shapeHold) {
+                    float u = Math.min(1f, p.formT / cfg.shapeGather), e = 1f - (1f - u) * (1f - u) * (1f - u);
+                    p.x = p.sx0 + (p.tx - p.sx0) * e;
+                    p.y = p.sy0 + (p.ty - p.sy0) * e;
+                    continue;
+                }
+                float ang = (float) fx.range(0, TAU), rel = (float) fx.range(10, 30) * cfg.k;
+                p.formT = -1f;
+                p.vx = (float) Math.cos(ang) * rel;
+                p.vy = (float) Math.sin(ang) * rel;
+                p.life = p.life0 = (float) fx.range(0.7, 1.7);
+            }
             p.vx += gx;
             p.vy += gy;
             p.x += p.vx * dt;
@@ -1123,6 +1152,9 @@ public final class GameWorld {
         float c = (float) Math.cos(r.rot), sn = (float) Math.sin(r.rot);
         float spacing = 4f * cfg.k;
         int nv = r.outline.length / 2;
+        lastKillFirst = particles.size();
+        killX = r.x;
+        killY = r.y;
         outer:
         for (int v = 0; v < nv; v++) {
             int u = (v + 1) % nv;
@@ -1152,6 +1184,39 @@ public final class GameWorld {
             rocks.add(newRock(r.size - 1, r, false));
         }
         if (listener != null) listener.onRockDestroyed();
+    }
+
+    /** Kills a rock by index without a shot (tests). */
+    void killForTest(int i) { kill(i); }
+
+    /**
+     * A milestone: the debris of this step's kill (plus extras spawned at the kill point, never past the particle
+     * cap) gathers into the shape (unit points, width 2) centred at (0.5w, 0.45h), holds, then releases.
+     * Uses the fx stream, never the game's Rng.
+     */
+    public void formShape(float[] unitPts) {
+        int n = unitPts.length / 2;
+        float sx = killX, sy = killY;
+        if (lastKillFirst < 0) { sx = w * 0.5f; sy = h * 0.45f; }
+        int first = lastKillFirst < 0 ? particles.size() : lastKillFirst;
+        while (particles.size() - first < n && particles.size() < cfg.particleCap) {
+            Particle p = new Particle();
+            p.x = sx;
+            p.y = sy;
+            p.life = p.life0 = 1f;
+            p.alpha = 1f;
+            particles.add(p);
+        }
+        float half = cfg.shapeWidth * 0.5f;
+        for (int i = 0, m = Math.min(n, particles.size() - first); i < m; i++) {
+            Particle p = particles.get(first + i);
+            p.sx0 = p.x;
+            p.sy0 = p.y;
+            p.tx = w * 0.5f + unitPts[2 * i] * half;
+            p.ty = h * 0.45f + unitPts[2 * i + 1] * half;
+            p.formT = 0f;
+            p.lit = true;
+        }
     }
 
     private Rock newRock(int size, Rock parent, boolean anywhere) {

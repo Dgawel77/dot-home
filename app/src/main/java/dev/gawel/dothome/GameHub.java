@@ -17,6 +17,8 @@ import java.util.TimeZone;
 import dev.gawel.dothome.core.FireMode;
 import dev.gawel.dothome.core.GameWorld;
 import dev.gawel.dothome.core.IntroGate;
+import dev.gawel.dothome.core.MilestoneShapes;
+import dev.gawel.dothome.core.Milestones;
 import dev.gawel.dothome.core.Rng;
 import dev.gawel.dothome.core.Sky;
 import dev.gawel.dothome.core.Weather;
@@ -36,6 +38,9 @@ final class GameHub {
     private final PrefsStore prefs;
     private final GameWorld world = new GameWorld(new Rng(System.nanoTime()));
     private ScoreBook scoreBook;
+    private Milestones milestones;
+    /** The four milestone shapes, built once so a kill allocates nothing. */
+    private static final float[][] SHAPES = new float[Milestones.COUNTS.length][];
     private final SensorTilt tilt;
     private final List<DotWallpaperService.DotEngine> visible = new ArrayList<>();
     private FireMode fireMode;
@@ -104,6 +109,7 @@ final class GameHub {
         prefs = new PrefsStore(appContext);
         keyguard = (KeyguardManager) appContext.getSystemService(Context.KEYGUARD_SERVICE);
         scoreBook = new ScoreBook(prefs, System::currentTimeMillis, TimeZone.getDefault());
+        milestones = new Milestones(prefs);
         fireMode = readFireMode();
         tilt = new SensorTilt(appContext, new TiltInput(), new SensorTilt.Listener() {
             @Override
@@ -120,6 +126,8 @@ final class GameHub {
             public void onRockDestroyed() {
                 scoreBook.addRock();
                 scoreBook.refresh();
+                int m = milestones.reached(scoreBook.today(), scoreBook.day());
+                if (m > 0) world.formShape(shape(m));
             }
 
             @Override
@@ -134,6 +142,15 @@ final class GameHub {
     DotRenderer renderer() { return renderer; }
 
     GameWorld world() { return world; }
+
+    private static float[] shape(int milestone) {
+        for (int i = 0; i < Milestones.COUNTS.length; i++) {
+            if (Milestones.COUNTS[i] != milestone) continue;
+            if (SHAPES[i] == null) SHAPES[i] = MilestoneShapes.points(milestone);
+            return SHAPES[i];
+        }
+        return MilestoneShapes.points(milestone);
+    }
 
     ScoreBook scoreBook() { return scoreBook; }
 

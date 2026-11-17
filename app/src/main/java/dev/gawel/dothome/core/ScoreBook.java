@@ -28,6 +28,9 @@ public final class ScoreBook {
 
     public int best() { return readInt(K_BEST); }
 
+    /** The current "yyyy-MM-dd" key. */
+    public String day() { return fmt.format(new Date(nowMillis.getAsLong())); }
+
     public void addRock() {
         refresh();
         int t = today() + 1;

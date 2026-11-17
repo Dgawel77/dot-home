@@ -547,7 +547,8 @@ final class DotRenderer {
             float qx = sx(p.x), qy = sy(p.y);
             if (qy < clearTopY) continue;
             float lk = p.life / p.life0;
-            dot65.draw(c, qx, qy, rReg * (0.45f + 0.55f * lk), p.alpha * lk);
+            if (p.lit) user.draw(c, qx, qy, rReg, p.alpha);
+            else dot65.draw(c, qx, qy, rReg * (0.45f + 0.55f * lk), p.alpha * lk);
         }
 
         // the plumes, retro plumes and RCS puffs: free dots that shrink and fade over their short life
