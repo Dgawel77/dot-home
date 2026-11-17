@@ -14,8 +14,10 @@ import java.util.List;
  * on the goal and slows on the retros, which fire within 30 degrees of straight behind it, alongside any RCS turn.
  * A goal behind it is still a turn (the retros brake while it turns). Defence: the rock soonest on a collision
  * course within 2 s is shot when the turn to its lead-aim bearing, any cooldown left and the bolt's flight fit before
- * it arrives with 0.15 s to spare (in manual mode only within a 40 degree turn, so the tap is still followed); the
- * ship turns to it, engines off, and fires once at the intercept point. Any other rock is dodged only in an
+ * it arrives with 0.15 s to spare (in manual mode only within a 40 degree turn, so the tap is still followed); a big
+ * rock only when it comes at the ship fast enough that its pieces carry on at it too (a drifting one's pieces would
+ * scatter and stay in the field). The ship turns to it, engines off, and fires once at the intercept point; in a tap
+ * fire mode that kill does not score. Any other rock is dodged only in an
  * emergency: when one is on a collision course within the next 1 s (0.5 s in manual mode) the ship burns sideways
  * for a moment, then flies on. Nothing else about the rocks steers it; a rock it does hit just bumps it.
  *
@@ -45,6 +47,7 @@ import java.util.List;
  */
 public final class GameWorld {
     public interface Listener {
+        /** A bolt destroyed a rock (not reported for the defence's bolts in a tap fire mode: they do not score). */
         void onRockDestroyed();
         void onShipHit();
     }
@@ -59,9 +62,13 @@ public final class GameWorld {
     }
     /**
      * A laser bolt: position, the previous step's position (hits are swept along the path), velocity, its angle,
-     * age, distance flown, life left and, once it hits, the seconds left of its flare at the hit point.
+     * age, distance flown, life left and, once it hits, the seconds left of its flare at the hit point; defence is
+     * true for a bolt the defence fired (its kill scores only in auto-fire mode).
      */
-    public static final class Shot { public float x, y, px, py, vx, vy, angle, t, trav, life, hit; }
+    public static final class Shot {
+        public float x, y, px, py, vx, vy, angle, t, trav, life, hit;
+        public boolean defence;
+    }
     /** The red muzzle flash: ship-local position (px), the bolt's angle relative to the heading, seconds left. */
     public static final class Flash { public float x, y, angle, t; }
     public static final class Particle {
@@ -578,7 +585,7 @@ public final class GameWorld {
     /** Fires a pending tap's bolt, runs auto-fire's cadence (it fires but does not steer in manual mode) and ends its facing hold. */
     private void aimAndFire(float dt) {
         Ship s = ship;
-        if (tapFire && fireT <= 0) shoot(tapX, tapY, true);
+        if (tapFire && fireT <= 0) shoot(tapX, tapY, true, false);
         tapFire = false;
         if (autoFire) {
             autoT -= dt;
@@ -586,7 +593,7 @@ public final class GameWorld {
                 Rock r = nearestRock();
                 if (r != null) {
                     if (!facing && manualT <= 0f) setFacing(r);
-                    if (fireT <= 0) shoot(r.x, r.y, true);
+                    if (fireT <= 0) shoot(r.x, r.y, true, false);
                     autoT = cfg.autoFireEvery;
                 }
             }
@@ -626,10 +633,10 @@ public final class GameWorld {
      * One bolt from the next of the four guns, leaving its barrel's tip (where the barrel is now, its recoil from an
      * earlier shot included) along the barrel's axis: the heading, or 1.5 degrees in for a wingtip gun. With toeIn
      * it flies at (tx, ty) instead when that bearing from the muzzle is within cfg.gunCone of the heading. The muzzle
-     * flash shows at the tip, and the barrel's recoil starts over. False when MAX_SHOTS are already flying (the flash
-     * still shows).
+     * flash shows at the tip, and the barrel's recoil starts over. `defence` marks the defence's bolt. False when
+     * MAX_SHOTS are already flying (the flash still shows).
      */
-    private boolean shoot(float tx, float ty, boolean toeIn) {
+    private boolean shoot(float tx, float ty, boolean toeIn, boolean defence) {
         fireT = cfg.fireCooldown;
         Ship s = ship;
         int g = gun;
@@ -661,6 +668,7 @@ public final class GameWorld {
             b.angle = a;
             b.t = b.trav = b.hit = 0f;
             b.life = cfg.shotLife;
+            b.defence = defence;
             shots.add(b);
             return true;
         }
@@ -684,7 +692,7 @@ public final class GameWorld {
     /** Fires the barrage's bolts that are due, while the ship spins faster than cfg.barrageFireSpin. */
     private void barrageFire() {
         while (barrageT >= barrageBoltT && Math.abs(ship.spin) > cfg.barrageFireSpin) {
-            if (shoot(0f, 0f, false)) barrageBolts++;
+            if (shoot(0f, 0f, false, false)) barrageBolts++;
             barrageBoltT += cfg.barrageFireEvery;
         }
     }
@@ -908,7 +916,7 @@ public final class GameWorld {
                     hitA[laserHits] = b.angle;
                     laserHits++;
                 }
-                kill(i);
+                kill(i, !b.defence || autoFire); // in a tap mode the defence's kills do not score
                 break;
             }
         }
@@ -1168,9 +1176,13 @@ public final class GameWorld {
      * Defence's threat scan: the rock not already engaged that is soonest on a collision course within
      * DEFEND_HORIZON, its contact time the first root of |r + u t| = hitRadius + DODGE_MARGIN (r and u relative to
      * the ship, both holding their velocities). Returns it when it can be shot in time, with defBearing and
-     * (defX, defY) its lead aim: the turn to that bearing (turnTime, none within cfg.gunCone), any fire cooldown
-     * left and the bolt's flight (bolts do not inherit the ship's velocity) plus DEFEND_MARGIN_S come before
-     * contact, and in manual mode the turn is at most DEFEND_MANUAL_TURN. Otherwise null: the dodge handles it.
+     * (defX, defY) its lead aim: the turn to that bearing (turnTime from the current spin, none within
+     * cfg.gunCone), any fire cooldown left and the bolt's flight (bolts do not inherit the ship's velocity) plus
+     * DEFEND_MARGIN_S come before contact (the threat it was already turning to last step keeps it while all that
+     * still fits, without the margin, so a turn under way is not abandoned), and in manual mode the turn is at most
+     * DEFEND_MANUAL_TURN. A big rock must also be coming at the ship fast enough that its pieces carry on at it
+     * (piecesComeOn); a drifting one is not shot, as its pieces would scatter and stay in the field as more, faster
+     * rocks. Otherwise null: the dodge handles it.
      */
     private Rock defend(boolean manual) {
         Ship s = ship;
@@ -1195,16 +1207,28 @@ public final class GameWorld {
         }
         if (threat == null) return null;
         float px = threat.x - s.x, py = threat.y - s.y;
+        if (threat.size > 1 && !piecesComeOn(threat, px, py)) return null;
         float flight = interceptTime(px, py, threat.vx, threat.vy, cfg.shotSpeed);
         if (flight < 0f) return null;
         defX = threat.x + threat.vx * flight;
         defY = threat.y + threat.vy * flight;
         defBearing = (float) Math.atan2(defY - s.y, defX - s.x);
         defFlight = flight;
-        float turn = Math.abs(wrapAngle(defBearing - s.angle));
-        if (manual && turn > DEFEND_MANUAL_TURN) return null;
-        float est = (turn <= cfg.gunCone ? 0f : turnTime(turn, cfg.rcsAccel, cfg.maxSpin)) + Math.max(0f, fireT) + flight;
-        return est + DEFEND_MARGIN_S < soonest ? threat : null;
+        float turn = wrapAngle(defBearing - s.angle);
+        if (manual && Math.abs(turn) > DEFEND_MANUAL_TURN) return null;
+        float est = (Math.abs(turn) <= cfg.gunCone ? 0f : turnTime(turn, s.spin, cfg.rcsAccel, cfg.maxSpin))
+            + Math.max(0f, fireT) + flight;
+        return est + (threat == defRock ? 0f : DEFEND_MARGIN_S) < soonest ? threat : null;
+    }
+
+    /**
+     * Whether a big rock's pieces, shot now, carry on at the ship: each keeps FRAGMENT_KEEP of its velocity plus a
+     * random kick of up to FRAGMENT_KICK_MAX, so they do only when that share of its speed toward the ship (p is the
+     * rock relative to the ship) beats the kick. A slower rock's pieces scatter every way.
+     */
+    private boolean piecesComeOn(Rock r, float px, float py) {
+        float closing = -(r.vx * px + r.vy * py) / Math.max(1e-3f, hypot(px, py));
+        return FRAGMENT_KEEP * closing > FRAGMENT_KICK_MAX * cfg.k;
     }
 
     /**
@@ -1219,6 +1243,30 @@ public final class GameWorld {
         float q = (float) Math.sqrt(disc), t1 = (-b - q) / a, t2 = (-b + q) / a;
         float lo = Math.min(t1, t2), hi = Math.max(t1, t2);
         return lo > 0f ? lo : hi > 0f ? hi : -1f;
+    }
+
+    /**
+     * Seconds to turn through `angle` (signed, screen sense) starting at `spin` (rad/s): bang-bang at 0.8 x
+     * rcsAccel, the spin capped at maxSpin. A spin the wrong way is stopped first; one too fast to stop in time
+     * overshoots and turns back.
+     */
+    static float turnTime(float angle, float spin, float rcsAccel, float maxSpin) {
+        float a = angle, w = spin;
+        if (a < 0f) {
+            a = -a;
+            w = -w;
+        }
+        float acc = 0.8f * rcsAccel;
+        if (w < 0f) return -w / acc + turnTime(a + w * w / (2f * acc), rcsAccel, maxSpin);
+        float stop = w * w / (2f * acc);
+        if (stop >= a) return w / acc + turnTime(stop - a, rcsAccel, maxSpin);
+        if (w >= maxSpin) return (a - stop) / w + w / acc; // over the cap (a bump's spin): coast, then stop
+        float peak2 = acc * a + 0.5f * w * w; // speed up to the peak, then slow to a stop on the bearing
+        if (peak2 <= maxSpin * maxSpin) {
+            float peak = (float) Math.sqrt(peak2);
+            return (2f * peak - w) / acc;
+        }
+        return (2f * maxSpin - w) / acc + (a - (2f * maxSpin * maxSpin - w * w) / (2f * acc)) / maxSpin;
     }
 
     /**
@@ -1240,7 +1288,7 @@ public final class GameWorld {
         Ship s = ship;
         if (Math.abs(wrapAngle((float) Math.atan2(defY - s.y, defX - s.x) - s.angle)) > cfg.gunCone) return;
         int slot = freeEngagement();
-        if (slot < 0 || !shoot(defX, defY, true)) return; // no bolt (MAX_SHOTS flying): no engagement
+        if (slot < 0 || !shoot(defX, defY, true, true)) return; // no bolt (MAX_SHOTS flying): no engagement
         defenceShots++;
         engRock[slot] = defRock;
         engT[slot] = defFlight + DEFEND_ENGAGED;
@@ -1313,6 +1361,8 @@ public final class GameWorld {
      */
     static final float DEFEND_HORIZON = 2f, DEFEND_MARGIN_S = 0.15f, DEFEND_ENGAGED = 0.1f;
     static final float DEFEND_MANUAL_TURN = (float) Math.toRadians(40);
+    /** A big rock's pieces keep FRAGMENT_KEEP of its velocity plus a kick of FRAGMENT_KICK_MIN..MAX px/s (x k). */
+    static final float FRAGMENT_KEEP = 0.6f, FRAGMENT_KICK_MIN = 18f, FRAGMENT_KICK_MAX = 44f;
     private static final int ENGAGEMENTS = 4;
 
     /** Auto-fire: the nearest rock within 0.6 of the short side, or null. */
@@ -1336,7 +1386,8 @@ public final class GameWorld {
         return m;
     }
 
-    private void kill(int i) {
+    /** Destroys rock i: debris, its two pieces if it is big, and (when `scored`) the listener's onRockDestroyed. */
+    private void kill(int i, boolean scored) {
         Rock r = rocks.remove(i);
         float c = (float) Math.cos(r.rot), sn = (float) Math.sin(r.rot);
         float spacing = 4f * cfg.k;
@@ -1372,11 +1423,11 @@ public final class GameWorld {
             rocks.add(newRock(r.size - 1, r, false));
             rocks.add(newRock(r.size - 1, r, false));
         }
-        if (listener != null) listener.onRockDestroyed();
+        if (scored && listener != null) listener.onRockDestroyed();
     }
 
     /** Kills a rock by index without a shot (tests). */
-    void killForTest(int i) { kill(i); }
+    void killForTest(int i) { kill(i, true); }
 
     /**
      * A milestone: the debris of this step's kill (plus extras spawned at the kill point, never past the particle
@@ -1416,9 +1467,9 @@ public final class GameWorld {
         if (parent != null) {
             r.x = parent.x;
             r.y = parent.y;
-            float ang = (float) rng.range(0, TAU), sp = (float) rng.range(18, 44) * k;
-            r.vx = parent.vx * 0.6f + (float) Math.cos(ang) * sp;
-            r.vy = parent.vy * 0.6f + (float) Math.sin(ang) * sp;
+            float ang = (float) rng.range(0, TAU), sp = (float) rng.range(FRAGMENT_KICK_MIN, FRAGMENT_KICK_MAX) * k;
+            r.vx = parent.vx * FRAGMENT_KEEP + (float) Math.cos(ang) * sp;
+            r.vy = parent.vy * FRAGMENT_KEEP + (float) Math.sin(ang) * sp;
         } else if (anywhere) {
             int tries = 0;
             do {

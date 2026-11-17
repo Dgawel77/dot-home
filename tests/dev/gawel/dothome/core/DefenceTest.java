@@ -58,6 +58,144 @@ public final class DefenceTest {
         T.near(2f * (float) Math.sqrt(knee / (0.8f * acc)), knee / spin + spin / (0.8f * acc), 1e-5f, "continuous at the knee");
     }
 
+    /** The turn from the current spin: from rest as before, sooner spinning the right way, later the wrong way. */
+    public static void testTurnTimeFromSpin() {
+        float acc = (float) Math.toRadians(540), spin = (float) Math.PI, a = (float) Math.toRadians(100);
+        float rest = GameWorld.turnTime(a, acc, spin);
+        T.near(rest, GameWorld.turnTime(a, 0f, acc, spin), 1e-5f, "from rest");
+        T.near(rest, GameWorld.turnTime(-a, 0f, acc, spin), 1e-5f, "from rest, the other way");
+        float toward = GameWorld.turnTime(a, 2f, acc, spin), away = GameWorld.turnTime(a, -2f, acc, spin);
+        T.check(toward < rest, "spinning toward it is sooner: " + toward + " vs " + rest);
+        T.check(away > rest, "spinning away is later: " + away + " vs " + rest);
+        T.near(toward, GameWorld.turnTime(-a, -2f, acc, spin), 1e-5f, "mirror");
+        // a spin at the cap partway: coasting the rest of the way, then stopping
+        float left = (float) Math.toRadians(40);
+        T.check(GameWorld.turnTime(left, spin, acc, spin) < GameWorld.turnTime(left, acc, spin),
+            "a turn under way at the cap finishes sooner than one from rest");
+        // too fast to stop on it: an overshoot and a turn back, later than at the right speed
+        float tiny = (float) Math.toRadians(5);
+        T.check(GameWorld.turnTime(tiny, spin, acc, spin) > spin / (0.8f * acc), "an overshoot stops, then turns back");
+    }
+
+    /**
+     * A turn under way is not abandoned: a small rock from the side (70-110 degrees off the nose) is taken on, and the
+     * aim is held from the start of the turn to the shot (the spin it built counts toward the rest of the turn), with
+     * no dodge and no hit.
+     */
+    public static void testTurnUnderWayIsHeldToTheShot() {
+        int[][] cases = {{70, 200, 140}, {90, 250, 160}, {110, 225, 140}};
+        for (int[] cs : cases) {
+            Count c = new Count();
+            GameWorld g = live(1, c);
+            double b = Math.toRadians(cs[0]);
+            GameWorld.Rock rock = g.addRock(1, (float) (310 + Math.cos(b) * cs[1]), (float) (390 + Math.sin(b) * cs[1]),
+                (float) (-Math.cos(b) * cs[2]), (float) (-Math.sin(b) * cs[2]));
+            boolean started = false, evaded = false;
+            for (int i = 1; i <= Math.round(4f / DT) && g.defenceShots() == 0; i++) {
+                g.step(DT);
+                dropSpawned(g);
+                evaded |= g.evading();
+                if (g.defenceShots() > 0) break;
+                if (started) T.check(g.defending(), cs[0] + " deg: the aim held at " + i * DT);
+                started |= g.defending();
+            }
+            T.check(started, cs[0] + " deg: it turned to shoot");
+            T.eq(1, g.defenceShots(), cs[0] + " deg: shot");
+            T.check(!evaded, cs[0] + " deg: never a dodge");
+            for (int i = 0; i < Math.round(1f / DT); i++) {
+                g.step(DT);
+                dropSpawned(g);
+            }
+            T.check(!g.rocks().contains(rock), cs[0] + " deg: the rock is gone");
+            T.eq(0, c.hits, cs[0] + " deg: no hit");
+        }
+    }
+
+    /**
+     * A big rock drifting into the ship at a natural rock's speed (25 px/s) is dodged, not shot: its pieces would
+     * scatter and stay in the field. The same rock coming at 120 px/s is shot (its pieces carry on at the ship).
+     */
+    public static void testDriftingBigRockIsDodgedNotShot() {
+        GameWorld g = live(6, null);
+        GameWorld.Rock rock = g.addRock(3, 310 + 100, 390, -25, 0);
+        boolean dodged = false;
+        for (int i = 1; i <= Math.round(4f / DT); i++) {
+            g.step(DT);
+            dropSpawned(g);
+            dodged |= g.evading();
+            T.check(!g.defending(), "no defence aim at " + i * DT);
+        }
+        T.check(dodged, "it dodged");
+        T.eq(0, g.defenceShots(), "never shot");
+        T.check(g.rocks().contains(rock), "the rock is whole");
+
+        GameWorld f = live(6, null);
+        GameWorld.Rock fast = f.addRock(3, 310 + 300, 390, -120, 0);
+        for (int i = 1; i <= Math.round(2f / DT); i++) {
+            f.step(DT);
+            dropSpawned(f);
+        }
+        T.check(f.defenceShots() >= 1, "the fast one is shot: " + f.defenceShots());
+        T.check(!f.rocks().contains(fast), "and split");
+    }
+
+    /**
+     * Idle in a tap fire mode (no taps, no auto-fire) the field's rocks all drift, so the defence leaves them whole:
+     * no piece ever appears, and the field stays as many slow big rocks as before the defence.
+     */
+    public static void testIdleTapWorldSplitsNoDriftingRock() {
+        for (long seed = 1; seed <= 3; seed++) {
+            GameWorld g = new GameWorld(new Rng(seed));
+            g.resize(1080, 2340);
+            g.skipIntro();
+            for (int i = 0; i < 60 * 120; i++) {
+                g.step(1f / 60f);
+                for (GameWorld.Rock r : g.rocks()) T.check(r.size > 1, "seed " + seed + ": a piece at " + i / 60f + " s");
+            }
+            T.eq(0, g.defenceShots(), "seed " + seed + ": no defence bolt");
+        }
+    }
+
+    /**
+     * In a tap fire mode a defence bolt's kill does not score (the listener hears nothing) while a tap's does; with
+     * auto-fire on, every kill scores, the defence's too.
+     */
+    public static void testDefenceKillsScoreOnlyInAutoFire() {
+        Count c = new Count();
+        GameWorld g = live(1, c);
+        GameWorld.Rock rock = g.addRock(1, 310 + 300, 390, -120, 0);
+        for (int i = 1; i <= Math.round(3f / DT) && g.rocks().contains(rock); i++) {
+            g.step(DT);
+            dropSpawned(g);
+        }
+        T.check(!g.rocks().contains(rock), "the defence shot it");
+        T.check(g.defenceShots() >= 1, "with its bolt");
+        T.eq(0, c.destroyed, "no score for the defence's kill");
+        GameWorld.Ship s = g.ship();
+        GameWorld.Rock tapped = g.addRock(1, s.x + (float) Math.cos(s.angle) * 120, s.y + (float) Math.sin(s.angle) * 120, 0, 0);
+        for (int i = 0; i < 30; i++) g.step(DT); // the fire cooldown
+        g.aim(tapped.x, tapped.y);
+        for (int i = 1; i <= Math.round(1f / DT) && g.rocks().contains(tapped); i++) g.step(DT);
+        T.check(!g.rocks().contains(tapped), "the tap shot it");
+        T.eq(1, c.destroyed, "the tap's kill scores");
+
+        Count a = new Count();
+        GameWorld au = live(1, a, 80, 390, 0f);
+        au.setAutoFire(true);
+        au.addRock(1, 600, 390, -220, 0); // fast: the defence takes it before it is in auto-fire's reach
+        int kills = 0;
+        boolean defenceKill = false;
+        for (int i = 1; i <= Math.round(3f / DT); i++) {
+            int n = au.rocks().size();
+            au.step(DT);
+            dropSpawned(au);
+            kills += Math.max(0, n - au.rocks().size());
+            for (GameWorld.Shot b : au.shots()) defenceKill |= b.defence && b.hit > 0f;
+        }
+        T.check(defenceKill, "the defence's bolt made a kill with auto-fire on");
+        T.eq(kills, a.destroyed, "every kill scores with auto-fire on");
+    }
+
     /** A small rock dead ahead closing at 120 px/s is shot down before it arrives, without a dodge. */
     public static void testRockDeadAheadIsShot() {
         Count c = new Count();
