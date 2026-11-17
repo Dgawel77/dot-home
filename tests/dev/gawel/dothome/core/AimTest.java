@@ -3,16 +3,15 @@ package dev.gawel.dothome.core;
 import dev.gawel.dothome.test.T;
 
 /**
- * Rotate-to-aim (design/mockups/ShipV2.dc.html, aimMode "rotate"): a tap queues a target, the RCS turns the ship to
- * face it and once the heading is within 5 degrees of the bearing one bolt leaves a twin gun, the guns taking turns,
- * along the heading toed in at most 3 degrees so the two streams converge on the target.
+ * Tap-to-fire: a tap fires one bolt at once from the next twin gun along the heading (within 3 degrees of it), and
+ * the RCS then turns the ship to face the tap point and holds the facing until it settles (or 1.5 s).
  */
 public final class AimTest {
     private AimTest() {}
 
     private static final float DT = 0.016f;
     private static final float DEG = (float) (Math.PI / 180);
-    private static final float CONE = 5 * DEG, GUN_CONE = 3 * DEG;
+    private static final float CONE = 3 * DEG, GUN_CONE = 3 * DEG;
 
     private static final class Count implements GameWorld.Listener {
         int destroyed, hits;
@@ -78,47 +77,109 @@ public final class AimTest {
         return (float) Math.abs(Math.cos(a) * (py - y) - Math.sin(a) * (px - x));
     }
 
-    public static void testTapBehindTurnsWithRcsThenFiresFromAGun() {
+    public static void testTapBehindFiresAtOnceAlongTheHeadingThenTurnsWithRcs() {
         GameWorld g = live(1, null);
         GameWorld.Ship s = g.ship();
-        float tx = 510, ty = 590; // 135 degrees clockwise of the nose
+        float a0 = s.angle, tx = 510, ty = 590; // 135 degrees clockwise of the nose
         T.near(135 * DEG, GameWorld.wrapAngle(bearing(s, tx, ty) - s.angle), 0.01, "behind the ship");
-        T.eq(true, g.aim(tx, ty), "queued");
-        T.eq(0, g.shots().size(), "nothing fires at the tap");
-        boolean rcs = false;
-        GameWorld.Shot b = null;
-        int n = 0;
-        while (b == null && n < Math.round(g.config().aimTimeout / DT)) {
+        T.eq(true, g.aim(tx, ty), "accepted");
+        g.step(DT);
+        T.eq(1, g.shots().size(), "exactly one bolt in the same step");
+        GameWorld.Shot b = newBolt(g);
+        T.check(b != null, "a fresh bolt");
+        fromAGun(g, b);
+        T.check(Math.abs(GameWorld.wrapAngle(b.angle - a0)) <= GUN_CONE + 1e-3f, "along the heading it had");
+        boolean rcs = false, ok = false;
+        for (int i = 0; i < Math.round(g.config().faceTimeout / DT); i++) {
             g.step(DT);
-            n++;
             rcs |= g.rcsFirings() > 0;
-            b = newBolt(g);
-            float e = err(s, tx, ty);
-            if (b == null) T.check(e > CONE, "lined up at " + e / DEG + " degrees but did not fire");
-            else T.check(e <= CONE, "fired at a heading error of " + e / DEG + " degrees");
-            T.eq(0f, s.thrust, "the engines stay off while aiming");
+            T.check(newBolt(g) == null, "no further bolt");
+            if (g.facingActive()) T.eq(0f, s.thrust, "the engines stay off while turning");
+            ok |= err(s, tx, ty) < 10 * DEG || !g.facingActive();
         }
         T.check(rcs, "the RCS turned it");
-        T.check(b != null, "fired within the timeout");
-        T.check(n * DT > 0.5f, "it turned first: fired after " + n * DT + " s");
-        T.eq(1, g.shots().size(), "one bolt");
-        fromAGun(g, b);
-        GameWorld.Flash f = g.flash();
-        T.eq(0, g.aimCount(), "the target is done");
-        for (int i = 0; i < 6; i++) g.step(DT);
-        T.check(f.t <= 0, "the flash is gone after about 0.08 s: " + f.t);
+        T.check(ok, "within 1.5 s it faces the tap (or the hold ended)");
+        T.check(g.shots().size() <= 1, "no delayed shot");
     }
 
-    public static void testTapAheadFiresAtOnce() {
+    public static void testTapAheadToesTheBoltInTowardTheTap() {
         GameWorld g = live(1, null);
-        GameWorld.Ship s = g.ship();
-        float a0 = s.angle;
-        T.eq(true, g.aim(320, 120), "queued"); // 2 degrees right of the nose
+        T.eq(true, g.aim(320, 120), "accepted"); // 2 degrees right of the nose
         g.step(DT);
         GameWorld.Shot b = newBolt(g);
-        T.check(b != null, "already lined up: fires on the next step");
-        fromAGun(g, b);
-        T.check(Math.abs(GameWorld.wrapAngle(s.angle - a0)) < 0.01f, "barely turned");
+        T.check(b != null, "fires on the next step");
+        int side = fromAGun(g, b);
+        T.check(GameWorld.wrapAngle(b.angle - g.ship().angle) * side < 0, "toed in toward the tap's side");
+    }
+
+    public static void testTapsAlternateMuzzles() {
+        GameWorld g = live(1, null);
+        int prev = 0, n = 0;
+        float[][] taps = {{310, 100}, {560, 390}, {100, 200}, {200, 600}, {500, 90}};
+        for (float[] t : taps) {
+            for (int i = 0; i < 10; i++) g.step(DT); // past the cooldown
+            g.aim(t[0], t[1]);
+            g.step(DT);
+            GameWorld.Shot b = newBolt(g);
+            T.check(b != null, "bolt for tap " + n);
+            int side = fromAGun(g, b);
+            T.check(side != prev, "tap " + n + " from the other gun");
+            prev = side;
+            n++;
+        }
+    }
+
+    public static void testTapDuringCooldownSetsTheFacingWithoutFiring() {
+        GameWorld g = live(1, null);
+        g.aim(310, 100);
+        g.step(DT);
+        T.check(newBolt(g) != null, "first tap fires");
+        g.aim(510, 590);
+        g.step(DT);
+        T.eq(null, newBolt(g), "no bolt during the cooldown");
+        T.eq(true, g.facingActive(), "but it is the facing target now");
+        T.near(510, g.aimTargetX(), 1e-6, "x");
+        T.near(590, g.aimTargetY(), 1e-6, "y");
+        for (int i = 0; i < 40; i++) {
+            g.step(DT);
+            T.eq(null, newBolt(g), "never a delayed shot");
+        }
+    }
+
+    public static void testNewerTapRetargets() {
+        GameWorld g = live(1, null);
+        g.aim(110, 250);
+        g.step(DT);
+        g.aim(510, 590);
+        T.near(510, g.aimTargetX(), 1e-6, "x replaced");
+        T.near(590, g.aimTargetY(), 1e-6, "y replaced");
+        GameWorld.Ship s = g.ship();
+        float best = 99;
+        for (int i = 0; i < Math.round(1.2f / DT); i++) {
+            g.step(DT);
+            best = Math.min(best, err(s, 510, 590));
+        }
+        T.check(best < 10 * DEG, "it turned to the newer tap: " + best / DEG);
+    }
+
+    public static void testHoldEndsAndAutopilotResumes() {
+        GameWorld g = live(1, null);
+        g.setWanderTargetForTest(310, 120); // the autopilot wants to fly up there at once
+        g.aim(510, 590);
+        int steps = 0;
+        while (g.facingActive() && steps < 200) {
+            g.step(DT);
+            steps++;
+            T.eq(0f, g.engineCommand(), "no burn while facing");
+        }
+        T.check(!g.facingActive(), "the hold ended");
+        T.check(steps * DT <= g.config().faceTimeout + 0.05f, "within 1.5 s: " + steps * DT);
+        boolean burned = false;
+        for (int i = 0; i < Math.round(3f / DT) && !burned; i++) {
+            g.step(DT);
+            burned = g.engineCommand() > 0;
+        }
+        T.check(burned, "the autopilot flies again");
     }
 
     public static void testNoBoltLeavesOffTheHeading() {
@@ -133,8 +194,6 @@ public final class AimTest {
             int bolts = 0, prevSide = 0;
             for (int i = 0, n = Math.round(30f / DT); i < n; i++) {
                 if (i % 23 == 0) g.aim((float) taps.next() * 620, (float) taps.next() * 722);
-                boolean aimed = g.aimCount() > 0;
-                float tx = aimed ? g.aimTargetX() : 0, ty = aimed ? g.aimTargetY() : 0;
                 int hits = c.hits;
                 g.step(DT);
                 GameWorld.Shot b = newBolt(g);
@@ -147,51 +206,10 @@ public final class AimTest {
                 T.check(side != prevSide, "seed " + seed + ": the guns take turns");
                 prevSide = side;
                 if (c.hits != hits) continue; // a knock in the same step moves the ship after the shot
-                if (aimed) T.check(err(s, tx, ty) <= CONE + 1e-5f, "seed " + seed + ": fired off target " + err(s, tx, ty) / DEG);
                 T.eq(side, fromAGun(g, b), "seed " + seed + ": from the gun that flashed");
             }
-            T.check(bolts > 20, "seed " + seed + " fired " + bolts);
+            T.check(bolts > 15, "seed " + seed + " fired " + bolts);
         }
-    }
-
-    public static void testTapsQueueUpToThreeAndTheNewestIsReplaced() {
-        GameWorld g = live(1, null);
-        GameWorld.Ship s = g.ship();
-        float[][] taps = {{110, 250}, {510, 250}, {120, 560}, {560, 390}};
-        for (float[] t : taps) T.eq(true, g.aim(t[0], t[1]), "accepted");
-        T.eq(GameWorld.AIM_QUEUE, g.aimCount(), "three at most");
-        // the fourth tap replaced the newest waiting one (the third)
-        float[][] order = {taps[0], taps[1], taps[3]};
-        int shots = 0;
-        float lastShot = -1;
-        for (int i = 0; i < Math.round(4f / DT) && shots < 3; i++) {
-            g.step(DT);
-            GameWorld.Shot b = newBolt(g);
-            if (b == null) continue;
-            T.check(err(s, order[shots][0], order[shots][1]) <= CONE, "shot " + shots + " at its own target, in order");
-            T.check(g.time() - lastShot >= g.config().fireCooldown - 1e-4f || lastShot < 0, "the cooldown holds");
-            fromAGun(g, b);
-            lastShot = g.time();
-            shots++;
-            T.eq(3 - shots, g.aimCount(), "then the next target");
-        }
-        T.eq(3, shots, "one bolt per target");
-        T.eq(0, g.aimCount(), "the queue is empty");
-    }
-
-    public static void testRepeatedTapsOnOnePointFireAtTheCooldown() {
-        GameWorld g = live(1, null);
-        for (int i = 0; i < 3; i++) g.aim(310, 100);
-        int[] at = new int[3];
-        int shots = 0;
-        for (int i = 0; i < 40 && shots < 3; i++) {
-            g.step(DT);
-            if (newBolt(g) != null) at[shots++] = i;
-        }
-        T.eq(3, shots, "three bolts");
-        T.eq(0, at[0], "the first at once");
-        T.check(at[1] - at[0] >= 7 && at[1] - at[0] <= 9, "then at the 0.12 s cooldown: " + (at[1] - at[0]) + " steps");
-        T.check(at[2] - at[1] >= 7 && at[2] - at[1] <= 9, "and again: " + (at[2] - at[1]) + " steps");
     }
 
     public static void testGunsSitOnTheHullShouldersEitherSideBehindTheNose() {
@@ -206,123 +224,6 @@ public final class AimTest {
             }
             T.check(onHull, "gun " + i + " is a hull outline corner");
         }
-    }
-
-    public static void testConsecutiveBoltsAlternateGuns() {
-        GameWorld g = live(1, null);
-        GameWorld.Ship s = g.ship();
-        float[][] taps = {{310, 100}, {310, 100}, {560, 390}, {560, 390}, {100, 200}};
-        int shots = 0, prev = 0;
-        for (float[] t : taps) {
-            g.aim(t[0], t[1]);
-            for (int i = 0; i < Math.round(1.2f / DT) && g.aimCount() > 0; i++) {
-                g.step(DT);
-                GameWorld.Shot b = newBolt(g);
-                if (b == null) continue;
-                int side = fromAGun(g, b);
-                // the spawn point's side of the centreline, from the world positions
-                float cross = (float) (Math.cos(s.angle) * (b.py - s.y) - Math.sin(s.angle) * (b.px - s.x));
-                T.check(cross * side > 0, "the spawn point sits on the gun's side");
-                T.check(side != prev, "bolt " + shots + " from the other gun");
-                prev = side;
-                shots++;
-            }
-        }
-        T.eq(taps.length, shots, "a bolt per tap");
-    }
-
-    public static void testTwinBoltsConvergeOnTheTarget() {
-        float tol = 0.38f * 33.5f * 0.92f; // a small rock's hit radius at k = 1
-        float[][] targets = {{310, 140}, {560, 390}, {120, 560}}; // ahead, 90 degrees right, 135 degrees left
-        for (float[] t : targets) {
-            GameWorld g = live(1, null);
-            g.aim(t[0], t[1]);
-            g.aim(t[0], t[1]);
-            float[] x = new float[2], y = new float[2], a = new float[2];
-            int[] side = new int[2];
-            int n = 0;
-            for (int i = 0; i < Math.round(2.4f / DT) && n < 2; i++) {
-                g.step(DT);
-                GameWorld.Shot b = newBolt(g);
-                if (b == null) continue;
-                side[n] = fromAGun(g, b);
-                x[n] = b.px;
-                y[n] = b.py;
-                a[n] = b.angle;
-                n++;
-            }
-            String at = "target " + t[0] + "," + t[1];
-            T.eq(2, n, at + ": two bolts");
-            T.eq(-side[0], side[1], at + ": one from each gun");
-            for (int j = 0; j < 2; j++) {
-                float m = miss(x[j], y[j], a[j], t[0], t[1]);
-                T.check(m <= tol, at + ": bolt " + j + " passes " + m + " px from the target");
-            }
-            if (t[0] == 310) { // lined up from the start: both are toed in and cross on the target itself
-                GameWorld.Ship s = g.ship();
-                for (int j = 0; j < 2; j++) {
-                    float off = GameWorld.wrapAngle(a[j] - s.angle);
-                    T.check(off * side[j] < 0 && Math.abs(off) <= 2 * DEG, at + ": toed in " + off / DEG + " degrees");
-                    T.check(miss(x[j], y[j], a[j], t[0], t[1]) < 0.05f, at + ": bolt " + j + " through the target");
-                }
-                // where the two paths cross
-                float d0x = (float) Math.cos(a[0]), d0y = (float) Math.sin(a[0]);
-                float d1x = (float) Math.cos(a[1]), d1y = (float) Math.sin(a[1]);
-                float den = d0x * d1y - d0y * d1x, u = ((x[1] - x[0]) * d1y - (y[1] - y[0]) * d1x) / den;
-                float cx = x[0] + d0x * u, cy = y[0] + d0y * u;
-                T.check(Math.hypot(cx - t[0], cy - t[1]) < 0.5, at + ": the streams cross at " + cx + "," + cy);
-            }
-        }
-    }
-
-    public static void testAutopilotResumesWhenTheQueueEmpties() {
-        GameWorld g = live(1, null);
-        GameWorld.Ship s = g.ship();
-        g.setWanderTargetForTest(310, 120); // the autopilot wants to fly up there at once
-        g.aim(510, 590);
-        int steps = 0;
-        while (g.aimCount() > 0 && steps < 100) {
-            g.step(DT);
-            steps++;
-            T.eq(0f, g.engineCommand(), "no burn while aiming");
-            T.eq(0f, s.thrust, "engines off while aiming");
-        }
-        T.eq(0, g.aimCount(), "shot");
-        boolean burned = false;
-        for (int i = 0; i < Math.round(3f / DT) && !burned; i++) {
-            g.step(DT);
-            burned = g.engineCommand() > 0;
-        }
-        T.check(burned, "the autopilot flies again");
-    }
-
-    public static void testTimeoutDropsATargetItCannotLineUp() {
-        GameWorld g = live(1, null);
-        GameWorld.Ship s = g.ship();
-        s.spin = (float) -Math.PI; // spinning counter-clockwise at the turn-rate cap
-        float a = s.angle + 120 * DEG; // and the target 120 degrees clockwise
-        float tx = s.x + 200 * (float) Math.cos(a), ty = s.y + 200 * (float) Math.sin(a);
-        g.aim(tx, ty);
-        float nx = s.x + 200 * (float) Math.cos(a + 30 * DEG), ny = s.y + 200 * (float) Math.sin(a + 30 * DEG);
-        g.aim(nx, ny); // the next target, 30 degrees further on
-        int steps = Math.round(g.config().aimTimeout / DT);
-        for (int i = 0; i < steps - 1; i++) {
-            g.step(DT);
-            T.eq(0, g.shots().size(), "not lined up: no bolt at step " + i);
-        }
-        T.eq(2, g.aimCount(), "still trying just before the timeout");
-        T.check(err(s, tx, ty) > CONE, "not lined up yet");
-        g.step(DT);
-        g.step(DT);
-        T.eq(1, g.aimCount(), "dropped after 1.2 s");
-        T.eq(0, g.shots().size(), "without a bolt");
-        GameWorld.Shot b = null;
-        for (int i = 0; i < Math.round(1.2f / DT) && b == null; i++) {
-            g.step(DT);
-            b = newBolt(g);
-        }
-        T.check(b != null, "the next target gets its own 1.2 s and is shot");
-        T.check(err(s, nx, ny) <= CONE, "at the next target");
     }
 
     /** A rock heads straight at the ship while taps keep it aiming: avoidance wins, then aiming carries on. */
@@ -358,41 +259,41 @@ public final class AimTest {
         }
     }
 
-    public static void testAutoFireTurnsToTheNearestRockAndFiresFromTheNose() {
+    public static void testAutoFireTurnsToTheNearestRockAndFiresAlongTheHeading() {
         Count c = new Count();
         GameWorld g = live(1, c);
         GameWorld.Ship s = g.ship();
         GameWorld.Rock r = g.addRock(1, s.x + 100, s.y, 0, 0); // 90 degrees right of the nose
         g.setAutoFire(true);
         boolean rcs = false;
-        GameWorld.Shot b = null;
-        for (int i = 0; i < Math.round(1.2f / DT) && b == null; i++) {
+        int bolts = 0;
+        for (int i = 0; i < Math.round(3f / DT); i++) {
             g.step(DT);
             rcs |= g.rcsFirings() > 0;
-            b = newBolt(g);
-            if (b == null) T.check(err(s, r.x, r.y) > CONE, "not lined up yet");
+            GameWorld.Shot b = newBolt(g);
+            if (b != null) {
+                bolts++;
+                fromAGun(g, b);
+            }
         }
         T.check(rcs, "it turned with the RCS");
-        T.check(b != null, "and fired");
-        T.check(err(s, r.x, r.y) <= CONE, "at the rock");
-        fromAGun(g, b);
-        for (int i = 0; i < 20; i++) g.step(DT);
-        T.eq(1, c.destroyed, "and hit it");
+        T.check(bolts >= 3, "and kept firing on its cadence: " + bolts);
+        T.eq(1, c.destroyed, "and hit the rock once facing it");
     }
 
-    public static void testIntroAndReplayClearTheQueue() {
+    public static void testIntroAndReplayClearTheFacing() {
         GameWorld g = new GameWorld(new Rng(1));
         g.resize(620, 722);
         T.eq(false, g.aim(100, 100), "no taps during the intro");
-        T.eq(0, g.aimCount(), "nothing queued");
+        T.eq(false, g.facingActive(), "nothing set");
         g.skipIntro();
         g.aim(310, 700);
         g.aim(100, 100);
         g.restartIntro();
-        T.eq(0, g.aimCount(), "a replay clears the queue");
+        T.eq(false, g.facingActive(), "a replay clears the facing");
     }
 
-    public static void testQueuedPointsFollowAResize() {
+    public static void testFacingPointFollowsAResize() {
         GameWorld g = live(1, null);
         g.aim(310, 100);
         g.resize(330, 810);
@@ -406,7 +307,7 @@ public final class AimTest {
         int fired = 0;
         for (int n = 0; n < 200; n++) {
             g.aim(310, 40);
-            for (int i = 0; i < 8; i++) {
+            for (int i = 0; i < 9; i++) {
                 g.rocks().clear(); // nothing to dodge or hit
                 g.step(DT);
                 if (newBolt(g) != null) fired++;
@@ -462,7 +363,7 @@ public final class AimTest {
             b.step(DT);
             GameWorld.Ship p = a.ship(), q = b.ship();
             T.check(p.x == q.x && p.y == q.y && p.angle == q.angle && p.spin == q.spin, "ship at step " + i);
-            T.eq(a.aimCount(), b.aimCount(), "queue " + i);
+            T.eq(a.facingActive(), b.facingActive(), "facing " + i);
             T.eq(a.shots().size(), b.shots().size(), "bolts " + i);
             for (int j = 0; j < a.shots().size(); j++) {
                 GameWorld.Shot u = a.shots().get(j), v = b.shots().get(j);

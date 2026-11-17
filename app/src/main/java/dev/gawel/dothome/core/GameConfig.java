@@ -30,13 +30,13 @@ public final class GameConfig {
     public final float shotCull;
     /** Cooldown between bolts. */
     public final float fireCooldown = 0.12f;
-    /** A bolt fires once the heading is within this of the bearing to the aim target, radians (5 degrees). */
-    public final float aimCone = (float) Math.toRadians(5);
-    /** An aim target the ship cannot line up within this many seconds is dropped. */
-    public final float aimTimeout = 1.2f;
+    /** A tap's facing target is held until the heading is within this of it (3 degrees) for faceHold seconds. */
+    public final float faceCone = (float) Math.toRadians(3), faceHold = 0.4f;
+    /** A facing target is dropped after this many seconds at most. */
+    public final float faceTimeout = 1.5f;
     /**
-     * A gun aims its bolt from its muzzle at the target, but at most this far off the heading, radians (3 degrees):
-     * lined up, that is a slight toe-in and the twin streams converge on the target.
+     * A bolt flies along the heading, toed in toward the tap only when the tap is within this of it, radians
+     * (3 degrees): the twin streams then converge on it.
      */
     public final float gunCone = (float) Math.toRadians(3);
     /** The red muzzle flash at the firing point, seconds. */
