@@ -29,7 +29,13 @@ public final class GameWorld {
         /** Local x,y pairs of the polygon vertices. */
         public float[] outline;
     }
-    public static final class Shot { public float x, y, vx, vy, life; }
+    /**
+     * A laser bolt: position, the previous step's position (hits are swept along the path), velocity, its angle,
+     * age, distance flown, life left and, once it hits, the seconds left of its flare at the hit point.
+     */
+    public static final class Shot { public float x, y, px, py, vx, vy, angle, t, trav, life, hit; }
+    /** The red muzzle flash: ship-local position (px), the bolt's angle relative to the heading, seconds left. */
+    public static final class Flash { public float x, y, angle, t; }
     public static final class Particle { public float x, y, vx, vy, life, life0, alpha; }
     public static final class Ring { public float x, y, t; }
     public static final class Star { public float x, y, alpha, phase, speed, depth; }
@@ -47,6 +53,16 @@ public final class GameWorld {
     private final Ship ship = new Ship();
     private final List<Rock> rocks = new ArrayList<Rock>();
     private final List<Shot> shots = new ArrayList<Shot>();
+    /** Spent bolts for reuse: firing allocates nothing. */
+    private final List<Shot> shotPool = new ArrayList<Shot>();
+    /** At most this many bolts fly at once. */
+    public static final int MAX_SHOTS = 40;
+    private final Flash flash = new Flash();
+    private final float[] muzzle = new float[2];
+    // laser hits of the last step, for the renderer's sparks
+    private static final int MAX_HITS = 8;
+    private final float[] hitX = new float[MAX_HITS], hitY = new float[MAX_HITS], hitA = new float[MAX_HITS];
+    private int laserHits;
     private final List<Particle> particles = new ArrayList<Particle>();
     private final List<Ring> rings = new ArrayList<Ring>();
     private final List<Star> stars = new ArrayList<Star>();
@@ -72,6 +88,7 @@ public final class GameWorld {
 
     public GameWorld(Rng rng) {
         this.rng = rng;
+        for (int i = 0; i < MAX_SHOTS; i++) shotPool.add(new Shot());
     }
 
     public void setListener(Listener l) { listener = l; }
@@ -130,6 +147,19 @@ public final class GameWorld {
     /** RCS firing i's strength: the angular acceleration over the RCS maximum, 0..1. */
     public float rcsStrength(int i) { return rcsStrength[i]; }
 
+    /** Laser bolts that hit a rock in the last step (at most 8 are reported). */
+    public int laserHits() { return laserHits; }
+
+    public float laserHitX(int i) { return hitX[i]; }
+
+    public float laserHitY(int i) { return hitY[i]; }
+
+    /** The direction the bolt that made hit i was flying. */
+    public float laserHitAngle(int i) { return hitA[i]; }
+
+    /** The muzzle flash of the last bolt; over once t reaches 0. */
+    public Flash flash() { return flash; }
+
     /** Ends the intro now, releasing any hold (a fold, page swipe or visibility flip must not replay it); world time is untouched. */
     public void skipIntro() {
         introHeld = false;
@@ -160,7 +190,9 @@ public final class GameWorld {
         ship.thrust = 0f;
         ship.hitCooldown = 0f;
         resetFlight();
-        shots.clear();
+        clearShots();
+        flash.t = 0f;
+        laserHits = 0;
         particles.clear();
         rings.clear();
         wave = null;
@@ -198,7 +230,9 @@ public final class GameWorld {
             r.r *= kr;
             for (int i = 0; i < r.outline.length; i++) r.outline[i] *= kr;
         }
-        for (Shot s : shots) { s.x *= sx; s.y *= sy; }
+        for (Shot s : shots) { s.x *= sx; s.y *= sy; s.px *= sx; s.py *= sy; }
+        flash.x *= kr;
+        flash.y *= kr;
         for (Particle p : particles) { p.x *= sx; p.y *= sy; }
         for (Ring g : rings) { g.x *= sx; g.y *= sy; }
         for (Star s : stars) { s.x *= sx; s.y *= sy; }
@@ -268,20 +302,40 @@ public final class GameWorld {
         }
     }
 
-    /** Fires a shot toward (x, y); false during the intro or while the fire cooldown is running. */
+    /**
+     * Turret: fires a laser bolt toward (x, y) at once, without turning the ship; false during the intro or while
+     * the fire cooldown is running. The bolt leaves from the nose for a target ahead and from the hull edge facing
+     * it for one behind (ShipShape.muzzle), aimed from there at (x, y).
+     */
     public boolean fire(float x, float y) {
         if (!isLive() || fireT > 0) return false;
         fireT = cfg.fireCooldown;
-        float a = (float) Math.atan2(y - ship.y, x - ship.x);
-        float c = (float) Math.cos(a), s = (float) Math.sin(a);
-        Shot sh = new Shot();
-        sh.x = ship.x + c * 15f * cfg.k;
-        sh.y = ship.y + s * 15f * cfg.k;
-        sh.vx = c * cfg.shotSpeed;
-        sh.vy = s * cfg.shotSpeed;
-        sh.life = cfg.shotLife;
-        shots.add(sh);
+        Ship s = ship;
+        float k = cfg.k, c = (float) Math.cos(s.angle), sn = (float) Math.sin(s.angle);
+        ShipShape.muzzle(wrapAngle((float) Math.atan2(y - s.y, x - s.x) - s.angle), muzzle);
+        float lx = muzzle[0] * k, ly = muzzle[1] * k;
+        float mx = s.x + lx * c - ly * sn, my = s.y + lx * sn + ly * c;
+        float a = (float) Math.atan2(y - my, x - mx);
+        flash.x = lx;
+        flash.y = ly;
+        flash.angle = wrapAngle(a - s.angle);
+        flash.t = cfg.muzzleFlash;
+        if (shots.size() < MAX_SHOTS) {
+            Shot b = shotPool.isEmpty() ? new Shot() : shotPool.remove(shotPool.size() - 1);
+            b.x = b.px = mx;
+            b.y = b.py = my;
+            b.vx = (float) Math.cos(a) * cfg.shotSpeed;
+            b.vy = (float) Math.sin(a) * cfg.shotSpeed;
+            b.angle = a;
+            b.t = b.trav = b.hit = 0f;
+            b.life = cfg.shotLife;
+            shots.add(b);
+        }
         return true;
+    }
+
+    private void clearShots() {
+        for (int i = shots.size() - 1; i >= 0; i--) shotPool.add(shots.remove(i));
     }
 
     Rock addRock(int size, float x, float y, float vx, float vy) {
@@ -301,6 +355,7 @@ public final class GameWorld {
         time += dt;
         if (!introHeld) introT += dt;
         if (shockCool > 0) shockCool -= dt;
+        laserHits = 0;
         boolean live = isLive();
         Ship s = ship;
         if (live && autopilot) pilot(dt);
@@ -346,6 +401,7 @@ public final class GameWorld {
             rcsFirings = 2;
         }
         if (fireT > 0) fireT -= dt;
+        if (flash.t > 0) flash.t = Math.max(0f, flash.t - dt);
         if (s.hitCooldown > 0) s.hitCooldown -= dt;
 
         if (autoFire && live) {
@@ -362,26 +418,41 @@ public final class GameWorld {
             if (r.x < -e) r.x = w + e; else if (r.x > w + e) r.x = -e;
             if (r.y < -e) r.y = h + e; else if (r.y > h + e) r.y = -e;
         }
-        for (int i = 0; i < shots.size(); i++) {
-            Shot sh = shots.get(i);
-            sh.x += sh.vx * dt;
-            sh.y += sh.vy * dt;
-            sh.life -= dt;
-            if (sh.x < -10 || sh.x > w + 10 || sh.y < -10 || sh.y > h + 10) sh.life = 0;
-        }
-        for (int k = 0; k < shots.size(); k++) {
-            Shot sh = shots.get(k);
-            if (sh.life <= 0) continue;
+        float cull = cfg.shotCull;
+        for (int j = 0; j < shots.size(); j++) {
+            Shot b = shots.get(j);
+            b.t += dt;
+            if (b.hit > 0) { // a flare where it hit, then gone
+                b.hit -= dt;
+                if (b.hit <= 0) b.life = 0;
+                continue;
+            }
+            b.px = b.x;
+            b.py = b.y;
+            b.x += b.vx * dt;
+            b.y += b.vy * dt;
+            b.trav += hypot(b.vx, b.vy) * dt;
+            b.life -= dt;
+            if (b.x < -cull || b.x > w + cull || b.y < -cull || b.y > h + cull) b.life = 0;
+            if (b.life <= 0) continue;
             for (int i = 0; i < rocks.size(); i++) {
                 Rock r = rocks.get(i);
-                if (hypot(sh.x - r.x, sh.y - r.y) < r.r * 0.92f) {
-                    sh.life = 0;
-                    kill(i);
-                    break;
+                float u = segmentHit(b.px, b.py, b.x, b.y, r.x, r.y, r.r * 0.92f);
+                if (u < 0) continue;
+                b.x = b.px + (b.x - b.px) * u;
+                b.y = b.py + (b.y - b.py) * u;
+                b.hit = cfg.shotHitFlare;
+                if (laserHits < MAX_HITS) {
+                    hitX[laserHits] = b.x;
+                    hitY[laserHits] = b.y;
+                    hitA[laserHits] = b.angle;
+                    laserHits++;
                 }
+                kill(i);
+                break;
             }
         }
-        for (int i = shots.size() - 1; i >= 0; i--) if (shots.get(i).life <= 0) shots.remove(i);
+        for (int i = shots.size() - 1; i >= 0; i--) if (shots.get(i).life <= 0) shotPool.add(shots.remove(i));
 
         if (live) {
             for (int i = 0; i < rocks.size(); i++) {
@@ -644,6 +715,22 @@ public final class GameWorld {
         r.rot = (float) rng.range(0, TAU);
         r.vr = (float) rng.range(-0.25, 0.25);
         return r;
+    }
+
+    /**
+     * Where segment (x0,y0)-(x1,y1) first enters the circle, as a 0..1 fraction of the segment: 0 if it starts
+     * inside, -1 for a miss. Bolts move up to 45 px a step, so hits are swept along the path.
+     */
+    static float segmentHit(float x0, float y0, float x1, float y1, float cx, float cy, float r) {
+        double dx = x1 - x0, dy = y1 - y0, fx = x0 - cx, fy = y0 - cy;
+        double c = fx * fx + fy * fy - (double) r * r;
+        if (c <= 0) return 0f;
+        double a = dx * dx + dy * dy;
+        if (a < 1e-9) return -1f;
+        double b = 2 * (fx * dx + fy * dy), disc = b * b - 4 * a * c;
+        if (disc < 0) return -1f;
+        double u = (-b - Math.sqrt(disc)) / (2 * a);
+        return u >= 0 && u <= 1 ? (float) u : -1f;
     }
 
     /** a wrapped into -PI..PI. */

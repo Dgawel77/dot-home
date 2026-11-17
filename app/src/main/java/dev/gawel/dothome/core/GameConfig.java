@@ -24,8 +24,14 @@ public final class GameConfig {
     /** Ship hit radius against rocks, px. */
     public final float shipRadius;
 
-    public final float shotLife = 1.3f;
-    public final float fireCooldown = 0.1f;
+    /** Laser bolts: seconds of flight, and how long a bolt lingers as a flare where it hit. */
+    public final float shotLife = 1.1f, shotHitFlare = 0.06f;
+    /** Bolts are dropped this far past the screen edge, px. */
+    public final float shotCull;
+    /** Turret cooldown between bolts. */
+    public final float fireCooldown = 0.12f;
+    /** The red muzzle flash at the firing point, seconds. */
+    public final float muzzleFlash = 0.08f;
     public final float hitCooldown = 0.4f;
     public final float ringLife = 0.8f;
     public final int particleCap = 2000;
@@ -67,7 +73,8 @@ public final class GameConfig {
             ? (float) Math.PI / maxSpin + maxSpin / rcsAccel
             : 2f * (float) Math.sqrt(Math.PI / rcsAccel);
         flipTime = flip * 1.15f;
-        shotSpeed = 560f * k;
+        shotSpeed = 900f * k;
+        shotCull = 40f * k;
         hitKnock = 150f * k;
         rockSpeedMin = 10f * k;
         rockSpeedMax = 28f * k;
