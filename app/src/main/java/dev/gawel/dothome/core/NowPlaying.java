@@ -21,6 +21,8 @@ public final class NowPlaying {
     /** The player's package, and the session's own "open the player" activity (an opaque PendingIntent), or null. */
     public String pkg;
     public Object sessionActivity;
+    /** The session supports ACTION_SEEK_TO and knows its duration: the widget attaches its seek zones. */
+    public boolean canSeek;
 
     /** What a tap on the album art opens. */
     public enum ArtTarget { NONE, SESSION, LAUNCH }
@@ -74,8 +76,18 @@ public final class NowPlaying {
     public static boolean sameDisplayed(NowPlaying a, NowPlaying b) {
         if (a == b) return true;
         if (a == null || b == null) return false;
-        return sameClickTarget(a, b) && a.playing == b.playing && a.stopped == b.stopped && a.durationMs == b.durationMs
+        return sameClickTarget(a, b) && a.playing == b.playing && a.stopped == b.stopped && a.durationMs == b.durationMs && a.canSeek == b.canSeek
             && eq(a.title, b.title) && eq(a.artist, b.artist);
+    }
+
+    /** A copy with the position re-anchored (a seek just moved it), so the widget redraws at once. */
+    public NowPlaying withPosition(long pos, long nowElapsedMs) {
+        NowPlaying n = new NowPlaying();
+        n.title = title; n.artist = artist; n.playing = playing; n.durationMs = durationMs;
+        n.changedAtMs = changedAtMs; n.sessionKey = sessionKey; n.stopped = stopped; n.speed = speed;
+        n.pkg = pkg; n.sessionActivity = sessionActivity; n.canSeek = canSeek;
+        n.positionMs = pos; n.positionAtElapsedMs = nowElapsedMs;
+        return n;
     }
 
     private static boolean eq(String x, String y) { return x == null ? y == null : x.equals(y); }

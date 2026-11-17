@@ -300,20 +300,20 @@ final class WidgetArt {
             c.drawCircle(artX + cx, artY + cy, rd, p);
         }
 
-        float textX = artX + artS + 16f * dens;
-        float maxW = Math.max(1f, wPx - MUSIC_TRANSPORT_DP * dens - textX - 4f * dens);
+        float[] row = musicRow(wPx, hPx, dens);
+        float textX = row[0], maxW = row[4];
         Paint title = text(Fonts.interMedium(ctx), 15f, dens, DotStyle.L100);
         Paint artist = text(Fonts.inter(ctx), 13f, dens, DotStyle.L65);
 
         float titleH = 20f * dens, artistH = 16f * dens, gap = 8f * dens;
-        float y = Lattice.snap((hPx - (titleH + artistH + gap + s4)) / 2f, dens);
+        float y = row[1] - (titleH + artistH + gap);
         c.drawText(TextFit.fit(np.title, maxW, title::measureText), textX, baseline(title, y, titleH), title);
         y += titleH;
         c.drawText(TextFit.fit(np.artist, maxW, artist::measureText), textX, baseline(artist, y, artistH), artist);
         y += artistH + gap;
 
         // progress: one S4 dot row, elapsed L100, remainder L10
-        int total = Math.max(1, (int) (maxW / s4));
+        int total = (int) row[3];
         int done = 0;
         if (np.durationMs > 0) {
             long pos = np.positionAt(android.os.SystemClock.elapsedRealtime());
@@ -323,6 +323,20 @@ final class WidgetArt {
         Paint on = fill(DotStyle.L100), off = fill(DotStyle.L10);
         for (int i = 0; i < total; i++) dot(c, textX, y, s4, i, 0, rr, i < done ? on : off);
         return bmp;
+    }
+
+    /**
+     * Geometry of the music widget's progress dot row in px: {left, top, width, cell count, max text width}.
+     * Shared by {@link #music} and the seek zones, so the zones sit exactly over the dots.
+     */
+    static float[] musicRow(int wPx, int hPx, float dens) {
+        float s4 = Lattice.stepPx(Lattice.Step.S4, dens);
+        float textX = (16f + 64f + 16f) * dens;
+        float maxW = Math.max(1f, wPx - MUSIC_TRANSPORT_DP * dens - textX - 4f * dens);
+        float titleH = 20f * dens, artistH = 16f * dens, gap = 8f * dens;
+        float top = Lattice.snap((hPx - (titleH + artistH + gap + s4)) / 2f, dens) + titleH + artistH + gap;
+        int total = Math.max(1, (int) (maxW / s4));
+        return new float[] {textX, top, total * s4, total, maxW};
     }
 
     /** Pref "widget.backdrop" (default on): whether widgets draw their own clear glass card. */

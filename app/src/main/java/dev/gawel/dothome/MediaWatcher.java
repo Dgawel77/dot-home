@@ -16,6 +16,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 
+import dev.gawel.dothome.core.MusicSeek;
 import dev.gawel.dothome.core.NowPlaying;
 
 /**
@@ -184,6 +185,7 @@ public class MediaWatcher extends NotificationListenerService {
                 || st == PlaybackState.STATE_ERROR;
             n.positionMs = Math.max(0, ps.getPosition());
             n.speed = ps.getPlaybackSpeed();
+            n.canSeek = MusicSeek.canSeek(ps.getActions(), n.durationMs);
             n.positionAtElapsedMs = ps.getLastPositionUpdateTime();
             long updated = ps.getLastPositionUpdateTime();
             n.changedAtMs = updated > 0

@@ -14,6 +14,7 @@ import android.widget.RemoteViews;
 
 import dev.gawel.dothome.core.CardShape;
 import dev.gawel.dothome.core.ClockFit;
+import dev.gawel.dothome.core.MusicSeek;
 import dev.gawel.dothome.core.NowPlaying;
 import dev.gawel.dothome.core.Weather;
 
@@ -188,7 +189,44 @@ final class WidgetUpdater {
         rv.setOnClickPendingIntent(R.id.music_prev, commandIntent(ctx, 10, MediaCommandReceiver.PREV));
         rv.setOnClickPendingIntent(R.id.music_play, commandIntent(ctx, 11, MediaCommandReceiver.PLAY_PAUSE));
         rv.setOnClickPendingIntent(R.id.music_next, commandIntent(ctx, 12, MediaCommandReceiver.NEXT));
+        attachSeekZones(ctx, rv, np, w, h, eff);
         return rv;
+    }
+
+    private static final int[] SEEK_ZONE_IDS = {
+        R.id.music_seek_0, R.id.music_seek_1, R.id.music_seek_2, R.id.music_seek_3, R.id.music_seek_4,
+        R.id.music_seek_5, R.id.music_seek_6, R.id.music_seek_7, R.id.music_seek_8, R.id.music_seek_9,
+        R.id.music_seek_10, R.id.music_seek_11, R.id.music_seek_12, R.id.music_seek_13, R.id.music_seek_14,
+        R.id.music_seek_15, R.id.music_seek_16, R.id.music_seek_17, R.id.music_seek_18, R.id.music_seek_19};
+    private static final float SEEK_ZONE_DP = 40f;
+    /** Seek zones take request codes 100..119 (the buttons use 10..12). */
+    private static final int SEEK_CODE_BASE = 100;
+
+    /**
+     * Lays the 20 transparent seek zones exactly over the progress dot row (same geometry as WidgetArt.music), centred
+     * on it and SEEK_ZONE_DP tall. Click intents are attached only when the session can seek and has a duration; the
+     * layout-size calls need API 31, so older devices simply get no zones.
+     */
+    private static void attachSeekZones(Context ctx, RemoteViews rv, NowPlaying np, int w, int h, float eff) {
+        if (!np.canSeek || android.os.Build.VERSION.SDK_INT < 31) {
+            rv.setViewVisibility(R.id.music_seek, android.view.View.GONE);
+            return;
+        }
+        float[] row = WidgetArt.musicRow(w, h, eff);
+        float s4 = row[2] / row[3];
+        float centreDp = (row[1] + s4 / 2f) / eff;
+        int u = android.util.TypedValue.COMPLEX_UNIT_DIP;
+        rv.setViewVisibility(R.id.music_seek, android.view.View.VISIBLE);
+        rv.setViewLayoutWidth(R.id.music_seek, row[2] / eff, u);
+        rv.setViewLayoutHeight(R.id.music_seek, SEEK_ZONE_DP, u);
+        rv.setViewLayoutMargin(R.id.music_seek, RemoteViews.MARGIN_START, row[0] / eff, u);
+        rv.setViewLayoutMargin(R.id.music_seek, RemoteViews.MARGIN_TOP, Math.max(0f, centreDp - SEEK_ZONE_DP / 2f), u);
+        for (int i = 0; i < MusicSeek.ZONES; i++) {
+            Intent in = new Intent(MediaCommandReceiver.SEEK).setClass(ctx, MediaCommandReceiver.class)
+                .putExtra(MediaCommandReceiver.EXTRA_FRACTION, MusicSeek.zoneFraction(i));
+            rv.setOnClickPendingIntent(SEEK_ZONE_IDS[i],
+                PendingIntent.getBroadcast(ctx, SEEK_CODE_BASE + i, in, flags()));
+        }
     }
 
     /**
