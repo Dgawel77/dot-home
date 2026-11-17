@@ -15,22 +15,41 @@ import dev.gawel.dothome.core.Lattice;
 import dev.gawel.dothome.core.LatticeRaster;
 import dev.gawel.dothome.core.Rng;
 import dev.gawel.dothome.core.ScoreBook;
+import dev.gawel.dothome.core.ShipShape;
 import dev.gawel.dothome.core.Zones;
 
 /**
  * Draws the game on the 4 dp lattice anchored at the surface origin. Rocks are rasterised every frame into filled
  * lattice silhouettes (regular weight on the edge blending to light in the body, ink by sqrt(coverage)), or, with
  * the outline style, drawn as free outline dots with a body stipple. The shockwave and hit rings are lattice dot
- * rows. The ship, shots, debris, exhaust trail and stars are free soft dots.
+ * rows. The ship (Ship v2 "forked-5", heavy weight), its two main-engine plumes, its RCS puffs, debris and stars
+ * are free soft dots in the greys. Laser bolts, the muzzle flash and hit sparks are the one colour, DotStyle.LASER.
  * Dots draw across the whole screen.
- * Only the ship, its opening dot and shots reach L100; everything on a lock still stays at L65 or below. Nothing is
- * allocated per frame.
+ * Only the ship, its opening dot and the plumes reach L100; on a lock still every grey stays at L65 or below and
+ * the red is dimmed to 65%. Nothing is allocated per frame: plume, puff and spark dots live in fixed pools.
+ *
+ * <p>Sizes: positions and lengths are world px (mockup px x k); dot diameters and stroke widths are mockup px on
+ * the lattice (4 mockup px = one 4 dp step, so 3.4 is heavy weight).
  */
 final class DotRenderer {
     private static final float TAU = (float) (Math.PI * 2);
-    private static final float[] SHIP = {15, 0, -10, -9.5f, -5, 0, -10, 9.5f};
-    private static final int TRAIL_MAX = 48;
-    private static final float TRAIL_LIFE = 0.7f;
+    /** The forked-5 hull and its nozzle bars: x, y, diameter, level quads in mockup px (ShipShape). */
+    private static final float[] HULL = ShipShape.hullDots(), MARKS = ShipShape.nozzleMarks();
+    private static final int MARKS_PER_NOZZLE = ShipShape.marksPerNozzle();
+    /** A nozzle bar glows from L46 (as alpha on L100) at idle up to L100 at full thrust. */
+    private static final float NOZZLE_IDLE = 0.53f;
+    /** Plume dots per second per nozzle at full thrust (130 for the pair, as the prototype). */
+    private static final float PLUME_RATE = 65f;
+    /** RCS firings weaker than this (fine trim) show no puff. */
+    private static final float PUFF_MIN = 0.12f;
+    /** Thruster dots (plumes and puffs) and red sparks alive at once, at most. */
+    private static final int FX_MAX = 384, SPARK_MAX = 64;
+    /** LASER_GLOW's alpha, stacked from a 3x pass and a 2x pass so the glow reads about 35% beside the core. */
+    private static final float GLOW_ALPHA = (DotStyle.LASER_GLOW >>> 24) / 255f, GLOW_OUTER = 0.5f, GLOW_INNER = 0.6f;
+    /** A bolt is a pill: a 15 mockup px core line with round caps (about 18 long), 3 thick. */
+    private static final float BOLT_LEN = 15f, BOLT_THICK = 3f, SPARK_THICK = 1.6f;
+    /** Lock stills dim the laser red to this. */
+    private static final float STILL_RED = 0.65f;
     /** Breath tempo: the star twinkle period in seconds. */
     private static final float TWINKLE_PERIOD = 4f;
     /** Size shows depth: stars at or above NEAR_DEPTH are NEAR_SCALE times bigger. */
@@ -61,12 +80,12 @@ final class DotRenderer {
     private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final android.content.res.Resources res;
     private float density = -1, step, rLight, rReg, rHeavy;
+    /** Device px per mockup px of dot or stroke size: a quarter of the lattice step. */
+    private float mock;
 
     private boolean outlineRocks;
     private final WeakHashMap<GameWorld.Rock, RockDots> rockCache = new WeakHashMap<>();
     private long rockSeed = 1;
-    private float[] shipPts = new float[0];
-    private float shipSpacing = -1, shipK = -1;
 
     // rasterising scratch: one rock's polygon on screen and the coverage of its bounding-box cells (grown, never per frame)
     private float[] polyX = new float[16], polyY = new float[16];
@@ -79,11 +98,23 @@ final class DotRenderer {
         }
     };
 
-    private final float[] trailX = new float[TRAIL_MAX];
-    private final float[] trailY = new float[TRAIL_MAX];
-    private final float[] trailLife = new float[TRAIL_MAX];
-    private int trailHead;
-    private float trailT;
+    // thruster dots in world px: both plumes and the RCS puffs (puff marks the faster-damped RCS dots)
+    private final float[] fxX = new float[FX_MAX], fxY = new float[FX_MAX], fxVx = new float[FX_MAX];
+    private final float[] fxVy = new float[FX_MAX], fxLife = new float[FX_MAX], fxLife0 = new float[FX_MAX];
+    private final float[] fxDia = new float[FX_MAX], fxLevel = new float[FX_MAX];
+    private final boolean[] fxPuff = new boolean[FX_MAX];
+    private int fxN;
+    // red hit sparks in world px
+    private final float[] spX = new float[SPARK_MAX], spY = new float[SPARK_MAX], spVx = new float[SPARK_MAX];
+    private final float[] spVy = new float[SPARK_MAX], spLife = new float[SPARK_MAX], spLife0 = new float[SPARK_MAX];
+    private int spN;
+    private final float[] plumeAcc = new float[ShipShape.NOZZLES];
+    private float puffAcc = 0.9f;
+    // the ship's pose while emitting (set once per advance)
+    private float emX, emY, emVx, emVy, emCs, emSn, emK, emDt;
+    /** Visual noise for plumes, puffs and sparks; the simulation keeps its own seeded Rng. */
+    private final Rng fxRng = new Rng(0x5EEDL);
+    private final Paint red = new Paint(Paint.ANTI_ALIAS_FLAG);
     private float lastIntroT;
 
     private float parTx, parTy, parX, parY;
@@ -106,6 +137,7 @@ final class DotRenderer {
         textPaint.setLetterSpacing(LABEL_TRACKING_EM);
         textPaint.setColor(DotStyle.L65);
         textPaint.setTextAlign(Paint.Align.RIGHT);
+        red.setStrokeCap(Paint.Cap.ROUND);
         metrics();
         dot65.prewarm(rReg);
         dot100.prewarm(rHeavy);
@@ -120,6 +152,7 @@ final class DotRenderer {
         rLight = Lattice.radiusPx(Lattice.Step.S4, Lattice.Weight.LIGHT, d);
         rReg = Lattice.radiusPx(Lattice.Step.S4, Lattice.Weight.REGULAR, d);
         rHeavy = Lattice.radiusPx(Lattice.Step.S4, Lattice.Weight.HEAVY, d);
+        mock = step / 4f;
         textPaint.setTextSize(LABEL_DP * d);
     }
 
@@ -137,28 +170,145 @@ final class DotRenderer {
         parTx = parTy = parX = parY = 0f;
     }
 
-    /** Per-frame bookkeeping that is not part of the simulation (the ship's exhaust trail). Call after step(). */
+    /**
+     * Per-frame bookkeeping that is not part of the simulation: the plume and RCS dots from the step's thruster
+     * events and the red sparks from its laser hits. Call once after each step().
+     */
     void advance(GameWorld w, float dt) {
         if (w.width() <= 0) return;
-        float k = scaleK(w);
         float a = 1f - (float) Math.exp(-dt / 0.15f);
         parX += (parTx - parX) * a;
         parY += (parTy - parY) * a;
         float it = w.introTime();
-        if (it < lastIntroT) java.util.Arrays.fill(trailLife, 0f); // the intro restarted: the scene starts from one dot
+        if (it < lastIntroT) { // the intro restarted: the scene starts from one dot
+            fxN = spN = 0;
+            java.util.Arrays.fill(plumeAcc, 0f);
+            puffAcc = 0.9f;
+        }
         lastIntroT = it;
-        for (int i = 0; i < TRAIL_MAX; i++) if (trailLife[i] > 0) trailLife[i] -= dt;
-        trailT += dt;
+        float fdt = clamp(dt, 0f, 0.05f);
+        emitThrusters(w, fdt);
+        emitSparks(w);
+        moveFx(fdt);
+    }
+
+    /** Main-engine plume dots from both nozzles (density follows thrust) and RCS puffs out of the firing ports. */
+    private void emitThrusters(GameWorld w, float dt) {
         GameWorld.Ship s = w.ship();
-        float sp = (float) Math.sqrt(s.vx * s.vx + s.vy * s.vy);
-        if (trailT > 0.04f && sp > 10f * k) {
-            trailT = 0;
-            trailX[trailHead] = s.x - (float) Math.cos(s.angle) * 9f * k;
-            trailY[trailHead] = s.y - (float) Math.sin(s.angle) * 9f * k;
-            trailLife[trailHead] = TRAIL_LIFE;
-            trailHead = (trailHead + 1) % TRAIL_MAX;
+        emX = s.x;
+        emY = s.y;
+        emVx = s.vx;
+        emVy = s.vy;
+        emCs = (float) Math.cos(s.angle);
+        emSn = (float) Math.sin(s.angle);
+        emK = scaleK(w);
+        emDt = dt;
+        float k = emK;
+        for (int i = 0; i < ShipShape.NOZZLES; i++) {
+            float thr = w.nozzleThrust(i);
+            plumeAcc[i] = Math.min(2f, plumeAcc[i] + thr * PLUME_RATE * dt);
+            while (plumeAcc[i] >= 1f) {
+                plumeAcc[i] -= 1f;
+                float sp = rnd(120f, 200f) * k, spread = rnd(-0.2f, 0.2f);
+                float ly = ShipShape.nozzleY(i) + rnd(-1f, 1f) * ShipShape.NOZZLE_SPREAD;
+                addFx(ShipShape.NOZZLE_X, ly, -(float) Math.cos(spread) * sp, (float) Math.sin(spread) * sp,
+                    rnd(0.24f, 0.34f), 1.8f + thr, 1f, false);
+            }
+        }
+        int n = w.rcsFirings();
+        float ra = 0f;
+        for (int j = 0; j < n; j++) ra = Math.max(ra, w.rcsStrength(j));
+        if (ra < PUFF_MIN) {
+            puffAcc = 0.9f; // the next firing puffs at once
+            return;
+        }
+        puffAcc = Math.min(3f, puffAcc + (2f + ra * 24f) * dt);
+        while (puffAcc >= 1f) {
+            puffAcc -= 1f;
+            for (int j = 0; j < n; j++) {
+                int port = w.rcsPort(j), side = w.rcsSide(j);
+                float px = ShipShape.rcsX(port), py = ShipShape.rcsY(port, side);
+                for (int m = 2 + fxRng.nextInt(3); m > 0; m--) {
+                    addFx(px + rnd(-1f, 1f), py + side * 1.5f, rnd(-13f, 13f) * k, side * rnd(60f, 120f) * k,
+                        rnd(0.15f, 0.23f), 2.2f, 0.9f, true);
+                }
+            }
         }
     }
+
+    /**
+     * One thruster dot from ship-local (lx, ly) mockup px, ejected at local (ex, ey) px/s on top of the ship's
+     * velocity, born at a random moment inside the frame so a steady plume does not band.
+     */
+    private void addFx(float lx, float ly, float ex, float ey, float life, float dia, float level, boolean puff) {
+        if (fxN >= FX_MAX) return;
+        float wx = ex * emCs - ey * emSn, wy = ex * emSn + ey * emCs, u = (float) fxRng.next() * emDt;
+        int i = fxN++;
+        fxX[i] = emX + (lx * emCs - ly * emSn) * emK + wx * u;
+        fxY[i] = emY + (lx * emSn + ly * emCs) * emK + wy * u;
+        fxVx[i] = emVx + wx;
+        fxVy[i] = emVy + wy;
+        fxLife[i] = life - u;
+        fxLife0[i] = life;
+        fxDia[i] = dia;
+        fxLevel[i] = level;
+        fxPuff[i] = puff;
+    }
+
+    /** 5-7 red sparks thrown back from each laser hit, about 0.15 s. */
+    private void emitSparks(GameWorld w) {
+        float k = scaleK(w);
+        for (int j = 0; j < w.laserHits(); j++) {
+            float a = w.laserHitAngle(j) + (float) Math.PI;
+            for (int m = 5 + fxRng.nextInt(3); m > 0 && spN < SPARK_MAX; m--) {
+                float ang = a + rnd(-1.2f, 1.2f), sp = rnd(140f, 360f) * k;
+                int i = spN++;
+                spX[i] = w.laserHitX(j);
+                spY[i] = w.laserHitY(j);
+                spVx[i] = (float) Math.cos(ang) * sp;
+                spVy[i] = (float) Math.sin(ang) * sp;
+                spLife[i] = spLife0[i] = rnd(0.1f, 0.17f);
+            }
+        }
+    }
+
+    /** Moves, damps and ages the pooled dots, compacting the live ones to the front. */
+    private void moveFx(float dt) {
+        float plume = (float) Math.exp(-1.5f * dt), puff = (float) Math.exp(-5f * dt);
+        int n = 0;
+        for (int i = 0; i < fxN; i++) {
+            float life = fxLife[i] - dt;
+            if (life <= 0) continue;
+            float e = fxPuff[i] ? puff : plume;
+            fxX[n] = fxX[i] + fxVx[i] * dt;
+            fxY[n] = fxY[i] + fxVy[i] * dt;
+            fxVx[n] = fxVx[i] * e;
+            fxVy[n] = fxVy[i] * e;
+            fxLife[n] = life;
+            fxLife0[n] = fxLife0[i];
+            fxDia[n] = fxDia[i];
+            fxLevel[n] = fxLevel[i];
+            fxPuff[n] = fxPuff[i];
+            n++;
+        }
+        fxN = n;
+        float se = (float) Math.exp(-4f * dt);
+        n = 0;
+        for (int i = 0; i < spN; i++) {
+            float life = spLife[i] - dt;
+            if (life <= 0) continue;
+            spX[n] = spX[i] + spVx[i] * dt;
+            spY[n] = spY[i] + spVy[i] * dt;
+            spVx[n] = spVx[i] * se;
+            spVy[n] = spVy[i] * se;
+            spLife[n] = life;
+            spLife0[n] = spLife0[i];
+            n++;
+        }
+        spN = n;
+    }
+
+    private float rnd(float lo, float hi) { return lo + (hi - lo) * (float) fxRng.next(); }
 
     void draw(Canvas c, GameWorld w, ScoreBook sb, float topInset) {
         c.drawColor(DotStyle.GROUND);
@@ -193,7 +343,8 @@ final class DotRenderer {
     /**
      * Renders the current world into a new bitmap of the given size. rock, particle, shot, ship and ring dots (and the shockwave) above clearTopFraction of the height are skipped
      * so that band stays clear. The world is scaled uniformly to cover the target and centred (excess is cropped);
-     * the lattice and dot sizes are the target screen's, and every level is capped at L65.
+     * the lattice and dot sizes are the target screen's, every grey is capped at L65 (the ship and its plumes too)
+     * and the laser red is dimmed to 65%. Plumes and sparks come from this renderer's pools.
      */
     Bitmap renderStill(GameWorld w, int width, int height, float clearTopFraction) {
         Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
@@ -262,22 +413,12 @@ final class DotRenderer {
             dot65.draw(c, qx, qy, rReg * (0.45f + 0.55f * lk), p.alpha * lk);
         }
 
-        if (!still) {
-            for (int i = 0; i < TRAIL_MAX; i++) {
-                if (trailLife[i] <= 0) continue;
-                float lk = trailLife[i] / TRAIL_LIFE;
-                dot46.draw(c, trailX[i], trailY[i], rReg * (0.3f + 0.6f * lk), lk * fade);
-            }
-        }
-
-        List<GameWorld.Shot> shots = w.shots();
-        for (int i = 0; i < shots.size(); i++) {
-            GameWorld.Shot sh = shots.get(i);
-            float qx = sx(sh.x), qy = sy(sh.y);
+        // the two plumes and the RCS puffs: free dots that shrink and fade over their short life
+        for (int i = 0; i < fxN; i++) {
+            float qx = sx(fxX[i]), qy = sy(fxY[i]);
             if (qy < clearTopY) continue;
-            user.draw(c, qx, qy, rReg, 1f);
-            dot46.draw(c, sx(sh.x - sh.vx * 0.012f), sy(sh.y - sh.vy * 0.012f), rReg, 1f);
-            dot46.draw(c, sx(sh.x - sh.vx * 0.024f), sy(sh.y - sh.vy * 0.024f), rLight, 1f);
+            float q = fxLife[i] / fxLife0[i];
+            user.draw(c, qx, qy, (0.7f + (fxDia[i] - 0.7f) * q) * mock / 2f, fxLevel[i] * q);
         }
 
         GameWorld.Ship s = w.ship();
@@ -289,12 +430,19 @@ final class DotRenderer {
         }
         float sa = easeOut(hand);
         if (shipClear && sa > 0) {
-            if (step != shipSpacing || k != shipK) buildShipDots(step, k);
             float cs = (float) Math.cos(s.angle), sn = (float) Math.sin(s.angle);
             float blink = s.hitCooldown > 0 ? 1f - 0.45f * (float) Math.sin(Math.PI * (0.4f - s.hitCooldown) / 0.4f) : 1f;
-            for (int j = 0; j < shipPts.length; j += 2) {
-                float px = shipPts[j], py = shipPts[j + 1];
-                user.draw(c, sx(s.x + px * cs - py * sn), sy(s.y + px * sn + py * cs), rHeavy, sa * blink);
+            for (int j = 0; j < HULL.length; j += 4) {
+                float px = HULL[j] * k, py = HULL[j + 1] * k;
+                SoftDot d = HULL[j + 3] >= ShipShape.LEVEL_L100 ? user : dot65;
+                d.draw(c, sx(s.x + px * cs - py * sn), sy(s.y + px * sn + py * cs), HULL[j + 2] * mock / 2f, sa * blink);
+            }
+            // the nozzle bars grow and brighten with their engine's thrust
+            for (int j = 0; j < MARKS.length; j += 4) {
+                float thr = w.nozzleThrust(j / 4 / MARKS_PER_NOZZLE);
+                float px = MARKS[j] * k, py = MARKS[j + 1] * k;
+                user.draw(c, sx(s.x + px * cs - py * sn), sy(s.y + px * sn + py * cs),
+                    (MARKS[j + 2] + 1.4f * thr) * MARKS[j + 3] * mock / 2f, (NOZZLE_IDLE + (1f - NOZZLE_IDLE) * thr) * sa);
             }
         }
 
@@ -309,6 +457,73 @@ final class DotRenderer {
             GameWorld.Ring g = rings.get(i);
             float rk = g.t / cfg.ringLife;
             if (rk < 1f) latticeRing(c, g.x, g.y, (8f + rk * 62f) * k, 1f - rk);
+        }
+
+        drawLasers(c, w, k);
+    }
+
+    /**
+     * The one colour, on top of everything: each bolt a short glowing pill stretched along its path (a 3x and a 2x
+     * glow pass in LASER_GLOW, then the LASER core), the muzzle flash at the firing point, and the hit sparks.
+     * A bolt stretches 35% just after launch and squashes into a flare where it hits.
+     */
+    private void drawLasers(Canvas c, GameWorld w, float k) {
+        List<GameWorld.Shot> shots = w.shots();
+        GameWorld.Flash fl = w.flash();
+        if (shots.isEmpty() && spN == 0 && !(fl.t > 0)) return;
+        GameConfig cfg = w.config();
+        float dim = still ? STILL_RED : 1f;
+        red.setStyle(Paint.Style.STROKE);
+        for (int pass = 0; pass < 3; pass++) {
+            float wide = pass == 0 ? 3f : pass == 1 ? 2f : 1f;
+            float share = pass == 0 ? GLOW_ALPHA * GLOW_OUTER : pass == 1 ? GLOW_ALPHA * GLOW_INNER : 1f;
+            red.setColor(pass < 2 ? DotStyle.LASER_GLOW : DotStyle.LASER);
+            for (int i = 0; i < shots.size(); i++) {
+                GameWorld.Shot b = shots.get(i);
+                float x1 = sx(b.x), y1 = sy(b.y);
+                if (y1 < clearTopY) continue;
+                float len, th, al = 1f;
+                if (b.hit > 0) {
+                    float q = b.hit / cfg.shotHitFlare;
+                    len = BOLT_LEN * (0.15f + 0.35f * q) * k;
+                    th = BOLT_THICK * (1.6f - 0.6f * q);
+                    al = 0.4f + 0.6f * q;
+                } else {
+                    float st = 1f + 0.35f * Math.max(0f, 1f - b.t / 0.1f);
+                    len = Math.min(BOLT_LEN * st * k, b.trav);
+                    th = BOLT_THICK / (float) Math.sqrt(st);
+                }
+                float ux = (float) Math.cos(b.angle) * len * vs, uy = (float) Math.sin(b.angle) * len * vs;
+                red.setAlpha(Math.round(255f * clamp(share * al * dim, 0f, 1f)));
+                red.setStrokeWidth(th * wide * mock);
+                c.drawLine(x1 - ux, y1 - uy, x1, y1, red);
+            }
+        }
+        if (fl.t > 0) {
+            GameWorld.Ship s = w.ship();
+            float q = fl.t / cfg.muzzleFlash, cs = (float) Math.cos(s.angle), sn = (float) Math.sin(s.angle);
+            float fa = s.angle + fl.angle;
+            float x = sx(s.x + fl.x * cs - fl.y * sn + (float) Math.cos(fa) * 2f * k);
+            float y = sy(s.y + fl.x * sn + fl.y * cs + (float) Math.sin(fa) * 2f * k);
+            if (y >= clearTopY) {
+                float r = (1.2f + 1.6f * q) * mock;
+                red.setStyle(Paint.Style.FILL);
+                red.setColor(DotStyle.LASER_GLOW);
+                red.setAlpha(Math.round(255f * GLOW_ALPHA * q * dim));
+                c.drawCircle(x, y, r * 2.5f, red);
+                red.setColor(DotStyle.LASER);
+                red.setAlpha(Math.round(255f * q * dim));
+                c.drawCircle(x, y, r, red);
+                red.setStyle(Paint.Style.STROKE);
+            }
+        }
+        red.setColor(DotStyle.LASER);
+        red.setStrokeWidth(SPARK_THICK * mock);
+        for (int i = 0; i < spN; i++) {
+            float x = sx(spX[i]), y = sy(spY[i]);
+            if (y < clearTopY) continue;
+            red.setAlpha(Math.round(255f * clamp(spLife[i] / spLife0[i] * dim, 0f, 1f)));
+            c.drawLine(sx(spX[i] - spVx[i] * 0.014f), sy(spY[i] - spVy[i] * 0.014f), x, y, red);
         }
     }
 
@@ -460,26 +675,6 @@ final class DotRenderer {
         d.n = n;
         d.spacing = spacing;
         d.radius = rock.r;
-    }
-
-    private void buildShipDots(float sp, float k) {
-        int nv = SHIP.length / 2;
-        float[] tmp = new float[256];
-        int n = 0;
-        for (int i = 0; i < nv; i++) {
-            int u = (i + 1) % nv;
-            float ax = SHIP[2 * i] * k, ay = SHIP[2 * i + 1] * k, bx = SHIP[2 * u] * k, by = SHIP[2 * u + 1] * k;
-            int steps = Math.max(1, Math.round(hypot(bx - ax, by - ay) / sp));
-            for (int j = 0; j < steps && 2 * n + 2 <= tmp.length; j++) {
-                float tt = (float) j / steps;
-                tmp[2 * n] = ax + (bx - ax) * tt;
-                tmp[2 * n + 1] = ay + (by - ay) * tt;
-                n++;
-            }
-        }
-        shipPts = java.util.Arrays.copyOf(tmp, 2 * n);
-        shipSpacing = sp;
-        shipK = k;
     }
 
     private float sx(float x) { return vx + vs * x; }
