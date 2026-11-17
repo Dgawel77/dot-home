@@ -482,6 +482,8 @@ final class DotRenderer {
     /**
      * Places this frame's moon: where it really stands in the sky when the track is known (fading in over its first
      * 2 degrees and halving by day), else in the fixed corner by night, lit on the right waxing and the left waning.
+     * On a lock still it is one object: pushed down whole below the clear top band (MoonSky.stillY), or not drawn
+     * when it would then reach below the open band.
      */
     private void placeMoon(GameWorld w, float fog, float fade) {
         long now = System.currentTimeMillis();
@@ -499,12 +501,19 @@ final class DotRenderer {
             moonA = moonAlpha(w, fog, fade);
             moonLimb = moonPhase < 0.5f ? 0f : (float) Math.PI;
         }
+        if (still && moonA > 0f) {
+            float ext = (GameConfig.MOON_STAR_CLEAR * w.config().moonRadiusDp * density + step) * vsy;
+            float y = MoonSky.stillY(sy(moonCy), ext, clearTopY, Math.min(clearBottomY, canvasH));
+            if (y != y) moonA = 0f;
+            else moonCy = (y - vy) / vsy;
+        }
     }
 
     /**
      * The moon (placed by placeMoon): dots on the 4 dp lattice, shadow L10, lit L65, seas L30, craters L100
-     * (L65 on stills), and a sparse L10 halo ring that shimmers (held at a constant on stills). The glinting crater
-     * flares like a star's glint.
+     * (L65 on stills), and a sparse L10 halo ring that shimmers (held at a constant on stills). The halo's dots and
+     * their shimmer are picked by absolute lattice position, so the pattern stays put as the moon drifts. The
+     * glinting crater flares like a star's glint. Never clipped by a still's bands (placeMoon keeps it clear).
      */
     private void drawMoon(Canvas c, GameWorld w, GameConfig cfg, float alpha) {
         if (alpha <= 0f) return;
@@ -512,6 +521,7 @@ final class DotRenderer {
         float cx = moonCx, cy = moonCy, t = w.time();
         int n = (int) Math.ceil(GameConfig.MOON_STAR_CLEAR * rad / step) + 1;
         float ox = Lattice.snap(cx, density), oy = Lattice.snap(cy, density);
+        int ai = Math.round(ox / step), aj = Math.round(oy / step); // the centre's absolute lattice indices
         // the glint sits on the lattice dot nearest the glinting crater's centre (none on stills)
         int gc = still ? -1 : w.moonGlintCrater(), gi = Integer.MIN_VALUE, gj = Integer.MIN_VALUE;
         if (gc >= 0) {
@@ -524,10 +534,9 @@ final class DotRenderer {
                 float px = ox + i * step, py = oy + j * step;
                 float ux = (px - cx) / rad, uy = (py - cy) / rad, r2 = ux * ux + uy * uy;
                 int cell = r2 <= 1f ? MoonFace.cell(ux, uy, moonPhase, moonLimb)
-                        : MoonFace.haloCell(i, j, (float) Math.sqrt(r2));
+                        : MoonFace.haloCell(ai + i, aj + j, (float) Math.sqrt(r2));
                 if (cell == MoonFace.OUTSIDE) continue;
                 float qx = sx(px), qy = sy(py);
-                if (qy < clearTopY || qy > clearBottomY) continue;
                 switch (cell) {
                     case MoonFace.LIT: dot65.draw(c, qx, qy, rLight, alpha); break;
                     case MoonFace.SEA: dot30.draw(c, qx, qy, rLight, alpha); break;
@@ -547,7 +556,8 @@ final class DotRenderer {
                     case MoonFace.HALO:
                         float shimmer = still ? GameConfig.MOON_HALO_STILL : GameConfig.MOON_HALO_BASE
                                 + (1f - GameConfig.MOON_HALO_BASE) * (0.5f + 0.5f
-                                * (float) Math.sin(TAU * t / MoonFace.haloPeriod(i, j) + MoonFace.haloPhase(i, j)));
+                                * (float) Math.sin(TAU * t / MoonFace.haloPeriod(ai + i, aj + j)
+                                + MoonFace.haloPhase(ai + i, aj + j)));
                         dot10.draw(c, qx, qy, rLight, alpha * shimmer);
                         break;
                     default: dot10.draw(c, qx, qy, rLight, alpha); break; // SHADOW

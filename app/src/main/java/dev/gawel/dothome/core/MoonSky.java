@@ -173,6 +173,16 @@ public final class MoonSky {
     }
 
     /**
+     * A lock still's moon centre y, screen px: the moon is one object there, never sliced by the still's clear bands,
+     * so its centre is pushed down (x unchanged) until the disc and halo, `extent` px either side of it, sit wholly
+     * below clearTop. NaN (not drawn) when it would then reach below openBottom, the open band's bottom.
+     */
+    public static float stillY(float cy, float extent, float clearTop, float openBottom) {
+        float y = Math.max(cy, clearTop + extent);
+        return y + extent <= openBottom ? y : Float.NaN;
+    }
+
+    /**
      * How much day it is for the moon, 0 night .. 1 day: the sun-times dayness when known, else the sun's altitude
      * ramped over -6..+6 degrees; 0 when neither is known.
      */

@@ -121,4 +121,17 @@ public final class MoonSkyTest {
         T.near(670, MoonSky.screenY(0, cw, ch), 1e-3, "cover alt 0");
         T.near(300, MoonSky.screenY(75, cw, ch), 1e-3, "cover alt 75");
     }
+
+    /** On a lock still the moon is pushed whole below the clear top band, or not drawn when it no longer fits. */
+    public static void testStillMoonClearsTheTopBandWhole() {
+        float top = 420, bottom = 1000, ext = 30;
+        T.near(600, MoonSky.stillY(600, ext, top, bottom), 1e-3, "already clear: unchanged");
+        T.near(450, MoonSky.stillY(450, ext, top, bottom), 1e-3, "just clear: unchanged");
+        T.near(450, MoonSky.stillY(440, ext, top, bottom), 1e-3, "straddling the band's edge: pushed down whole");
+        T.near(450, MoonSky.stillY(300, ext, top, bottom), 1e-3, "inside the band: pushed down whole");
+        T.near(970, MoonSky.stillY(970, ext, top, bottom), 1e-3, "touching the bottom: drawn");
+        T.check(Float.isNaN(MoonSky.stillY(980, ext, top, bottom)), "past the open band's bottom: not drawn");
+        T.check(Float.isNaN(MoonSky.stillY(300, ext, top, 470)), "no room below the band: not drawn");
+        T.near(300, MoonSky.stillY(300, ext, 0, Float.MAX_VALUE), 1e-3, "no top band: unchanged");
+    }
 }
