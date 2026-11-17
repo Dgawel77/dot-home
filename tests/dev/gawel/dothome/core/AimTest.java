@@ -3,8 +3,8 @@ package dev.gawel.dothome.core;
 import dev.gawel.dothome.test.T;
 
 /**
- * Tap-to-fire: a tap fires one bolt at once from the next twin gun along the heading (within 3 degrees of it), and
- * the tap point becomes the waypoint the ship then turns and flies to (ManualModeTest covers the flight).
+ * Tap-to-fire: a tap fires one bolt at once from the next of the four guns along the heading (within 3 degrees of
+ * it), and the tap point becomes the waypoint the ship then turns and flies to (ManualModeTest covers the flight).
  */
 public final class AimTest {
     private AimTest() {}
@@ -50,16 +50,44 @@ public final class AimTest {
         return found;
     }
 
-    /**
-     * The bolt fired this step left one of the twin guns (px, py hold where it started) within 3 degrees of the
-     * heading at the bolt speed, with the muzzle flash at that gun. Returns the gun's side: -1 port, +1 starboard.
-     */
-    private static int fromAGun(GameWorld g, GameWorld.Shot b) {
+    /** Ship-local (x along the nose, y to starboard, world px) of world point (px, py). */
+    static float[] local(GameWorld g, float px, float py) {
         GameWorld.Ship s = g.ship();
-        float k = g.config().k, c = (float) Math.cos(s.angle), sn = (float) Math.sin(s.angle);
-        float dx = b.px - s.x, dy = b.py - s.y, lx = dx * c + dy * sn, ly = -dx * sn + dy * c; // ship-local
-        T.near(ShipShape.GUN_X * k, lx, 1e-3, "spawned at a gun (x)");
-        T.near(ShipShape.GUN_Y * k, Math.abs(ly), 1e-3, "spawned at a gun (y)");
+        float c = (float) Math.cos(s.angle), sn = (float) Math.sin(s.angle), dx = px - s.x, dy = py - s.y;
+        return new float[] {dx * c + dy * sn, -dx * sn + dy * c};
+    }
+
+    /** How far along gun i's axis from its breech the ship-local point (lx, ly) in world px lies, in ship units. */
+    static float along(GameWorld g, int i, float lx, float ly) {
+        float k = g.config().k, ga = ShipShape.gunAngle(i);
+        return (lx / k - ShipShape.breechX(i)) * (float) Math.cos(ga) + (ly / k - ShipShape.breechY(i)) * (float) Math.sin(ga);
+    }
+
+    /**
+     * The gun whose barrel tip is at ship-local (lx, ly), world px: on its axis, between its tip fully recoiled and
+     * its tip at rest. -1 if none.
+     */
+    static int gunAt(GameWorld g, float lx, float ly) {
+        float k = g.config().k;
+        for (int i = 0; i < ShipShape.GUNS; i++) {
+            float ga = ShipShape.gunAngle(i), rx = lx / k - ShipShape.breechX(i), ry = ly / k - ShipShape.breechY(i);
+            float across = -rx * (float) Math.sin(ga) + ry * (float) Math.cos(ga), a = along(g, i, lx, ly);
+            float tip = ShipShape.muzzleReach(i);
+            if (Math.abs(across) < 1e-3f && a <= tip + 1e-3f && a >= tip - ShipShape.recoilStroke(i) - 1e-3f) return i;
+        }
+        return -1;
+    }
+
+    /**
+     * The bolt fired this step left a gun's barrel tip (px, py hold where it started) within 3 degrees of the
+     * heading at the bolt speed, with the muzzle flash at that tip. Returns the gun (ShipShape order).
+     */
+    static int fromAGun(GameWorld g, GameWorld.Shot b) {
+        GameWorld.Ship s = g.ship();
+        float[] l = local(g, b.px, b.py);
+        float lx = l[0], ly = l[1];
+        int gun = gunAt(g, lx, ly);
+        T.check(gun >= 0, "spawned at a barrel tip: " + lx + "," + ly);
         float off = GameWorld.wrapAngle(b.angle - s.angle);
         T.check(Math.abs(off) <= GUN_CONE + 1e-6f, "within 3 degrees of the heading: " + off / DEG);
         T.near(g.config().shotSpeed, Math.hypot(b.vx, b.vy), 1e-2, "bolt speed");
@@ -69,7 +97,7 @@ public final class AimTest {
         T.near(lx, f.x, 1e-3, "flash at that gun (x)");
         T.near(ly, f.y, 1e-3, "flash at that gun (y)");
         T.near(off, f.angle, 1e-5, "flash along the bolt");
-        return ly > 0 ? 1 : -1;
+        return gun;
     }
 
     /** The shortest distance from the line through (x, y) along angle a to the point (px, py). */
@@ -108,25 +136,61 @@ public final class AimTest {
         g.step(DT);
         GameWorld.Shot b = newBolt(g);
         T.check(b != null, "fires on the next step");
-        int side = fromAGun(g, b);
+        int side = ShipShape.gunSide(fromAGun(g, b));
         T.check(GameWorld.wrapAngle(b.angle - g.ship().angle) * side < 0, "toed in toward the tap's side");
     }
 
-    public static void testTapsAlternateMuzzles() {
+    public static void testTapsCycleTheFourGunsCrossing() {
         GameWorld g = live(1, null);
-        int prev = 0, n = 0;
-        float[][] taps = {{310, 100}, {560, 390}, {100, 200}, {200, 600}, {500, 90}};
-        for (float[] t : taps) {
-            for (int i = 0; i < 10; i++) g.step(DT); // past the cooldown
-            g.aim(t[0], t[1]);
+        float[][] taps = {{310, 100}, {560, 390}, {100, 200}, {200, 600}, {500, 90}, {80, 650}, {300, 300}, {450, 500}};
+        int[] order = {ShipShape.NOSE_PORT, ShipShape.WING_STARBOARD, ShipShape.NOSE_STARBOARD, ShipShape.WING_PORT};
+        java.util.Set<Long> muzzles = new java.util.HashSet<Long>();
+        for (int n = 0; n < taps.length; n++) {
+            for (int i = 0; i < 10; i++) g.step(DT); // past the cooldown; each barrel is back at rest
+            g.aim(taps[n][0], taps[n][1]);
             g.step(DT);
             GameWorld.Shot b = newBolt(g);
             T.check(b != null, "bolt for tap " + n);
-            int side = fromAGun(g, b);
-            T.check(side != prev, "tap " + n + " from the other gun");
-            prev = side;
-            n++;
+            int gun = fromAGun(g, b);
+            T.eq(order[n % 4], gun, "tap " + n + ": nose-left, wing-right, nose-right, wing-left");
+            float[] l = local(g, b.px, b.py);
+            T.near(ShipShape.muzzleReach(gun), along(g, gun, l[0], l[1]), 1e-3, "at the tip of a barrel at rest");
+            muzzles.add(Math.round(l[0] * 10) * 100000L + Math.round(l[1] * 10));
         }
+        T.eq(4, muzzles.size(), "four distinct muzzles");
+    }
+
+    public static void testRecoilPhaseResetsOnlyForTheGunThatFired() {
+        GameWorld g = live(1, null);
+        for (int i = 0; i < ShipShape.GUNS; i++) T.check(g.gunAge(i) >= 10f, "idle at first");
+        for (int n = 0; n < 6; n++) {
+            for (int i = 0; i < 12; i++) g.step(DT);
+            float[] before = new float[ShipShape.GUNS];
+            for (int i = 0; i < ShipShape.GUNS; i++) before[i] = g.gunAge(i);
+            g.aim(310, 60);
+            g.step(DT);
+            int gun = fromAGun(g, newBolt(g));
+            for (int i = 0; i < ShipShape.GUNS; i++) {
+                if (i == gun) T.eq(0f, g.gunAge(i), "shot " + n + ": gun " + i + " starts its recoil");
+                else T.near(Math.min(10f, before[i] + DT), g.gunAge(i), 1e-5, "shot " + n + ": gun " + i + " untouched");
+            }
+        }
+    }
+
+    public static void testRecoilAndKickTiming() {
+        T.eq(0f, ShipShape.recoil(0f), "at rest as it fires");
+        T.near(0.75, ShipShape.recoil(0.03f), 1e-5, "three quarters back at 0.03 s");
+        T.near(1, ShipShape.recoil(0.06f), 1e-5, "fully back at 0.06 s");
+        T.near(Math.pow(1 - 0.06 / 0.22, 3), ShipShape.recoil(0.12f), 1e-5, "springing forward (cubic ease-out)");
+        T.check(ShipShape.recoil(0.2f) < 0.06f, "almost home at 0.2 s");
+        T.eq(0f, ShipShape.recoil(0.28f), "home at 0.28 s");
+        T.eq(0f, ShipShape.recoil(10f), "idle");
+        for (int i = 0; i < ShipShape.GUNS; i++) {
+            T.near(0.4 * ShipShape.gunLength(i), ShipShape.recoilStroke(i), 1e-5, "a 40% stroke");
+        }
+        T.near(1, ShipShape.kick(0.06f), 1e-5, "the hull kicks a ship unit back");
+        T.check(ShipShape.kick(0.2f) > 0f && ShipShape.kick(0.2f) < 0.2f, "and settles");
+        T.eq(0f, ShipShape.kick(0.36f), "settled");
     }
 
     public static void testTapDuringCooldownSetsTheWaypointWithoutFiring() {
@@ -190,7 +254,7 @@ public final class AimTest {
             g.skipIntro();
             g.setAutoFire(seed == 3);
             Rng taps = new Rng(seed + 100);
-            int bolts = 0, prevSide = 0;
+            int bolts = 0, prevGun = -1;
             for (int i = 0, n = Math.round(30f / DT); i < n; i++) {
                 if (i % 23 == 0) g.aim((float) taps.next() * 620, (float) taps.next() * 722);
                 int hits = c.hits;
@@ -201,28 +265,44 @@ public final class AimTest {
                 GameWorld.Ship s = g.ship();
                 float off = Math.abs(GameWorld.wrapAngle(b.angle - s.angle));
                 T.check(off <= GUN_CONE + 1e-6f, "seed " + seed + ": a bolt " + off / DEG + " degrees off the heading");
-                int side = g.flash().y > 0 ? 1 : -1;
-                T.check(side != prevSide, "seed " + seed + ": the guns take turns");
-                prevSide = side;
+                int gun = gunAt(g, g.flash().x, g.flash().y);
+                T.check(gun >= 0, "seed " + seed + ": the flash sits at a barrel tip");
+                if (prevGun >= 0) T.eq((prevGun + 1) % ShipShape.GUNS, gun, "seed " + seed + ": the guns take turns");
+                prevGun = gun;
                 if (c.hits != hits) continue; // a knock in the same step moves the ship after the shot
-                T.eq(side, fromAGun(g, b), "seed " + seed + ": from the gun that flashed");
+                T.eq(gun, fromAGun(g, b), "seed " + seed + ": from the gun that flashed");
             }
             T.check(bolts > 15, "seed " + seed + " fired " + bolts);
         }
     }
 
-    public static void testGunsSitOnTheHullShouldersEitherSideBehindTheNose() {
-        T.eq(2, ShipShape.GUNS, "two guns");
-        T.check(ShipShape.gunY(0) < 0 && ShipShape.gunY(1) > 0, "port and starboard of the centreline");
-        T.check(ShipShape.GUN_X < ShipShape.NOSE_X && ShipShape.GUN_X > 0, "forward of centre, behind the nose");
-        float[] d = ShipShape.hullDots();
-        for (int i = 0; i < ShipShape.GUNS; i++) {
-            boolean onHull = false;
-            for (int j = 0; j < d.length && !onHull; j += 4) {
-                onHull = Math.abs(d[j] - ShipShape.GUN_X) < 1e-4f && Math.abs(d[j + 1] - ShipShape.gunY(i)) < 1e-4f;
-            }
-            T.check(onHull, "gun " + i + " is a hull outline corner");
+    public static void testGunPlacementsFollowTheForkedGunsBoard() {
+        T.eq(4, ShipShape.GUNS, "four guns");
+        for (int i : new int[] {ShipShape.NOSE_PORT, ShipShape.NOSE_STARBOARD}) { // D: the under-nose twin
+            T.near(14.2, ShipShape.breechX(i), 1e-5, "nose breech x");
+            T.near(1.25, Math.abs(ShipShape.breechY(i)), 1e-5, "close either side of the centreline");
+            T.eq(0f, ShipShape.gunAngle(i), "parallel to the heading");
+            T.eq(5, ShipShape.gunDots(i), "five dots");
+            T.near(10.1, ShipShape.gunLength(i), 1e-4, "length");
+            T.near(4.5, ShipShape.muzzleX(i) - ShipShape.NOSE_X, 0.1, "the muzzle pokes past the nose");
+            T.check(ShipShape.gunUnder(i), "under the hull");
         }
+        float[] d = ShipShape.hullDots();
+        for (int i : new int[] {ShipShape.WING_PORT, ShipShape.WING_STARBOARD}) { // C: the wingtip guns
+            T.near(-10.4, ShipShape.breechX(i), 1e-5, "wing breech x");
+            T.near(12.5, Math.abs(ShipShape.breechY(i)), 1e-5, "on the wingtip");
+            T.near(-1.5 * DEG * ShipShape.gunSide(i), ShipShape.gunAngle(i), 1e-6, "toed in 1.5 degrees");
+            T.eq(3, ShipShape.gunDots(i), "three dots");
+            T.near(5.5, ShipShape.gunLength(i), 1e-4, "length");
+            T.check(!ShipShape.gunUnder(i), "over the hull");
+            boolean fin = false;
+            for (int j = 0; j < d.length && !fin; j += 4) {
+                fin = Math.hypot(d[j] - ShipShape.breechX(i), d[j + 1] - ShipShape.breechY(i)) < 1.5;
+            }
+            T.check(fin, "gun " + i + " sits on its fin tip");
+        }
+        int[] sides = {-1, 1, 1, -1};
+        for (int i = 0; i < 4; i++) T.eq(sides[i], ShipShape.gunSide(i), "crossing order: left, right, right, left");
     }
 
     public static void testAutoFireTurnsToTheNearestRockAndFiresAlongTheHeading() {

@@ -5,7 +5,7 @@ import dev.gawel.dothome.test.T;
 import java.util.TimeZone;
 
 /**
- * The spin barrage (a shake): 1.6 s on the spot spinning up to 3 rev/s and back, the guns alternating every 0.045 s
+ * The spin barrage (a shake): 1.6 s on the spot spinning up to 3 rev/s and back, the guns taking turns every 0.045 s
  * along the heading while it spins faster than 1 rev/s, then the autopilot again; a 30 s cooldown.
  */
 public final class BarrageTest {
@@ -218,14 +218,15 @@ public final class BarrageTest {
         T.check(h.wanderTargetX() != 100f || h.wanderTargetY() != 300f, "with a fresh wander target");
     }
 
-    public static void testBoltsFireAboveOneRevAlternatingAlongTheHeading() {
+    public static void testBoltsFireAboveOneRevFromAllFourGunsAlongTheHeading() {
         GameWorld g = live(4, null);
         GameWorld.Ship s = g.ship();
         GameConfig cfg = g.config();
-        float k = cfg.k;
         g.barrage();
-        int last = 0, prevSide = 0, quadrants = 0;
+        int last = 0, prevGun = -1, used = 0, quadrants = 0;
+        float[] age = new float[ShipShape.GUNS];
         while (g.isBarrage()) {
+            for (int i = 0; i < ShipShape.GUNS; i++) age[i] = g.gunAge(i);
             g.step(DT);
             int n = g.barrageBolts();
             if (n == last) continue;
@@ -233,22 +234,21 @@ public final class BarrageTest {
             last = n;
             T.check(Math.abs(s.spin) > REV, "fires only above 1 rev/s: " + s.spin);
             GameWorld.Shot b = g.shots().get(g.shots().size() - 1);
-            T.near(s.angle, b.angle, 1e-6, "the bolt flies the heading");
+            int gun = AimTest.fromAGun(g, b); // a barrel tip, within 3 degrees of the heading, the flash there
+            T.near(ShipShape.gunAngle(gun), GameWorld.wrapAngle(b.angle - s.angle), 1e-5, "along that barrel");
             T.near(0, GameWorld.wrapAngle((float) Math.atan2(b.vy, b.vx) - b.angle), 1e-4, "velocity along it");
-            T.near(cfg.shotSpeed, Math.hypot(b.vx, b.vy), 0.5, "shot speed");
-            // spawned at a gun's muzzle: ship-local (GUN_X, +/-GUN_Y)
-            float c = (float) Math.cos(s.angle), sn = (float) Math.sin(s.angle);
-            float dx = b.px - s.x, dy = b.py - s.y, lx = dx * c + dy * sn, ly = -dx * sn + dy * c;
-            T.near(ShipShape.GUN_X * k, lx, 1e-3, "muzzle x");
-            T.near(ShipShape.GUN_Y * k, Math.abs(ly), 1e-3, "muzzle y");
-            int side = ly > 0 ? 1 : -1;
-            T.check(side != prevSide, "the guns alternate");
-            prevSide = side;
-            T.eq(cfg.muzzleFlash, g.flash().t, "muzzle flash");
-            T.near(ly, g.flash().y, 1e-3, "the flash at that gun");
+            // the tip where the barrel is now: still sliding home from its shot four bolts ago
+            float[] l = AimTest.local(g, b.px, b.py);
+            float tip = ShipShape.muzzleReach(gun) - ShipShape.recoil(Math.min(10f, age[gun] + DT)) * ShipShape.recoilStroke(gun);
+            T.near(tip, AimTest.along(g, gun, l[0], l[1]), 1e-3, "the barrel's current tip");
+            if (prevGun >= 0) T.eq((prevGun + 1) % ShipShape.GUNS, gun, "the guns take turns");
+            prevGun = gun;
+            used |= 1 << gun;
+            T.eq(0f, g.gunAge(gun), "its recoil starts over");
             quadrants |= 1 << ((int) Math.floor((b.angle + Math.PI) / (Math.PI / 2)) & 3);
         }
         T.check(last >= 25 && last <= 32, "bolts " + last);
+        T.eq(15, used, "all four guns fire");
         T.eq(15, quadrants, "a spiral: bolts leave in every direction");
     }
 

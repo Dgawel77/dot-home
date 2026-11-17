@@ -12,11 +12,24 @@ public final class ShipShape {
     /** The nose tip. */
     public static final float NOSE_X = 19f, NOSE_Y = 0f;
     /**
-     * The twin guns, one at each forward shoulder of the hull (the outline's corners where the sides meet the nose
-     * taper): gun 0 to port (-y), gun 1 to starboard (+y). Shots alternate between them.
+     * Four guns (design/mockups ForkedGuns board, variants C and D), in firing order, which crosses the ship:
+     * 0 the under-nose twin's port barrel, 1 the starboard wingtip gun, 2 the under-nose starboard barrel, 3 the
+     * port wingtip gun. Each is a straight barrel of dots from its breech (the first dot's centre) along its axis.
      */
-    public static final int GUNS = 2;
-    public static final float GUN_X = 8f, GUN_Y = 3f;
+    public static final int GUNS = 4;
+    public static final int NOSE_PORT = 0, WING_STARBOARD = 1, NOSE_STARBOARD = 2, WING_PORT = 3;
+    /** The under-nose twin (D): two parallel barrels close either side of the centreline, slung under the hull. */
+    public static final float NOSE_GUN_X = 14.2f, NOSE_GUN_Y = 1.25f;
+    /** The wingtip guns (C): on the angular wingtip fins, toed in 1.5 degrees. */
+    public static final float WING_GUN_X = -10.4f, WING_GUN_Y = 12.5f, WING_GUN_TOE = (float) Math.toRadians(1.5);
+    private static final int NOSE_GUN_DOTS = 5, WING_GUN_DOTS = 3;
+    private static final float NOSE_GUN_GAP = 2.1f, WING_GUN_GAP = 1.9f, NOSE_GUN_DOT = 1.7f, WING_GUN_DOT = 1.7f;
+    /** A barrel slides back this share of its length on its shot. */
+    public static final float RECOIL_SHARE = 0.4f;
+    /** Recoil: back over RECOIL_BACK s, then forward over RECOIL_RETURN s (cubic ease-out). */
+    public static final float RECOIL_BACK = 0.06f, RECOIL_RETURN = 0.22f;
+    /** The hull kick (render only): back over RECOIL_BACK s, a KICK_SETTLE s cubic settle; summed shots cap at KICK_MAX. */
+    public static final float KICK_SETTLE = 0.3f, KICK_MAX = 1.6f;
     /** Hit radius against rocks. */
     public static final float RADIUS = 11f;
 
@@ -36,8 +49,64 @@ public final class ShipShape {
     /** Dot levels as the prototype's alpha on L100: 1 is L100, 0.75 is L65. */
     public static final float LEVEL_L100 = 1f, LEVEL_L65 = 0.75f;
 
-    /** Gun i's y. */
-    public static float gunY(int i) { return i == 0 ? -GUN_Y : GUN_Y; }
+    private static boolean nose(int gun) { return gun == NOSE_PORT || gun == NOSE_STARBOARD; }
+
+    /** Gun i's side: -1 port, +1 starboard. */
+    public static int gunSide(int gun) { return gun == NOSE_PORT || gun == WING_PORT ? -1 : 1; }
+
+    /** Gun i's breech: the centre of its rearmost dot. */
+    public static float breechX(int gun) { return nose(gun) ? NOSE_GUN_X : WING_GUN_X; }
+
+    public static float breechY(int gun) { return gunSide(gun) * (nose(gun) ? NOSE_GUN_Y : WING_GUN_Y); }
+
+    /** Gun i's axis, radians from the heading: 0 for the nose twin, toed in toward the centreline for the wingtips. */
+    public static float gunAngle(int gun) { return nose(gun) ? 0f : -gunSide(gun) * WING_GUN_TOE; }
+
+    /** Dots along gun i's barrel, their spacing and diameter. */
+    public static int gunDots(int gun) { return nose(gun) ? NOSE_GUN_DOTS : WING_GUN_DOTS; }
+
+    public static float gunGap(int gun) { return nose(gun) ? NOSE_GUN_GAP : WING_GUN_GAP; }
+
+    public static float gunDot(int gun) { return nose(gun) ? NOSE_GUN_DOT : WING_GUN_DOT; }
+
+    /** Gun i's barrel length, end to end. */
+    public static float gunLength(int gun) { return (gunDots(gun) - 1) * gunGap(gun) + gunDot(gun); }
+
+    /** From the breech to the muzzle along the axis (the front dot's far edge). */
+    public static float muzzleReach(int gun) { return (gunDots(gun) - 1) * gunGap(gun) + gunDot(gun) / 2f; }
+
+    /** Gun i's muzzle with the barrel at rest. */
+    public static float muzzleX(int gun) { return breechX(gun) + (float) Math.cos(gunAngle(gun)) * muzzleReach(gun); }
+
+    public static float muzzleY(int gun) { return breechY(gun) + (float) Math.sin(gunAngle(gun)) * muzzleReach(gun); }
+
+    /** True for the nose twin: drawn under the hull, whose dots draw over it. */
+    public static boolean gunUnder(int gun) { return nose(gun); }
+
+    /** How far gun i's barrel slides back on a shot. */
+    public static float recoilStroke(int gun) { return RECOIL_SHARE * gunLength(gun); }
+
+    /** The barrel's recoil, 0..1 of its stroke, age seconds after its shot: back fast (ease-out), forward with a cubic ease-out. */
+    public static float recoil(float age) {
+        if (!(age >= 0f) || age >= RECOIL_BACK + RECOIL_RETURN) return 0f;
+        if (age < RECOIL_BACK) {
+            float u = 1f - age / RECOIL_BACK;
+            return 1f - u * u;
+        }
+        float u = 1f - (age - RECOIL_BACK) / RECOIL_RETURN;
+        return u * u * u;
+    }
+
+    /** One shot's hull kick, ship units back, age seconds after it: back over RECOIL_BACK, a cubic settle over KICK_SETTLE. */
+    public static float kick(float age) {
+        if (!(age >= 0f) || age >= RECOIL_BACK + KICK_SETTLE) return 0f;
+        if (age < RECOIL_BACK) {
+            float u = 1f - age / RECOIL_BACK;
+            return 1f - u * u;
+        }
+        float u = 1f - (age - RECOIL_BACK) / KICK_SETTLE;
+        return u * u * u;
+    }
 
     /** Nozzle i's centre y. */
     public static float nozzleY(int i) { return i == 0 ? -NOZZLE_Y : NOZZLE_Y; }

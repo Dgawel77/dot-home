@@ -38,7 +38,7 @@ public final class GameConfig {
     public final float manualHoldSeconds = 4f;
     /**
      * A bolt flies along the heading, toed in toward the tap only when the tap is within this of it, radians
-     * (3 degrees): the twin streams then converge on it.
+     * (3 degrees): the streams then converge on it.
      */
     public final float gunCone = (float) Math.toRadians(3);
     /** The red muzzle flash at the firing point, seconds. */
@@ -55,7 +55,7 @@ public final class GameConfig {
     /**
      * The spin barrage (a shake): its cooldown and length, s; the spin-up (cubic ease-in) and spin-down (cubic
      * ease-out) at its ends, s; the top spin (3 rev/s) and the spin above which the guns fire (1 rev/s), rad/s; the
-     * seconds between bolts (the guns alternate); and the linear drag while it spins, per second.
+     * seconds between bolts (the guns take turns); and the linear drag while it spins, per second.
      */
     public final float barrageCooldown = 30f, barrageSeconds = 1.6f, barrageSpinUp = 0.3f, barrageSpinDown = 0.4f;
     public final float barrageSpin = (float) (6 * Math.PI), barrageFireSpin = (float) (2 * Math.PI);

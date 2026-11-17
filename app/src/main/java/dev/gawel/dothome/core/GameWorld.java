@@ -11,17 +11,21 @@ import java.util.List;
  * A PD autopilot picks a desired velocity (wander target, rock avoidance, screen edges), turns toward the heading
  * that velocity error needs, burns only within 20 degrees of it, and so flips and burns to brake.
  *
- * <p>Tap-to-fly: a tap fires one bolt at once from the next twin gun (they alternate) along the current heading,
- * toed in toward the tap only when the tap lies within 3 degrees of it (the fire cooldown still applies). The tap
- * point also becomes the waypoint and starts manual mode, until 4 s after the last tap: the same flight computer
- * flies the ship to the waypoint instead of a wander target (up to 1.25x the cruise speed, slowing within 120k px
- * of it), still dodging rocks, and once there holds station facing the way it came. A newer tap retargets at once.
- * Then the autopilot resumes from the current state with a fresh wander target.
+ * <p>Guns: four (ShipShape), the under-nose twin and the wingtip pair, taking turns in a crossing order. Each bolt
+ * leaves its barrel's tip along the barrel's axis (within 1.5 degrees of the heading); each gun's time since its
+ * shot drives the renderer's barrel recoil and hull kick, which are drawing only.
+ *
+ * <p>Tap-to-fly: a tap fires one bolt at once from the next gun along the current heading, toed in toward the tap
+ * only when the tap lies within 3 degrees of it (the fire cooldown still applies). The tap point also becomes the
+ * waypoint and starts manual mode, until 4 s after the last tap: the same flight computer flies the ship to the
+ * waypoint instead of a wander target (up to 1.25x the cruise speed, slowing within 120k px of it), still dodging
+ * rocks, and once there holds station facing the way it came. A newer tap retargets at once. Then the autopilot
+ * resumes from the current state with a fresh wander target.
  *
  * <p>The spin barrage (a shake, 30 s cooldown): for 1.6 s the ship spins on the spot, a random way, its spin
  * easing in to 3 rev/s over 0.3 s and out to 0 over the last 0.4 s, with the RCS firing hard on both ramps. The
  * autopilot and manual mode are off and the ship's drift dies under a 2/s drag. While it spins faster than 1 rev/s
- * the guns fire alternately every 0.045 s along the heading, so the bolts spray out in a spiral; they hit like any
+ * the guns fire in turn every 0.045 s along the heading, so the bolts spray out in a spiral; they hit like any
  * other bolt. Then manual mode flies on if a tap's 4 s are not yet up (its clock keeps running through the spin),
  * otherwise the autopilot takes over with a fresh wander target, keeping the final heading.
  *
@@ -95,8 +99,11 @@ public final class GameWorld {
     private boolean tapFire;
     /** Seconds of manual mode left (a tap sets it to cfg.manualHoldSeconds); the ship flies to the waypoint while > 0. */
     private float manualT;
-    /** The gun that fires next (ShipShape: 0 port, 1 starboard). */
+    /** The gun that fires next: the four take turns in ShipShape's order (nose port, wing starboard, nose starboard, wing port). */
     private int gun;
+    /** Seconds since each gun last fired (capped at GUN_IDLE): the renderer's recoil and hull kick phase. */
+    private final float[] gunAge = new float[ShipShape.GUNS];
+    private static final float GUN_IDLE = 10f;
     // laser hits of the last step, for the renderer's sparks
     private static final int MAX_HITS = 8;
     private final float[] hitX = new float[MAX_HITS], hitY = new float[MAX_HITS], hitA = new float[MAX_HITS];
@@ -142,6 +149,7 @@ public final class GameWorld {
         this.rng = rng;
         this.fx = new Rng(Double.doubleToLongBits(rng.next()));
         for (int i = 0; i < MAX_SHOTS; i++) shotPool.add(new Shot());
+        java.util.Arrays.fill(gunAge, GUN_IDLE);
     }
 
     public void setListener(Listener l) { listener = l; }
@@ -234,6 +242,9 @@ public final class GameWorld {
     /** The direction the bolt that made hit i was flying. */
     public float laserHitAngle(int i) { return hitA[i]; }
 
+    /** Seconds since gun i (ShipShape order) last fired; GUN_IDLE (10) or more when it has been idle. */
+    public float gunAge(int i) { return gunAge[i]; }
+
     /** The muzzle flash of the last bolt; over once t reaches 0. */
     public Flash flash() { return flash; }
 
@@ -272,6 +283,7 @@ public final class GameWorld {
         meteor.active = false;
         meteorT = -1f;
         flash.t = 0f;
+        java.util.Arrays.fill(gunAge, GUN_IDLE);
         laserHits = 0;
         particles.clear();
         rings.clear();
@@ -488,22 +500,30 @@ public final class GameWorld {
     }
 
     /**
-     * One bolt from the next gun (they alternate) along the heading. With toeIn it is toed in toward (tx, ty) from
-     * its muzzle when that bearing is within cfg.gunCone of the heading. The muzzle flash shows at that gun. False
-     * when MAX_SHOTS are already flying (the flash still shows).
+     * One bolt from the next of the four guns, leaving its barrel's tip (where the barrel is now, its recoil from an
+     * earlier shot included) along the barrel's axis: the heading, or 1.5 degrees in for a wingtip gun. With toeIn
+     * it flies at (tx, ty) instead when that bearing from the muzzle is within cfg.gunCone of the heading. The muzzle
+     * flash shows at the tip, and the barrel's recoil starts over. False when MAX_SHOTS are already flying (the flash
+     * still shows).
      */
     private boolean shoot(float tx, float ty, boolean toeIn) {
         fireT = cfg.fireCooldown;
         Ship s = ship;
-        float k = cfg.k, c = (float) Math.cos(s.angle), sn = (float) Math.sin(s.angle);
-        float lx = ShipShape.GUN_X * k, ly = ShipShape.gunY(gun) * k;
+        int g = gun;
         gun = (gun + 1) % ShipShape.GUNS;
+        float k = cfg.k, c = (float) Math.cos(s.angle), sn = (float) Math.sin(s.angle), ga = ShipShape.gunAngle(g);
+        float reach = ShipShape.muzzleReach(g) - ShipShape.recoil(gunAge[g]) * ShipShape.recoilStroke(g);
+        float lx = (ShipShape.breechX(g) + (float) Math.cos(ga) * reach) * k;
+        float ly = (ShipShape.breechY(g) + (float) Math.sin(ga) * reach) * k;
+        gunAge[g] = 0f;
         float mx = s.x + lx * c - ly * sn, my = s.y + lx * sn + ly * c;
-        float off = 0f, a = s.angle;
+        float off = ga, a = ga == 0f ? s.angle : wrapAngle(s.angle + ga);
         if (toeIn) {
-            off = wrapAngle((float) Math.atan2(ty - my, tx - mx) - s.angle);
-            if (Math.abs(off) > cfg.gunCone) off = 0f;
-            a = wrapAngle(s.angle + off);
+            float to = wrapAngle((float) Math.atan2(ty - my, tx - mx) - s.angle);
+            if (Math.abs(to) <= cfg.gunCone) {
+                off = to;
+                a = wrapAngle(s.angle + to);
+            }
         }
         flash.x = lx;
         flash.y = ly;
@@ -626,6 +646,7 @@ public final class GameWorld {
         if (dt > 0.05f) dt = 0.05f;
         if (dt < 0) dt = 0;
         time += dt;
+        for (int i = 0; i < ShipShape.GUNS; i++) gunAge[i] = Math.min(GUN_IDLE, gunAge[i] + dt);
         if (!introHeld) introT += dt;
         if (barrageCool > 0) barrageCool -= dt;
         laserHits = 0;

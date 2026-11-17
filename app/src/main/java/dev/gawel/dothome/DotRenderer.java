@@ -23,8 +23,10 @@ import dev.gawel.dothome.core.Zones;
  * lattice silhouettes (regular weight on the edge blending to light in the body, ink by sqrt(coverage)), or, with
  * the outline style, drawn as free outline dots with a body stipple. Hit rings are lattice dot rows. The ship
  * (Ship v2 "forked-5", heavy weight), its two main-engine plumes, its RCS puffs (heavier through a barrage's spin-up
- * and spin-down), debris and stars are free soft dots in the greys. Laser bolts, the muzzle flash and hit sparks are
- * the one colour, DotStyle.LASER.
+ * and spin-down), debris and stars are free soft dots in the greys. The four gun barrels are L65 dots (the
+ * under-nose twin under the hull, the wingtip pair over it on a black knockout); each slides back on its shot and
+ * springs forward, and every shot kicks the drawn hull back a little (drawing only: the simulation never moves).
+ * Laser bolts, the muzzle flash and hit sparks are the one colour, DotStyle.LASER.
  * Dots draw across the whole screen.
  * Only the ship, its opening dot and the plumes reach L100; on a lock still every grey stays at L65 or below and
  * the red is dimmed to 65%. Nothing is allocated per frame: plume, puff and spark dots live in fixed pools.
@@ -121,6 +123,11 @@ final class DotRenderer {
     /** Visual noise for plumes, puffs and sparks; the simulation keeps its own seeded Rng. */
     private final Rng fxRng = new Rng(0x5EEDL);
     private final Paint red = new Paint(Paint.ANTI_ALIAS_FLAG);
+    /** The black ring that sets the wingtip barrels off the hull, this many mockup px wider than the dot. */
+    private final Paint knock = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private static final float KNOCK = 0.25f;
+    /** One barrel's dots on screen (no barrel has more than this many). */
+    private final float[] barrelX = new float[8], barrelY = new float[8];
     private float lastIntroT;
 
     private float parTx, parTy, parX, parY;
@@ -144,6 +151,7 @@ final class DotRenderer {
         textPaint.setColor(DotStyle.L65);
         textPaint.setTextAlign(Paint.Align.RIGHT);
         red.setStrokeCap(Paint.Cap.ROUND);
+        knock.setColor(DotStyle.GROUND);
         metrics();
         dot65.prewarm(rReg);
         dot100.prewarm(rHeavy);
@@ -209,7 +217,7 @@ final class DotRenderer {
         emSn = (float) Math.sin(s.angle);
         emK = scaleK(w);
         emDt = dt;
-        float k = emK;
+        float k = emK, kick = hullKick(w); // plumes and puffs leave the kicked hull, mockup px back
         for (int i = 0; i < ShipShape.NOZZLES; i++) {
             float thr = w.nozzleThrust(i);
             plumeAcc[i] = Math.min(2f, plumeAcc[i] + thr * PLUME_RATE * dt);
@@ -217,7 +225,7 @@ final class DotRenderer {
                 plumeAcc[i] -= 1f;
                 float sp = rnd(120f, 200f) * k, spread = rnd(-0.2f, 0.2f);
                 float ly = ShipShape.nozzleY(i) + rnd(-1f, 1f) * ShipShape.NOZZLE_SPREAD;
-                addFx(ShipShape.NOZZLE_X, ly, -(float) Math.cos(spread) * sp, (float) Math.sin(spread) * sp,
+                addFx(ShipShape.NOZZLE_X - kick, ly, -(float) Math.cos(spread) * sp, (float) Math.sin(spread) * sp,
                     rnd(0.24f, 0.34f), 1.8f + thr, 1f, false);
             }
         }
@@ -235,7 +243,7 @@ final class DotRenderer {
             puffAcc -= 1f;
             for (int j = 0; j < n; j++) {
                 int port = w.rcsPort(j), side = w.rcsSide(j);
-                float px = ShipShape.rcsX(port), py = ShipShape.rcsY(port, side);
+                float px = ShipShape.rcsX(port) - kick, py = ShipShape.rcsY(port, side);
                 for (int m = 2 + fxRng.nextInt(3) + (heavy ? 2 : 0); m > 0; m--) {
                     addFx(px + rnd(-1f, 1f), py + side * 1.5f, rnd(-13f, 13f) * k, side * rnd(60f, 120f) * k,
                         rnd(0.15f, 0.23f) * life, 2.2f, 0.9f, true);
@@ -463,18 +471,22 @@ final class DotRenderer {
         if (shipClear && sa > 0) {
             float cs = (float) Math.cos(s.angle), sn = (float) Math.sin(s.angle);
             float blink = s.hitCooldown > 0 ? 1f - 0.45f * (float) Math.sin(Math.PI * (0.4f - s.hitCooldown) / 0.4f) : 1f;
+            // the hull kick: the drawn ship sits back along its heading (lock stills show it at rest)
+            float kick = still ? 0f : hullKick(w) * k, hx = s.x - kick * cs, hy = s.y - kick * sn;
+            drawBarrels(c, w, hx, hy, cs, sn, k, sa * blink, true);
             for (int j = 0; j < HULL.length; j += 4) {
                 float px = HULL[j] * k, py = HULL[j + 1] * k;
                 SoftDot d = HULL[j + 3] >= ShipShape.LEVEL_L100 ? user : dot65;
-                d.draw(c, sx(s.x + px * cs - py * sn), sy(s.y + px * sn + py * cs), HULL[j + 2] * mock / 2f, sa * blink);
+                d.draw(c, sx(hx + px * cs - py * sn), sy(hy + px * sn + py * cs), HULL[j + 2] * mock / 2f, sa * blink);
             }
             // the nozzle bars grow and brighten with their engine's thrust
             for (int j = 0; j < MARKS.length; j += 4) {
                 float thr = w.nozzleThrust(j / 4 / MARKS_PER_NOZZLE);
                 float px = MARKS[j] * k, py = MARKS[j + 1] * k;
-                user.draw(c, sx(s.x + px * cs - py * sn), sy(s.y + px * sn + py * cs),
+                user.draw(c, sx(hx + px * cs - py * sn), sy(hy + px * sn + py * cs),
                     (MARKS[j + 2] + 1.4f * thr) * MARKS[j + 3] * mock / 2f, (NOZZLE_IDLE + (1f - NOZZLE_IDLE) * thr) * sa);
             }
+            drawBarrels(c, w, hx, hy, cs, sn, k, sa * blink, false);
         }
 
         List<GameWorld.Ring> rings = w.rings();
@@ -485,6 +497,42 @@ final class DotRenderer {
         }
 
         drawLasers(c, w, k);
+    }
+
+    /** The hull kick of the guns' recent shots, ship units back (ShipShape.kick summed, capped at KICK_MAX). */
+    private static float hullKick(GameWorld w) {
+        float sum = 0f;
+        for (int g = 0; g < ShipShape.GUNS; g++) sum += ShipShape.kick(w.gunAge(g));
+        return Math.min(ShipShape.KICK_MAX, sum);
+    }
+
+    /**
+     * The gun barrels under the hull (the nose twin) or over it (the wingtips, on a black knockout ring so they read
+     * apart from the L100 hull), as L65 dots along each barrel's axis, slid back by its recoil (at rest on stills).
+     * (hx, hy) is the ship's drawn origin, kicked.
+     */
+    private void drawBarrels(Canvas c, GameWorld w, float hx, float hy, float cs, float sn, float k, float alpha,
+            boolean under) {
+        knock.setAlpha(Math.round(clamp(alpha, 0f, 1f) * 255));
+        for (int g = 0; g < ShipShape.GUNS; g++) {
+            if (ShipShape.gunUnder(g) != under) continue;
+            float off = still ? 0f : ShipShape.recoil(w.gunAge(g)) * ShipShape.recoilStroke(g);
+            float ga = ShipShape.gunAngle(g), gc = (float) Math.cos(ga), gs = (float) Math.sin(ga);
+            float bx = ShipShape.breechX(g), by = ShipShape.breechY(g), gap = ShipShape.gunGap(g);
+            float r = ShipShape.gunDot(g) * mock / 2f;
+            int n = ShipShape.gunDots(g);
+            for (int i = 0; i < n; i++) {
+                float a = i * gap - off, lx = (bx + gc * a) * k, ly = (by + gs * a) * k;
+                barrelX[i] = sx(hx + lx * cs - ly * sn);
+                barrelY[i] = sy(hy + lx * sn + ly * cs);
+            }
+            if (!under) {
+                for (int i = 0; i < n; i++) {
+                    if (barrelY[i] >= clearTopY) c.drawCircle(barrelX[i], barrelY[i], r + KNOCK * mock, knock);
+                }
+            }
+            for (int i = 0; i < n; i++) if (barrelY[i] >= clearTopY) dot65.draw(c, barrelX[i], barrelY[i], r, alpha);
+        }
     }
 
     /**
