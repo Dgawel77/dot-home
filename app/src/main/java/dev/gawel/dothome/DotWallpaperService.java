@@ -230,7 +230,7 @@ public class DotWallpaperService extends WallpaperService {
             boolean fired = false;
             if (WallpaperManager.COMMAND_TAP.equals(action) && hub.fireMode() == FireMode.TAP_COMMAND
                     && visible && hub.isActive(this)) {
-                hub.world().fire(x, y);
+                hub.world().aim(x, y);
                 fired = true;
             }
             Log.i(TAG, "onCommand action=" + action + " x=" + x + " y=" + y + " fired=" + fired);
@@ -267,7 +267,7 @@ public class DotWallpaperService extends WallpaperService {
                     boolean fired = false;
                     if (touchValid && ev.getPointerCount() == 1 && dx * dx + dy * dy < slop * slop
                             && ev.getEventTime() - downMs < 250) {
-                        hub.world().fire(ev.getX(), ev.getY());
+                        hub.world().aim(ev.getX(), ev.getY());
                         fired = true;
                     }
                     Log.i(TAG, "touch UP x=" + ev.getX() + " y=" + ev.getY() + " fired=" + fired);

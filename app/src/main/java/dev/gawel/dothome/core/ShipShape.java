@@ -9,7 +9,7 @@ package dev.gawel.dothome.core;
 public final class ShipShape {
     private ShipShape() {}
 
-    /** The nose tip: the turret's muzzle for targets ahead. */
+    /** The nose tip: the laser leaves from here along the heading. */
     public static final float NOSE_X = 19f, NOSE_Y = 0f;
     /** Hit radius against rocks. */
     public static final float RADIUS = 11f;
@@ -70,22 +70,6 @@ public final class ShipShape {
 
     /** Dots per nozzle in nozzleMarks(). */
     public static int marksPerNozzle() { return nozzleMarks().length / 4 / NOZZLES; }
-
-    /**
-     * The turret muzzle (ship-local mockup px) for a target rel radians off the nose (-PI..PI), into out[0..1]:
-     * the nose tip for a target ahead; for one behind (more than 90 degrees off) the point facing it on a circle of
-     * 0.6 x the nose length, so the bolt leaves from the hull edge facing the tap, not back through the hull.
-     */
-    public static void muzzle(float rel, float[] out) {
-        if (Math.abs(rel) > Math.PI / 2) {
-            float rr = 0.6f * NOSE_X;
-            out[0] = (float) Math.cos(rel) * rr;
-            out[1] = (float) Math.sin(rel) * rr;
-        } else {
-            out[0] = NOSE_X;
-            out[1] = NOSE_Y;
-        }
-    }
 
     /** A starboard half outline, tail to nose, mirrored into the full open outline: starboard side, nose, port side. */
     private static float[][] sym(float[][] v) {

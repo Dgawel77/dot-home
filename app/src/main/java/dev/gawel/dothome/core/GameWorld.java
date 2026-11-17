@@ -11,6 +11,11 @@ import java.util.List;
  * A PD autopilot picks a desired velocity (wander target, rock avoidance, screen edges), turns toward the heading
  * that velocity error needs, burns only within 20 degrees of it, and so flips and burns to brake.
  *
+ * <p>Rotate-to-aim (the prototype's aimMode "rotate"): a tap queues an aim target. The RCS turns the ship to face
+ * it, with the engines off unless a rock is about to hit (avoidance wins), and one bolt leaves the nose along the
+ * heading once that is within 5 degrees of the bearing; a target it cannot line up within 1.2 s is dropped.
+ * Auto-fire aims the same way at the nearest rock. Bolts never leave sideways or backwards.
+ *
  * <p>Thrusters are reported as per-step events the renderer reads (nozzle thrust levels, RCS firings), kept in
  * fixed arrays so a step allocates nothing for them. Angles are screen angles (y down): a growing angle turns
  * clockwise on screen.
@@ -58,7 +63,14 @@ public final class GameWorld {
     /** At most this many bolts fly at once. */
     public static final int MAX_SHOTS = 40;
     private final Flash flash = new Flash();
-    private final float[] muzzle = new float[2];
+    /** Aim targets waiting, the one being aimed at included; a tap on a full queue replaces the newest waiting one. */
+    public static final int AIM_QUEUE = 3;
+    // the aim queue, current target first: a screen point, or (auto-fire) a rock the aim follows
+    private final float[] aimX = new float[AIM_QUEUE], aimY = new float[AIM_QUEUE];
+    private final Rock[] aimRock = new Rock[AIM_QUEUE];
+    private int aimN;
+    /** Seconds spent on the current target. */
+    private float aimClock;
     // laser hits of the last step, for the renderer's sparks
     private static final int MAX_HITS = 8;
     private final float[] hitX = new float[MAX_HITS], hitY = new float[MAX_HITS], hitA = new float[MAX_HITS];
@@ -73,9 +85,10 @@ public final class GameWorld {
     private float wanderX, wanderY, wanderT;
 
     // flight computer: the RCS angular acceleration and engine command it set this step, its low-passed desired
-    // velocity, the heading it holds when there is nothing to correct, and its pointing and burning latches
+    // velocity, the heading it holds when there is nothing to correct, its pointing and burning latches, and
+    // whether a rock about to hit has it dodging instead of aiming
     private float angAccel, thrustCmd, desVx, desVy, holdAngle, headingErr;
-    private boolean pointing, burning;
+    private boolean pointing, burning, evading;
 
     // thruster events of the last step (fixed arrays: nothing is allocated per step)
     private final float[] nozzleThrust = new float[ShipShape.NOZZLES];
@@ -191,6 +204,7 @@ public final class GameWorld {
         ship.hitCooldown = 0f;
         resetFlight();
         clearShots();
+        clearAim();
         flash.t = 0f;
         laserHits = 0;
         particles.clear();
@@ -231,6 +245,7 @@ public final class GameWorld {
             for (int i = 0; i < r.outline.length; i++) r.outline[i] *= kr;
         }
         for (Shot s : shots) { s.x *= sx; s.y *= sy; s.px *= sx; s.py *= sy; }
+        for (int i = 0; i < aimN; i++) { aimX[i] *= sx; aimY[i] *= sy; }
         flash.x *= kr;
         flash.y *= kr;
         for (Particle p : particles) { p.x *= sx; p.y *= sy; }
@@ -265,7 +280,7 @@ public final class GameWorld {
     private void resetFlight() {
         angAccel = thrustCmd = desVx = desVy = headingErr = 0f;
         holdAngle = ship.angle;
-        pointing = burning = false;
+        pointing = burning = evading = false;
         java.util.Arrays.fill(nozzleThrust, 0f);
         rcsFirings = 0;
     }
@@ -282,6 +297,17 @@ public final class GameWorld {
 
     /** The autopilot's last main-engine command, 0..1 (tests). */
     float engineCommand() { return thrustCmd; }
+
+    /** True while a rock about to hit has the autopilot dodging instead of aiming (tests). */
+    boolean evading() { return evading; }
+
+    /** Aim targets queued, the current one included (tests). */
+    int aimCount() { return aimN; }
+
+    /** The current aim target: where a rock target is now, or the tapped point. */
+    float aimTargetX() { return aimRock[0] != null ? aimRock[0].x : aimX[0]; }
+
+    float aimTargetY() { return aimRock[0] != null ? aimRock[0].y : aimY[0]; }
 
     /** Pins the wander target (tests). */
     void setWanderTargetForTest(float x, float y) { wanderX = x; wanderY = y; wanderT = 1e9f; }
@@ -303,35 +329,90 @@ public final class GameWorld {
     }
 
     /**
-     * Turret: fires a laser bolt toward (x, y) at once, without turning the ship; false during the intro or while
-     * the fire cooldown is running. The bolt leaves from the nose for a target ahead and from the hull edge facing
-     * it for one behind (ShipShape.muzzle), aimed from there at (x, y).
+     * A tap: queues (x, y) as an aim target; false during the intro. The ship turns to each target in turn and fires
+     * one bolt from the nose once its heading is within cfg.aimCone of the bearing (no sooner than the fire
+     * cooldown allows), then moves on to the next; one it cannot line up within cfg.aimTimeout is dropped. Up to
+     * AIM_QUEUE targets wait, the current one included; a tap on a full queue replaces the newest waiting target.
      */
-    public boolean fire(float x, float y) {
-        if (!isLive() || fireT > 0) return false;
+    public boolean aim(float x, float y) {
+        if (!isLive()) return false;
+        int i = aimN < AIM_QUEUE ? aimN++ : AIM_QUEUE - 1;
+        if (i == 0) aimClock = 0f;
+        aimX[i] = x;
+        aimY[i] = y;
+        aimRock[i] = null;
+        return true;
+    }
+
+    /**
+     * Auto-fire picks the nearest rock when nothing is queued; the current target is shot once the heading is within
+     * cfg.aimCone of its bearing, or dropped once cfg.aimTimeout runs out or its rock is gone.
+     */
+    private void aimAndFire(float dt) {
+        if (autoFire) {
+            autoT -= dt;
+            if (autoT <= 0 && aimN == 0) aimAtNearestRock();
+        }
+        if (aimN == 0) return;
+        Ship s = ship;
+        if (aimRock[0] != null && !rocks.contains(aimRock[0])) {
+            nextTarget(s.angle);
+            return;
+        }
+        aimClock += dt;
+        float bearing = (float) Math.atan2(aimTargetY() - s.y, aimTargetX() - s.x);
+        if (fireT <= 0 && Math.abs(wrapAngle(bearing - s.angle)) <= cfg.aimCone) {
+            shoot();
+            nextTarget(bearing);
+        } else if (aimClock > cfg.aimTimeout) {
+            nextTarget(s.angle);
+        }
+    }
+
+    /**
+     * The current target is done (shot or dropped): the next one starts its clock, or the autopilot takes over
+     * holding the heading hold (after a shot the target's bearing, so the turn settles on it).
+     */
+    private void nextTarget(float hold) {
+        if (aimRock[0] != null) autoT = cfg.autoFireEvery;
+        for (int i = 1; i < aimN; i++) {
+            aimX[i - 1] = aimX[i];
+            aimY[i - 1] = aimY[i];
+            aimRock[i - 1] = aimRock[i];
+        }
+        aimN--;
+        aimRock[aimN] = null;
+        aimClock = 0f;
+        holdAngle = hold;
+    }
+
+    private void clearAim() {
+        java.util.Arrays.fill(aimRock, null);
+        aimN = 0;
+        aimClock = 0f;
+    }
+
+    /** One bolt from the nose along the heading, with the muzzle flash there. */
+    private void shoot() {
         fireT = cfg.fireCooldown;
         Ship s = ship;
         float k = cfg.k, c = (float) Math.cos(s.angle), sn = (float) Math.sin(s.angle);
-        ShipShape.muzzle(wrapAngle((float) Math.atan2(y - s.y, x - s.x) - s.angle), muzzle);
-        float lx = muzzle[0] * k, ly = muzzle[1] * k;
-        float mx = s.x + lx * c - ly * sn, my = s.y + lx * sn + ly * c;
-        float a = (float) Math.atan2(y - my, x - mx);
+        float lx = ShipShape.NOSE_X * k, ly = ShipShape.NOSE_Y * k;
         flash.x = lx;
         flash.y = ly;
-        flash.angle = wrapAngle(a - s.angle);
+        flash.angle = 0f;
         flash.t = cfg.muzzleFlash;
         if (shots.size() < MAX_SHOTS) {
             Shot b = shotPool.isEmpty() ? new Shot() : shotPool.remove(shotPool.size() - 1);
-            b.x = b.px = mx;
-            b.y = b.py = my;
-            b.vx = (float) Math.cos(a) * cfg.shotSpeed;
-            b.vy = (float) Math.sin(a) * cfg.shotSpeed;
-            b.angle = a;
+            b.x = b.px = s.x + lx * c - ly * sn;
+            b.y = b.py = s.y + lx * sn + ly * c;
+            b.vx = c * cfg.shotSpeed;
+            b.vy = sn * cfg.shotSpeed;
+            b.angle = s.angle;
             b.t = b.trav = b.hit = 0f;
             b.life = cfg.shotLife;
             shots.add(b);
         }
-        return true;
     }
 
     private void clearShots() {
@@ -404,10 +485,7 @@ public final class GameWorld {
         if (flash.t > 0) flash.t = Math.max(0f, flash.t - dt);
         if (s.hitCooldown > 0) s.hitCooldown -= dt;
 
-        if (autoFire && live) {
-            autoT -= dt;
-            if (autoT <= 0) autoFireAtNearest();
-        }
+        if (live) aimAndFire(dt);
 
         for (int i = 0; i < rocks.size(); i++) {
             Rock r = rocks.get(i);
@@ -526,6 +604,8 @@ public final class GameWorld {
      * 2. The velocity error sets the wanted heading, so slowing down points the ship against its motion.
      * 3. RCS: PD on the heading error, the turn rate capped at maxSpin and at what it can still stop from.
      * 4. Main engines only while the nose is within 20 degrees of the wanted heading.
+     * While aiming the wanted heading is the target's bearing and the engines stay off, unless a rock is about to
+     * hit (its path comes within the avoidance clearance in the next 1.6 s): then it flies as above until clear.
      */
     private void pilot(float dt) {
         float k = cfg.k, vmax = cfg.maxSpeed;
@@ -538,6 +618,7 @@ public final class GameWorld {
         }
         float dx = wanderX - s.x, dy = wanderY - s.y, d = hypot(dx, dy);
         float vx = 0f, vy = 0f;
+        boolean threat = false;
         if (d > 1e-3f) {
             float ab = 0.8f * cfg.thrust, tf = cfg.flipTime, dd = Math.max(0f, d - 10f * k);
             float sp = Math.min(vmax, ab * ((float) Math.sqrt(tf * tf + 2f * dd / ab) - tf));
@@ -553,6 +634,7 @@ public final class GameWorld {
             float cx = rx + rvx * tc, cy = ry + rvy * tc, cd = hypot(cx, cy);
             float clear = r.r + 40f * k;
             float u = cd < clear ? (1f - cd / clear) * (1f - 0.5f * tc / 1.6f) : 0f;
+            if (tc > 0 && cd < clear) threat = true; // closing, and its path comes within the clearance
             float near = 1f - nowD / (r.r + 50f * k);
             if (near > u) {
                 u = near;
@@ -595,6 +677,9 @@ public final class GameWorld {
             pointing = true;
         }
         float want = pointing ? (float) Math.atan2(ey, ex) : holdAngle;
+        evading = aimN > 0 && threat;
+        boolean aiming = aimN > 0 && !threat;
+        if (aiming) want = (float) Math.atan2(aimTargetY() - s.y, aimTargetX() - s.x);
 
         float ae = wrapAngle(want - s.angle);
         float lim = Math.min(cfg.maxSpin, (float) Math.sqrt(2f * 0.8f * cfg.rcsAccel * Math.abs(ae)));
@@ -604,7 +689,7 @@ public final class GameWorld {
         angAccel = al;
         headingErr = ae;
 
-        boolean aligned = pointing && Math.abs(ae) < MAIN_ENGINE_CONE;
+        boolean aligned = !aiming && pointing && Math.abs(ae) < MAIN_ENGINE_CONE;
         if (burning) {
             if (!aligned || em < 5f * k) burning = false;
         } else if (aligned && em > 20f * k) {
@@ -616,7 +701,8 @@ public final class GameWorld {
     /** The main engines fire only while the heading is within this of the wanted one (20 degrees). */
     static final float MAIN_ENGINE_CONE = (float) Math.toRadians(20);
 
-    private void autoFireAtNearest() {
+    /** Auto-fire: the nearest rock within 0.6 of the short side becomes the aim target, followed as it drifts. */
+    private void aimAtNearestRock() {
         float best = 0.6f * Math.min(w, h);
         Rock target = null;
         for (int i = 0; i < rocks.size(); i++) {
@@ -624,7 +710,10 @@ public final class GameWorld {
             float d = hypot(r.x - ship.x, r.y - ship.y);
             if (d < best) { best = d; target = r; }
         }
-        if (target != null && fire(target.x, target.y)) autoT = cfg.autoFireEvery;
+        if (target == null) return;
+        aimRock[0] = target;
+        aimN = 1;
+        aimClock = 0f;
     }
 
     private float mass() {

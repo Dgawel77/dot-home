@@ -195,7 +195,7 @@ public final class ShipFlightTest {
         for (int i = 0; i < Math.round(25f / DT); i++) {
             if (i % 97 == 50) {
                 float x = 40 + (i * 37) % 540, y = 60 + (i * 53) % 600;
-                T.eq(a.fire(x, y), b.fire(x, y), "fire " + i);
+                T.eq(a.aim(x, y), b.aim(x, y), "tap " + i);
             }
             if (i == 900) a.shockwave();
             if (i == 900) b.shockwave();

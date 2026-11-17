@@ -25,7 +25,7 @@ public final class GameWorldTest {
 
     private static void fireUntilKill(GameWorld g, Count c, float x, float y) {
         g.skipIntro(); // firing waits for the intro
-        g.fire(x, y);
+        g.aim(x, y);
         for (int i = 0; i < 125 && c.destroyed < 1; i++) g.step(0.016f);
     }
 
@@ -89,8 +89,12 @@ public final class GameWorldTest {
     public static void testFireCooldown() {
         GameWorld g = world(new Count());
         g.skipIntro();
-        T.eq(true, g.fire(100, 100), "first");
-        T.eq(false, g.fire(100, 100), "second");
+        T.eq(true, g.aim(310, 100), "first");
+        T.eq(true, g.aim(310, 100), "a second tap waits its turn");
+        g.step(0.016f);
+        T.eq(1, g.shots().size(), "one bolt");
+        g.step(0.016f);
+        T.eq(1, g.shots().size(), "the second waits for the cooldown");
     }
 
     public static void testParticlesCapped() {
@@ -464,7 +468,7 @@ public final class GameWorldTest {
         T.eq(0, g.rings().size(), "hit rings cleared");
         T.check(g.wave() == null, "no shockwave");
         T.eq(false, g.shockwave(), "no shockwave during the replayed intro");
-        T.eq(false, g.fire(s.x, s.y - 100), "no tap fire during the intro");
+        T.eq(false, g.aim(s.x, s.y - 100), "no tap fire during the intro");
         float x0 = s.x, y0 = s.y;
         for (int i = 0; i < 62; i++) { // 0.99 s, autopilot and auto-fire on
             g.step(0.016f);
@@ -481,14 +485,14 @@ public final class GameWorldTest {
 
     public static void testNoFireDuringFirstIntro() {
         GameWorld g = world(new Count());
-        T.eq(false, g.fire(100, 100), "tap during the intro");
+        T.eq(false, g.aim(100, 100), "tap during the intro");
         g.setAutoFire(true);
         g.addRock(1, g.ship().x + 100, g.ship().y, 0, 0);
         for (int i = 0; i < 70; i++) {
             g.step(0.016f);
             T.eq(0, g.shots().size(), "auto-fire waits for the intro, step " + i);
         }
-        for (int i = 0; i < 30; i++) g.step(0.016f);
+        for (int i = 0; i < 90; i++) g.step(0.016f); // it turns to the rock first
         T.check(g.shots().size() > 0 || g.particles().size() > 0, "auto-fire after the intro");
     }
 

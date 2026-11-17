@@ -28,8 +28,12 @@ public final class GameConfig {
     public final float shotLife = 1.1f, shotHitFlare = 0.06f;
     /** Bolts are dropped this far past the screen edge, px. */
     public final float shotCull;
-    /** Turret cooldown between bolts. */
+    /** Cooldown between bolts. */
     public final float fireCooldown = 0.12f;
+    /** A bolt fires once the heading is within this of the bearing to the aim target, radians (5 degrees). */
+    public final float aimCone = (float) Math.toRadians(5);
+    /** An aim target the ship cannot line up within this many seconds is dropped. */
+    public final float aimTimeout = 1.2f;
     /** The red muzzle flash at the firing point, seconds. */
     public final float muzzleFlash = 0.08f;
     public final float hitCooldown = 0.4f;

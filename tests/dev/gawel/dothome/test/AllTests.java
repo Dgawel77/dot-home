@@ -36,7 +36,7 @@ public final class AllTests {
         dev.gawel.dothome.core.LabelPickerTest.class,
         dev.gawel.dothome.core.LabelClearTest.class,
         dev.gawel.dothome.core.ShipFlightTest.class,
-        dev.gawel.dothome.core.TurretTest.class,
+        dev.gawel.dothome.core.AimTest.class,
     };
 
     public static void main(String[] args) throws Exception {
