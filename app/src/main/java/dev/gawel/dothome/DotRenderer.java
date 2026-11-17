@@ -23,9 +23,10 @@ import dev.gawel.dothome.core.Zones;
  * lattice silhouettes (regular weight on the edge blending to light in the body, ink by sqrt(coverage)), or, with
  * the outline style, drawn as free outline dots with a body stipple. Hit rings are lattice dot rows. The ship
  * (Ship v2 "forked-5", heavy weight), its two main-engine plumes, its two small nose-retro plumes (L65 fading to
- * L46), its RCS puffs (heavier through a barrage's spin-up and spin-down), debris and stars are free soft dots in the greys. The four gun barrels are L65 dots (the
- * under-nose twin under the hull, the wingtip pair over it on a black knockout); each slides back on its shot and
- * springs forward, and every shot kicks the drawn hull back a little (drawing only: the simulation never moves).
+ * L46), its RCS puffs (heavier through a barrage's spin-up and spin-down), debris and stars are free soft dots in
+ * the greys. The four gun barrels are L65 dots (the under-nose twin under the hull, the wingtip pair over it on a
+ * black knockout); each slides back on its shot and springs forward, and every shot kicks the drawn hull back a
+ * little (drawing only: the simulation never moves).
  * Laser bolts, the muzzle flash and hit sparks are the one colour, DotStyle.LASER.
  * Dots draw across the whole screen.
  * Only the ship, its opening dot and the plumes reach L100; on a lock still every grey stays at L65 or below and

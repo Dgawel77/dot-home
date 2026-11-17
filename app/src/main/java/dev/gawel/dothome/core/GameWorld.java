@@ -946,8 +946,10 @@ public final class GameWorld {
         float ref = d > ARRIVE_NEAR * k ? (float) Math.atan2(dy, dx)
             : hypot(s.vx, s.vy) > ARRIVE_SPEED * k ? (float) Math.atan2(s.vy, s.vx) : s.angle;
         float off = Math.abs(wrapAngle(back - ref)), am = wrapAngle(need - s.angle);
-        // a nose already nearer the needed acceleration than its reverse brakes on the main engines instead
-        braking = pointing && dodgeT <= 0f && off < (braking ? BRAKE_EXIT : BRAKE_ENTER) && Math.abs(am) > HALF_TURN;
+        // a nose already nearer the needed acceleration than its reverse brakes on the main engines instead, and
+        // braking means slowing: a slow ship with the goal behind it (no speed to shed) turns to it
+        braking = pointing && dodgeT <= 0f && off < (braking ? BRAKE_EXIT : BRAKE_ENTER) && Math.abs(am) > HALF_TURN
+            && ex * s.vx + ey * s.vy < 0f;
         float want = pointing ? braking ? back : need : manual && arrived ? wpBearing : holdAngle;
         boolean aiming = facing && dodgeT <= 0f;
         if (aiming) {

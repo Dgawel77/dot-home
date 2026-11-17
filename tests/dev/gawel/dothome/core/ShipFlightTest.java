@@ -123,6 +123,29 @@ public final class ShipFlightTest {
 
     public static void testAutopilotWanderBrakesWithoutFlip() { cleanTrip(false); }
 
+    /** Seconds a slow ship drifting away from a target 35 px behind it takes to come back within 10 px, measured. */
+    private static final float NEAR_BEHIND = 2.82f;
+
+    public static void testSlowShipTurnsForATargetJustBehind() {
+        GameWorld g = live(4, null);
+        GameWorld.Ship s = g.ship();
+        s.x = 310;
+        s.y = 400;
+        s.angle = 0f;
+        s.vx = 10f; // nose and drift away from the target
+        g.setWanderTargetForTest(275, 400);
+        float turned = 0, back = -1;
+        for (int i = 1; i <= Math.round(4f / DT); i++) {
+            g.step(DT);
+            g.rocks().clear();
+            turned = Math.max(turned, Math.abs(GameWorld.wrapAngle(s.angle)));
+            if (back < 0 && dist(s, 275, 400) < 10 && speed(s) < 20) back = i * DT;
+        }
+        T.check(turned > 150 * DEG, "it turns round for the target behind: " + turned / DEG);
+        T.check(back > 0 && back <= NEAR_BEHIND * 1.2f, "and settles on it within " + NEAR_BEHIND * 1.2f + " s: " + back
+            + " (now " + dist(s, 275, 400) + " px off)");
+    }
+
     public static void testRetrosDeterministic() {
         GameWorld a = live(9, null), b = live(9, null);
         GameWorld[] gs = {a, b};

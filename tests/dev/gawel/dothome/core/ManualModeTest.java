@@ -5,8 +5,8 @@ import dev.gawel.dothome.test.T;
 /**
  * A tap is a waypoint: until the later of 4 s after the last tap and 2 s after it arrives (12 s cap) the flight
  * computer flies the ship straight there (Newtonian: main engines forward, nose retros to brake, no flip) and holds
- * station once it arrives; then the autopilot wanders again. Rocks it would merely pass are ignored; only one on a collision course within 0.5 s makes
- * it dodge, briefly. A newer tap retargets at once.
+ * station once it arrives; then the autopilot wanders again. Rocks it would merely pass are ignored; only one on a
+ * collision course within 0.5 s makes it dodge, briefly. A newer tap retargets at once.
  */
 public final class ManualModeTest {
     private ManualModeTest() {}
@@ -339,6 +339,28 @@ public final class ManualModeTest {
         T.check(worst < 30, "settles without overshooting: strayed " + worst);
         T.check(dist(g, 410, 560) < GameWorld.ARRIVE_NEAR && speed(g.ship()) < GameWorld.ARRIVE_SPEED, "holds station there: "
             + dist(g, 410, 560) + " px, " + speed(g.ship()) + " px/s");
+    }
+
+    /**
+     * A tap 35 px behind a resting ship (inside the arrival radius, so it counts as arrived at once) still turns
+     * the ship to face it: there is no speed to shed, so it is not braking.
+     */
+    public static void testTapJustBehindASlowShipTurnsToIt() {
+        GameWorld g = live(16);
+        place(g, 310, 560); // heading up, at rest
+        g.aim(310, 595);
+        float turned = 0;
+        for (int i = 1; i <= Math.round(1.9f / DT); i++) { // manual mode holds 2 s after arrival
+            g.step(DT);
+            g.shots().clear();
+            g.rocks().clear();
+            turned = Math.max(turned, Math.abs(GameWorld.wrapAngle(g.ship().angle + 90 * DEG)));
+        }
+        T.check(g.isManual(), "still holding station");
+        T.check(turned > 150 * DEG, "it turns round: " + turned / DEG);
+        T.check(dist(g, 310, 595) < GameWorld.ARRIVE_NEAR, "near the tap: " + dist(g, 310, 595));
+        T.check(Math.abs(GameWorld.wrapAngle(g.ship().angle - 90 * DEG)) < 30 * DEG,
+            "and faces the way it came (down): " + g.ship().angle / DEG);
     }
 
     public static void testEachTapFiresExactlyOneBoltAlongTheHeading() {
