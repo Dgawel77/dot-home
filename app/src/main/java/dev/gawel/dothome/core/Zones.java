@@ -15,6 +15,11 @@ public final class Zones {
 
     public static boolean isCover(float w, float h) { return w / h < 0.6f; }
 
+    /** Cover-shaped in either orientation (min/max < 0.6); used where a rotation must not look like a fold. */
+    public static boolean isCoverShape(float w, float h) {
+        return Math.min(w, h) / Math.max(w, h) < 0.6f;
+    }
+
     public static List<float[]> defaults(float w, float h) {
         return scale(isCover(w, h) ? COVER : MAIN, w, h);
     }

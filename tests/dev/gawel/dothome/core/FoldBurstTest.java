@@ -21,6 +21,15 @@ public final class FoldBurstTest {
         T.near(1f, s[1], 1e-6f, "v");
     }
 
+    public static void testCoverRotationNoBurst() {
+        float[] s = FoldBurst.startScale(968, 2376, 2376, 968);
+        T.near(1f, s[0], 1e-6f, "cover->landscape x");
+        T.near(1f, s[1], 1e-6f, "cover->landscape y");
+        s = FoldBurst.startScale(2376, 968, 968, 2376);
+        T.near(1f, s[0], 1e-6f, "landscape->cover x");
+        T.near(1f, s[1], 1e-6f, "landscape->cover y");
+    }
+
     public static void testScaleEndsAtOne() {
         T.near(1f, FoldBurst.scaleAt(0.52f, FoldBurst.SECONDS), 1e-6f, "v");
         T.near(1f, FoldBurst.scaleAt(1.9f, FoldBurst.SECONDS), 1e-6f, "v");

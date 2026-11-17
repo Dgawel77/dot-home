@@ -13,9 +13,11 @@ public final class FoldBurst {
 
     /** The per-axis start scale {sx, sy}: {1, 1} unless the cover/main class changes. */
     public static float[] startScale(float ow, float oh, float nw, float nh) {
-        if (Zones.isCover(ow, oh) == Zones.isCover(nw, nh)) return new float[] {1f, 1f};
+        if (nw == oh && nh == ow) return new float[] {1f, 1f}; // a pure rotation
+        boolean oldCover = Zones.isCoverShape(ow, oh);
+        if (oldCover == Zones.isCoverShape(nw, nh)) return new float[] {1f, 1f};
         float rx = ow / nw, ry = oh / nh;
-        if (Zones.isCover(ow, oh)) return new float[] {Math.min(1f, rx), Math.min(1f, ry)};
+        if (oldCover) return new float[] {Math.min(1f, rx), Math.min(1f, ry)};
         return new float[] {Math.max(1f, rx), Math.max(1f, ry)};
     }
 

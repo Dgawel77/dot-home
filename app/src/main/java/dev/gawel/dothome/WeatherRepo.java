@@ -23,7 +23,12 @@ final class WeatherRepo {
     private static final String K_OM = "weather.om", K_ALERT = "weather.alert",
         K_PLACE = "weather.place", K_AT = "weather.fetchedAtMs";
 
+    /** The fetch time of the newest weather seen (stored or parsed from the cache); lets callers spot a new fetch cheaply. */
+    private static volatile long lastFetchedAtMs;
+
     private WeatherRepo() {}
+
+    static long lastFetchedAtMs() { return lastFetchedAtMs; }
 
     /** The last good fetch, or null if there is none. */
     static Weather cached(Context ctx) {
@@ -34,6 +39,7 @@ final class WeatherRepo {
             if (om == null || at == null) return null;
             Weather w = OpenMeteoParser.parse(om, Long.parseLong(at));
             if (w == null) return null;
+            lastFetchedAtMs = w.fetchedAtMs;
             String alert = prefs.get(K_ALERT, "");
             if (alert != null && !alert.isEmpty()) w = w.withAlert(alert);
             return w.withPlace(prefs.get(K_PLACE, ""));
@@ -75,6 +81,7 @@ final class WeatherRepo {
             prefs.put(K_ALERT, alert == null ? "" : alert);
             prefs.put(K_PLACE, name);
             prefs.put(K_AT, String.valueOf(now));
+            lastFetchedAtMs = now;
             Weather out = w.withPlace(name);
             if (alert != null) out = out.withAlert(alert);
             Log.i(TAG, "weather ok " + Math.round(out.tempF) + " " + name);

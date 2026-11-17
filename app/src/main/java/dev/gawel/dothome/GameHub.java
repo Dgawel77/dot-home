@@ -62,6 +62,8 @@ final class GameHub {
     private long weatherFxAtMs;
     /** The sun's times from the cached weather (0 = unknown), for the day/night ramp. */
     private long sunriseMs, sunsetMs;
+    /** The fetchedAtMs of the weather the game currently shows (0 = none); a newer fetch is re-applied at once. */
+    private long appliedFetchedAtMs;
 
     private static final String TAG = "GameHub";
     private boolean batteryOn;
@@ -201,7 +203,9 @@ final class GameHub {
     /** Once a second from the active engine's frame loop; later tasks add their own periodic work here. */
     void tick1s(long nowMs) {
         scoreBook.refresh(); // rolls the day over at midnight while visible
-        if (nowMs - weatherFxAtMs >= WEATHER_REFRESH_MS) refreshWeatherFx(nowMs);
+        if (nowMs - weatherFxAtMs >= WEATHER_REFRESH_MS || WeatherRepo.lastFetchedAtMs() != appliedFetchedAtMs) {
+            refreshWeatherFx(nowMs);
+        }
         world.setDayness(Sky.dayness(nowMs, sunriseMs, sunsetMs));
         updateBeat();
     }
@@ -223,6 +227,7 @@ final class GameHub {
     private void refreshWeatherFx(long nowMs) {
         weatherFxAtMs = nowMs;
         Weather wx = WeatherRepo.cached(appContext);
+        appliedFetchedAtMs = wx == null ? 0 : wx.fetchedAtMs;
         world.setWeather(WeatherFx.from(wx, nowMs));
         sunriseMs = wx == null ? 0 : wx.sunriseMs;
         sunsetMs = wx == null ? 0 : wx.sunsetMs;

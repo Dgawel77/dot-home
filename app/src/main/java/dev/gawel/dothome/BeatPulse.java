@@ -7,25 +7,27 @@ import dev.gawel.dothome.core.BeatDetector;
 
 /**
  * Visualizer glue for the beat pulse: FFT of the output mix (session 0) into a BeatDetector. Callbacks arrive on a
- * binder thread, so the detector is guarded by a lock. Any failure releases the Visualizer, logs once and latches
- * until {@link #clearFailure()} (the Setup switch toggled).
+ * binder thread, so the detector is guarded by a lock. Any failure releases the Visualizer, logs once and backs
+ * off for 5 minutes (or until {@link #clearFailure()}, the Setup switch toggled).
  */
 final class BeatPulse {
     private static final String TAG = "DotHome";
-    private static volatile boolean failed;
+    private static final long RETRY_MS = 5L * 60 * 1000;
+    /** elapsedRealtime before which start() does not retry after a failure (0 = free to try). */
+    private static volatile long retryAtMs;
 
     private final BeatDetector detector = new BeatDetector();
     private Visualizer visualizer;
 
     /** Lets start() try again; called when the Setup switch is toggled. */
-    static void clearFailure() { failed = false; }
+    static void clearFailure() { retryAtMs = 0; }
 
     boolean running() { return visualizer != null; }
 
-    /** Starts capture; false on any failure (or a latched earlier one). Idempotent while running. */
+    /** Starts capture; false on any failure (or backing off after an earlier one). Idempotent while running. */
     boolean start() {
         if (visualizer != null) return true;
-        if (failed) return false;
+        if (android.os.SystemClock.elapsedRealtime() < retryAtMs) return false;
         Visualizer v = null;
         try {
             v = new Visualizer(0);
@@ -46,7 +48,7 @@ final class BeatPulse {
     }
 
     private boolean fail(Visualizer v, String why) {
-        failed = true;
+        retryAtMs = android.os.SystemClock.elapsedRealtime() + RETRY_MS;
         release(v);
         visualizer = null;
         Log.w(TAG, "beat pulse disabled: " + why);

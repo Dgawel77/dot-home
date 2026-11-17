@@ -124,7 +124,7 @@ public class SetupActivity extends Activity {
         parent.addView(backdrop, parent.indexOfChild(rocks) + 1);
 
         Switch lockLive = new Switch(this);
-        lockLive.setText("Lock screen shows the game (beta)");
+        lockLive.setText("Lock screen shows the game (beta; turning off keeps the last image)");
         lockLive.setTextColor(0xFFFFFFFF);
         lockLive.setChecked("true".equals(prefs.get(PrefsStore.KEY_LOCK_LIVE, "false")));
         lockLive.setOnCheckedChangeListener((b, on) -> prefs.put(PrefsStore.KEY_LOCK_LIVE, on ? "true" : "false"));

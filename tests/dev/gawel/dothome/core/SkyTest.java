@@ -32,6 +32,12 @@ public final class SkyTest {
         T.near(0.5, d(RISE + 3 * DAY), 0.01, "3 days later at sunrise");
     }
 
+    public static void testStaleSunTimesGiveNaN() {
+        T.check(!Float.isNaN(Sky.dayness(RISE + 7 * DAY, RISE, SET)), "exactly 7 days still known");
+        T.check(Float.isNaN(Sky.dayness(RISE + 7 * DAY + 1, RISE, SET)), "just over 7 days unknown");
+        T.check(Float.isNaN(Sky.dayness(SET + 30 * DAY, RISE, SET)), "a month old unknown");
+    }
+
     public static void testUnknownSunGivesNaN() {
         T.check(Float.isNaN(Sky.dayness(RISE, 0, SET)), "sunrise 0");
         T.check(Float.isNaN(Sky.dayness(RISE, RISE, 0)), "sunset 0");

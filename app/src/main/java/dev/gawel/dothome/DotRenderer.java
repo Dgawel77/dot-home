@@ -53,6 +53,8 @@ final class DotRenderer {
     private static final float PUFF_MIN = 0.12f;
     /** A barrage's spin-up and spin-down puff this many times as often, a little longer, with two more dots each. */
     private static final float BARRAGE_PUFFS = 2f, BARRAGE_PUFF_LIFE = 1.3f;
+    /** The last fraction of a retro dot's life over which it fades to nothing. */
+    private static final float RETRO_FADE = 0.2f;
     /** Thruster dots (plumes and puffs) and red sparks alive at once, at most. */
     private static final int FX_MAX = 384, SPARK_MAX = 64;
     /** LASER_GLOW's alpha, stacked from a 3x pass and a 2x pass so the glow reads about 35% beside the core. */
@@ -147,6 +149,8 @@ final class DotRenderer {
     private String scoreText = "";
 
     // the current draw: screen = (vx, vy) + vs * world; identity live, a centred cover fit for stills
+    /** The four glint dots' offsets, in steps. */
+    private static final float[] GLINT_DX = {1f, -1f, 0f, 0f}, GLINT_DY = {0f, 0f, 1f, -1f};
     private float vs = 1f, vsx = 1f, vsy = 1f, vx, vy;
     private float canvasW, canvasH;
     private boolean still;
@@ -451,7 +455,7 @@ final class DotRenderer {
             } else {
                 float len = (float) Math.sqrt(p.vx[i] * p.vx[i] + p.vy[i] * p.vy[i]);
                 if (len < 1e-3f) continue;
-                float ux = -p.vx[i] / len * step * vs, uy = -p.vy[i] / len * step * vs;
+                float ux = -p.vx[i] / len * step * vsx, uy = -p.vy[i] / len * step * vsy;
                 for (int q = 0; q < 3; q++) {
                     float dx = qx + ux * q, dy = qy + uy * q;
                     if (dy < clearTopY || dy > clearBottomY) continue;
@@ -461,14 +465,18 @@ final class DotRenderer {
         }
     }
 
+    /** The moon's alpha: 0 by day or with unknown sun times, dimmed by fog like the stars. */
+    private static float moonAlpha(GameWorld w, float fog, float fade) {
+        float d = w.dayness();
+        if (d != d) return 0f;
+        return clamp(1f - 2f * d, 0f, 1f) * fade * fog;
+    }
+
     /**
      * The night moon: light dots on the 4 dp lattice within the moon's radius, lit cells L65 and unlit L10 (both
      * within the still cap). It fades out as the day comes and is not drawn when the sun times are unknown.
      */
-    private void drawMoon(Canvas c, GameWorld w, GameConfig cfg, float fade) {
-        float d = w.dayness();
-        if (d != d) return;
-        float alpha = clamp(1f - 2f * d, 0f, 1f) * fade;
+    private void drawMoon(Canvas c, GameWorld w, GameConfig cfg, float alpha) {
         if (alpha <= 0f) return;
         float rad = cfg.moonRadiusDp * density;
         float cx = GameConfig.moonCentreX(w.width(), w.height()), cy = GameConfig.moonCentreY(w.height());
@@ -505,6 +513,9 @@ final class DotRenderer {
         // by day fewer, dimmer stars (the sun's real times); unknown counts as night
         float day = w.dayness();
         if (day != day) day = 0f;
+        float moonA = moonAlpha(w, fog, fade);
+        float moonCx = GameConfig.moonCentreX(w.width(), w.height()), moonCy = GameConfig.moonCentreY(w.height());
+        float moonR = cfg.moonRadiusDp * density + step, moonR2 = moonR * moonR;
         int starsShown = Math.round(stars.size() * (1f + (cfg.dayStarCount - 1f) * day));
         float dayDim = 1f + (cfg.dayStarBright - 1f) * day;
         for (int i = 0; i < starsShown && i < stars.size(); i++) {
@@ -514,6 +525,7 @@ final class DotRenderer {
                 x = wrap(x + parX * st.depth * 28f * k, w.width());
                 y = wrap(y + parY * st.depth * 28f * k, w.height());
             }
+            if (moonA > 0f && (x - moonCx) * (x - moonCx) + (y - moonCy) * (y - moonCy) < moonR2) continue;
             float qx = sx(x), qy = sy(y);
             float twinkle = 0.35f + 0.65f * (0.5f + 0.5f * (float) Math.sin(TAU * t / st.period + st.phase));
             float r = st.depth >= NEAR_DEPTH ? rLight * NEAR_SCALE : rLight;
@@ -528,12 +540,13 @@ final class DotRenderer {
                 a = a + (1f - a) * e;
                 sd = user;
                 float cr = rLight * 0.7f, cs = step;
-                float[] cx = {cs, -cs, 0, 0}, cy = {0, 0, cs, -cs};
-                for (int q = 0; q < 4; q++) dot65.draw(c, qx + cx[q], qy + cy[q], cr, e * g * fade);
+                for (int q = 0; q < 4; q++) {
+                    dot65.draw(c, qx + GLINT_DX[q] * cs, qy + GLINT_DY[q] * cs, cr, e * g * fade);
+                }
             }
             sd.draw(c, qx, qy, r, Math.min(1f, a * fog * dayDim * fade + cfg.beatAlpha * pulse * fade));
         }
-        drawMoon(c, w, cfg, fade);
+        drawMoon(c, w, cfg, moonA);
         drawPrecip(c, w, fade);
 
         GameWorld.Meteor m = still ? null : w.meteor();
@@ -569,6 +582,7 @@ final class DotRenderer {
             if (qy < clearTopY || qy > clearBottomY) continue;
             float q = fxLife[i] / fxLife0[i];
             float lv = fxLevelEnd[i] + (fxLevel[i] - fxLevelEnd[i]) * q;
+            if (fxLevelEnd[i] > 0f && q < RETRO_FADE) lv *= q / RETRO_FADE; // retro dots fade out over their last 20%
             user.draw(c, qx, qy, (0.7f + (fxDia[i] - 0.7f) * q) * mock / 2f, lv);
         }
 
