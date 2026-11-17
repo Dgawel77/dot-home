@@ -125,6 +125,11 @@ public final class GameWorld {
     /** Weather (snow, rain, wind lean) has its own stream too: it never draws from the game's Rng. */
     private final Rng precipRng;
     private final Precip precip = new Precip();
+    /** The charging stream has its own stream too. */
+    private final Rng chargeRng;
+    private final ChargeStream chargeStream = new ChargeStream();
+    private boolean charging;
+    private int batteryPercent = -1;
     private WeatherFx weather = WeatherFx.NONE;
     private float dayness = Float.NaN;
     public static final float GLINT_SECONDS = 0.3f, METEOR_SECONDS = 0.7f;
@@ -173,6 +178,7 @@ public final class GameWorld {
         long seed = Double.doubleToLongBits(rng.next());
         this.fx = new Rng(seed);
         this.precipRng = new Rng(seed ^ 0x5DEECE66DL);
+        this.chargeRng = new Rng(seed ^ 0x2545F4914F6CDD1DL);
         for (int i = 0; i < MAX_SHOTS; i++) shotPool.add(new Shot());
         java.util.Arrays.fill(gunAge, GUN_IDLE);
     }
@@ -185,6 +191,11 @@ public final class GameWorld {
     public void setDayness(float d) { dayness = d; }
     public float dayness() { return dayness; }
     public Precip precip() { return precip; }
+    public ChargeStream chargeStream() { return chargeStream; }
+    /** The battery: charging or not, and the percent (-1 = unknown). */
+    public void setPower(boolean charging, int percent) { this.charging = charging; batteryPercent = percent; }
+    /** True iff the battery is low and not charging: the ship draws dimmer. */
+    public boolean shipDim() { return !charging && batteryPercent >= 0 && batteryPercent < cfg.lowBattery; }
     public void setTilt(float tx, float ty) { tiltX = clamp(tx, -1f, 1f); tiltY = clamp(ty, -1f, 1f); }
     /** Off, nothing flies the ship: the engines and RCS stay idle and it coasts (tests). */
     public void setAutopilot(boolean on) { autopilot = on; }
@@ -359,6 +370,7 @@ public final class GameWorld {
         }
         for (Shot s : shots) { s.x *= sx; s.y *= sy; s.px *= sx; s.py *= sy; }
         precip.scale(sx, sy);
+        chargeStream.scale(sx, sy);
         tapX *= sx;
         tapY *= sy;
         float band = EDGE_BAND * cfg.k;
@@ -773,6 +785,7 @@ public final class GameWorld {
 
         float windX = weather.windX, windY = weather.windY;
         precip.step(dt, weather, tiltX, tiltY, w, h, cfg, precipRng);
+        chargeStream.step(dt, charging, s.x, s.y, w, h, cfg, chargeRng);
         for (int i = 0; i < rocks.size(); i++) {
             Rock r = rocks.get(i);
             r.x += (r.vx + windX * cfg.windRockBias) * dt;

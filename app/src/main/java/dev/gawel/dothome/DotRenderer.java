@@ -14,6 +14,7 @@ import dev.gawel.dothome.core.GameWorld;
 import dev.gawel.dothome.core.Lattice;
 import dev.gawel.dothome.core.MoonPhase;
 import dev.gawel.dothome.core.LatticeRaster;
+import dev.gawel.dothome.core.ChargeStream;
 import dev.gawel.dothome.core.Precip;
 import dev.gawel.dothome.core.Rng;
 import dev.gawel.dothome.core.ScoreBook;
@@ -417,6 +418,18 @@ final class DotRenderer {
         return bmp;
     }
 
+    /** The charging stream: light dots, L46 blending to L65 as they close on the ship. */
+    private void drawCharge(Canvas c, GameWorld w, float fade) {
+        ChargeStream cs = w.chargeStream();
+        for (int i = 0; i < cs.n; i++) {
+            float qx = sx(cs.x[i]), qy = sy(cs.y[i]);
+            if (qy < clearTopY) continue;
+            float g = cs.glow[i];
+            dot46.draw(c, qx, qy, rLight, (1f - g) * fade);
+            dot65.draw(c, qx, qy, rLight, g * fade);
+        }
+    }
+
     /** Snow as soft dots (L65 or L46), rain as a three-dot streak of L46 trailing the drop; never above L65. */
     private void drawPrecip(Canvas c, GameWorld w, float fade) {
         Precip p = w.precip();
@@ -546,6 +559,7 @@ final class DotRenderer {
             user.draw(c, qx, qy, (0.7f + (fxDia[i] - 0.7f) * q) * mock / 2f, lv);
         }
 
+        drawCharge(c, w, fade);
         GameWorld.Ship s = w.ship();
         boolean shipClear = clearTopY < 0 || sy(s.y - 12f * k) >= clearTopY;
         if (shipClear && it < intro) {
@@ -560,16 +574,17 @@ final class DotRenderer {
             // the hull kick: the drawn ship sits back along its heading (lock stills show it at rest)
             float kick = still ? 0f : hullKick(w) * k, hx = s.x - kick * cs, hy = s.y - kick * sn;
             drawBarrels(c, w, hx, hy, cs, sn, k, sa * blink, true);
+            boolean dim = w.shipDim(); // under 15% and not charging: the hull and bars draw at L46
             for (int j = 0; j < HULL.length; j += 4) {
                 float px = HULL[j] * k, py = HULL[j + 1] * k;
-                SoftDot d = HULL[j + 3] >= ShipShape.LEVEL_L100 ? user : dot65;
+                SoftDot d = dim ? dot46 : HULL[j + 3] >= ShipShape.LEVEL_L100 ? user : dot65;
                 d.draw(c, sx(hx + px * cs - py * sn), sy(hy + px * sn + py * cs), HULL[j + 2] * mock / 2f, sa * blink);
             }
             // the nozzle bars grow and brighten with their engine's thrust
             for (int j = 0; j < MARKS.length; j += 4) {
                 float thr = w.nozzleThrust(j / 4 / MARKS_PER_NOZZLE);
                 float px = MARKS[j] * k, py = MARKS[j + 1] * k;
-                user.draw(c, sx(hx + px * cs - py * sn), sy(hy + px * sn + py * cs),
+                (dim ? dot46 : user).draw(c, sx(hx + px * cs - py * sn), sy(hy + px * sn + py * cs),
                     (MARKS[j + 2] + 1.4f * thr) * MARKS[j + 3] * mock / 2f, (NOZZLE_IDLE + (1f - NOZZLE_IDLE) * thr) * sa);
             }
             drawBarrels(c, w, hx, hy, cs, sn, k, sa * blink, false);

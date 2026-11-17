@@ -1,7 +1,13 @@
 package dev.gawel.dothome;
 
 import android.app.KeyguardManager;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.os.BatteryManager;
+import android.os.Build;
+import android.util.Log;
 import android.os.SystemClock;
 
 import java.util.ArrayList;
@@ -45,6 +51,48 @@ final class GameHub {
     private long weatherFxAtMs;
     /** The sun's times from the cached weather (0 = unknown), for the day/night ramp. */
     private long sunriseMs, sunsetMs;
+
+    private static final String TAG = "GameHub";
+    private boolean batteryOn;
+    private final BroadcastReceiver batteryReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) { applyBattery(intent); }
+    };
+
+    /** Guarded so the RECEIVER_NOT_EXPORTED overload is only touched on API 33+. */
+    private static final class Api33 {
+        static Intent register(Context c, BroadcastReceiver r, IntentFilter f) {
+            return c.registerReceiver(r, f, Context.RECEIVER_NOT_EXPORTED);
+        }
+    }
+
+    /** Listens for battery changes while anything is visible; idempotent. The sticky intent gives the initial state. */
+    private void setBattery(boolean on) {
+        if (on == batteryOn) return;
+        try {
+            if (on) {
+                IntentFilter f = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+                Intent sticky = Build.VERSION.SDK_INT >= 33
+                        ? Api33.register(appContext, batteryReceiver, f)
+                        : appContext.registerReceiver(batteryReceiver, f);
+                batteryOn = true;
+                applyBattery(sticky);
+            } else {
+                batteryOn = false;
+                appContext.unregisterReceiver(batteryReceiver);
+            }
+        } catch (RuntimeException ex) {
+            Log.w(TAG, "battery receiver toggle failed: " + ex);
+        }
+    }
+
+    private void applyBattery(Intent i) {
+        if (i == null) return;
+        int level = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+        int scale = i.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+        boolean charging = i.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0;
+        world.setPower(charging, level >= 0 && scale > 0 ? level * 100 / scale : -1);
+    }
 
     static synchronized GameHub get(Context context) {
         if (instance == null) instance = new GameHub(context.getApplicationContext());
@@ -124,6 +172,7 @@ final class GameHub {
         refreshWeatherFx(System.currentTimeMillis());
         WidgetUpdater.updateAll(appContext);
         tilt.start(e.displayRotation()); // restart = recalibrate on the first sample
+        setBattery(true);
     }
 
     /** Once a second from the active engine's frame loop; later tasks add their own periodic work here. */
@@ -165,6 +214,7 @@ final class GameHub {
         scoreBook.refresh(); // score writes are already applied to prefs; this just rolls the day over
         if (visible.isEmpty()) {
             tilt.stop();
+            setBattery(false);
             world.setTilt(0f, 0f);
             if (renderer != null) renderer.resetParallax();
             hiddenAtMs = SystemClock.elapsedRealtime();

@@ -45,6 +45,7 @@ public final class AllTests {
         dev.gawel.dothome.core.MusicSeekTest.class,
         dev.gawel.dothome.core.ArtMathTest.class,
         dev.gawel.dothome.core.PrecipTest.class,
+        dev.gawel.dothome.core.ChargeStreamTest.class,
     };
 
     public static void main(String[] args) throws Exception {

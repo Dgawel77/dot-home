@@ -76,6 +76,11 @@ public final class GameConfig {
     public final float snowFall, snowDrift, rainFall, rainSlant, windRockBias;
     public final float fogStarDim = 0.5f;
 
+    /** Charging: dots spawned per second, their cruise speed toward the ship (px/s), and the battery percent below which the ship dims. */
+    public final float chargeRate = 15f;
+    public final float chargeSpeed;
+    public final int lowBattery = 15;
+
     /** By day the stars thin to this fraction of their count and dim to this fraction of their alpha. */
     public final float dayStarCount = 0.6f, dayStarBright = 0.75f;
     /** The night moon's radius, dp (a 40 dp disc). */
@@ -118,6 +123,7 @@ public final class GameConfig {
         rainFall = 520f * k;
         rainSlant = 160f * k;
         windRockBias = 6f * k;
+        chargeSpeed = 260f * k;
         thrust = 160f * k;
         maxSpeed = 140f * k;
         shipRadius = ShipShape.RADIUS * k;
