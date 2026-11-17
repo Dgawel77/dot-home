@@ -72,7 +72,7 @@ final class LockStills {
                 String name = (float) p.x / p.y < 0.6f ? "lock-cover.png" : "lock-main.png";
                 if (names.contains(name)) continue; // e.g. a virtual display with the same shape
                 names.add(name);
-                bitmaps.add(renderer.renderStill(world, p.x, p.y, CLEAR_TOP));
+                bitmaps.add(renderer.renderStill(world, p.x, p.y, CLEAR_TOP, 0f));
             }
         } catch (RuntimeException | OutOfMemoryError e) {
             Log.w(TAG, "lock still render failed: " + e);
@@ -102,7 +102,7 @@ final class LockStills {
     }
 
     /** Native (unrotated) pixel size from the display mode; getRealSize is deprecated from API 31. */
-    private static Point realSize(Display d) {
+    static Point realSize(Display d) {
         Display.Mode m = d.getMode();
         int w = m.getPhysicalWidth(), h = m.getPhysicalHeight();
         // lock screens are portrait: a landscape-native panel (e.g. 2316x904) is swapped to 904x2316

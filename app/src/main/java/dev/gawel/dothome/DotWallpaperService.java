@@ -50,6 +50,7 @@ public class DotWallpaperService extends WallpaperService {
                 setTick(false);
                 // arm on screen-off, not screen-on: an engine can turn visible before SCREEN_ON arrives
                 GameHub.get(DotWallpaperService.this).onScreenOff();
+                LockWallpaper.onScreenOff(getApplicationContext());
             } else if (Intent.ACTION_USER_PRESENT.equals(action)) {
                 GameHub.get(DotWallpaperService.this).onUserPresent();
             }

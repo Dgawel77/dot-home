@@ -10,6 +10,8 @@ final class PrefsStore implements KeyValueStore {
     /** Wallpaper rock style: lattice silhouettes (default) or the free outline dots, kept to check shimmer on the device. */
     static final String KEY_ROCK_STYLE = "game.rockStyle";
     static final String ROCK_LATTICE = "lattice";
+    /** Beta: set the lock wallpaper to a dimmed still of the game on screen-off ("true"/"false", default off). */
+    static final String KEY_LOCK_LIVE = "lock.live";
     static final String ROCK_OUTLINE = "outline";
 
     private final SharedPreferences prefs;

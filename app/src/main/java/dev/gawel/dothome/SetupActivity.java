@@ -111,6 +111,13 @@ public class SetupActivity extends Activity {
         android.view.ViewGroup parent = (android.view.ViewGroup) rocks.getParent();
         parent.addView(backdrop, parent.indexOfChild(rocks) + 1);
 
+        Switch lockLive = new Switch(this);
+        lockLive.setText("Lock screen shows the game (beta)");
+        lockLive.setTextColor(0xFFFFFFFF);
+        lockLive.setChecked("true".equals(prefs.get(PrefsStore.KEY_LOCK_LIVE, "false")));
+        lockLive.setOnCheckedChangeListener((b, on) -> prefs.put(PrefsStore.KEY_LOCK_LIVE, on ? "true" : "false"));
+        parent.addView(lockLive, parent.indexOfChild(backdrop) + 1);
+
         WeatherJob.schedule(this);
         WeatherJob.refreshSoon(this);
     }

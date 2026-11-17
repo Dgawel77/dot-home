@@ -151,6 +151,7 @@ final class DotRenderer {
     private boolean still;
     /** Screen y above which (stills only) rock, particle, shot, ship and ring dots are skipped; negative draws everything. */
     private float clearTopY = -1;
+    private float clearBottomY = Float.MAX_VALUE;
 
     DotRenderer(Context context) {
         res = context.getResources();
@@ -390,12 +391,12 @@ final class DotRenderer {
     }
 
     /**
-     * Renders the current world into a new bitmap of the given size. rock, particle, shot, ship and ring dots above clearTopFraction of the height are skipped
+     * Renders the current world into a new bitmap of the given size. rock, particle, shot, ship and ring dots above clearTopFraction of the height and below (1 - clearBottomFraction) are skipped
      * so that band stays clear. The world is scaled uniformly to cover the target and centred (excess is cropped);
      * the lattice and dot sizes are the target screen's, every grey is capped at L65 (the ship and its plumes too)
      * and the laser red is dimmed to 65%. Plumes and sparks come from this renderer's pools.
      */
-    Bitmap renderStill(GameWorld w, int width, int height, float clearTopFraction) {
+    Bitmap renderStill(GameWorld w, int width, int height, float clearTopFraction, float clearBottomFraction) {
         Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
         c.drawColor(DotStyle.GROUND);
@@ -409,6 +410,7 @@ final class DotRenderer {
             canvasW = width;
             canvasH = height;
             clearTopY = clearTopFraction * height;
+            clearBottomY = (1f - clearBottomFraction) * height;
             try {
                 drawScene(c, w);
             } finally {
@@ -416,6 +418,7 @@ final class DotRenderer {
                 vs = vsx = vsy = 1f;
                 vx = vy = 0f;
                 clearTopY = -1f;
+                clearBottomY = Float.MAX_VALUE;
             }
         }
         return bmp;
@@ -426,7 +429,7 @@ final class DotRenderer {
         ChargeStream cs = w.chargeStream();
         for (int i = 0; i < cs.n; i++) {
             float qx = sx(cs.x[i]), qy = sy(cs.y[i]);
-            if (qy < clearTopY) continue;
+            if (qy < clearTopY || qy > clearBottomY) continue;
             float g = cs.glow[i];
             dot46.draw(c, qx, qy, rLight, (1f - g) * fade);
             dot65.draw(c, qx, qy, rLight, g * fade);
@@ -439,7 +442,7 @@ final class DotRenderer {
         for (int i = 0; i < p.n; i++) {
             float qx = sx(p.x[i]), qy = sy(p.y[i]);
             if (p.snow) {
-                if (qy < clearTopY) continue;
+                if (qy < clearTopY || qy > clearBottomY) continue;
                 (p.light[i] ? dot65 : dot46).draw(c, qx, qy, rLight * p.size[i], PRECIP_ALPHA * fade);
             } else {
                 float len = (float) Math.sqrt(p.vx[i] * p.vx[i] + p.vy[i] * p.vy[i]);
@@ -447,7 +450,7 @@ final class DotRenderer {
                 float ux = -p.vx[i] / len * step * vs, uy = -p.vy[i] / len * step * vs;
                 for (int q = 0; q < 3; q++) {
                     float dx = qx + ux * q, dy = qy + uy * q;
-                    if (dy < clearTopY) continue;
+                    if (dy < clearTopY || dy > clearBottomY) continue;
                     dot46.draw(c, dx, dy, rLight, PRECIP_ALPHA * fade);
                 }
             }
@@ -475,7 +478,7 @@ final class DotRenderer {
                 int cell = MoonPhase.cell(ux, uy, phase);
                 if (cell == 0) continue;
                 float qx = sx(px), qy = sy(py);
-                if (qy < clearTopY) continue;
+                if (qy < clearTopY || qy > clearBottomY) continue;
                 (cell == 2 ? dot65 : dot10).draw(c, qx, qy, rLight, alpha);
             }
         }
@@ -548,7 +551,7 @@ final class DotRenderer {
         for (int i = 0; i < parts.size(); i++) {
             GameWorld.Particle p = parts.get(i);
             float qx = sx(p.x), qy = sy(p.y);
-            if (qy < clearTopY) continue;
+            if (qy < clearTopY || qy > clearBottomY) continue;
             float lk = p.life / p.life0;
             if (p.lit) user.draw(c, qx, qy, rReg, p.formT >= 0f ? p.alpha : p.alpha * lk); // released: fades like debris
             else dot65.draw(c, qx, qy, rReg * (0.45f + 0.55f * lk), p.alpha * lk);
@@ -557,7 +560,7 @@ final class DotRenderer {
         // the plumes, retro plumes and RCS puffs: free dots that shrink and fade over their short life
         for (int i = 0; i < fxN; i++) {
             float qx = sx(fxX[i]), qy = sy(fxY[i]);
-            if (qy < clearTopY) continue;
+            if (qy < clearTopY || qy > clearBottomY) continue;
             float q = fxLife[i] / fxLife0[i];
             float lv = fxLevelEnd[i] + (fxLevel[i] - fxLevelEnd[i]) * q;
             user.draw(c, qx, qy, (0.7f + (fxDia[i] - 0.7f) * q) * mock / 2f, lv);
@@ -565,7 +568,7 @@ final class DotRenderer {
 
         drawCharge(c, w, fade);
         GameWorld.Ship s = w.ship();
-        boolean shipClear = clearTopY < 0 || sy(s.y - 12f * k) >= clearTopY;
+        boolean shipClear = clearTopY < 0 || sy(s.y - 12f * k) >= clearTopY && sy(s.y + 12f * k) <= clearBottomY;
         if (shipClear && it < intro) {
             // the opening dot: one pulsing hero dot that hands over to the ship
             float pr = rHeavy * (1f + Math.abs((float) Math.sin(it * 3.2f)));
@@ -633,10 +636,10 @@ final class DotRenderer {
             }
             if (!under) {
                 for (int i = 0; i < n; i++) {
-                    if (barrelY[i] >= clearTopY) c.drawCircle(barrelX[i], barrelY[i], r + KNOCK * mock, knock);
+                    if (barrelY[i] >= clearTopY && barrelY[i] <= clearBottomY) c.drawCircle(barrelX[i], barrelY[i], r + KNOCK * mock, knock);
                 }
             }
-            for (int i = 0; i < n; i++) if (barrelY[i] >= clearTopY) dot65.draw(c, barrelX[i], barrelY[i], r, alpha);
+            for (int i = 0; i < n; i++) if (barrelY[i] >= clearTopY && barrelY[i] <= clearBottomY) dot65.draw(c, barrelX[i], barrelY[i], r, alpha);
         }
     }
 
@@ -659,7 +662,7 @@ final class DotRenderer {
             for (int i = 0; i < shots.size(); i++) {
                 GameWorld.Shot b = shots.get(i);
                 float x1 = sx(b.x), y1 = sy(b.y);
-                if (y1 < clearTopY) continue;
+                if (y1 < clearTopY || y1 > clearBottomY) continue;
                 float len, th, al = 1f;
                 if (b.hit > 0) {
                     float q = b.hit / cfg.shotHitFlare;
@@ -683,7 +686,7 @@ final class DotRenderer {
             float fa = s.angle + fl.angle;
             float x = sx(s.x + fl.x * cs - fl.y * sn + (float) Math.cos(fa) * 2f * k);
             float y = sy(s.y + fl.x * sn + fl.y * cs + (float) Math.sin(fa) * 2f * k);
-            if (y >= clearTopY) {
+            if (y >= clearTopY && y <= clearBottomY) {
                 float r = (1.2f + 1.6f * q) * mock;
                 red.setStyle(Paint.Style.FILL);
                 red.setColor(DotStyle.LASER_GLOW);
@@ -699,7 +702,7 @@ final class DotRenderer {
         red.setStrokeWidth(SPARK_THICK * mock);
         for (int i = 0; i < spN; i++) {
             float x = sx(spX[i]), y = sy(spY[i]);
-            if (y < clearTopY) continue;
+            if (y < clearTopY || y > clearBottomY) continue;
             red.setAlpha(Math.round(255f * clamp(spLife[i] / spLife0[i] * dim, 0f, 1f)));
             c.drawLine(sx(spX[i] - spVx[i] * 0.014f), sy(spY[i] - spVy[i] * 0.014f), x, y, red);
         }
@@ -733,7 +736,7 @@ final class DotRenderer {
         }
         // a non-finite or runaway outline is skipped, never drawn from a stale grid
         if (!LatticeRaster.accepts(polyX, polyY, nv, step, 0f, 0f)) return;
-        if (maxX < 0 || maxY < 0 || minX > canvasW || minY > canvasH || maxY < clearTopY) return; // off screen
+        if (maxX < 0 || maxY < 0 || minX > canvasW || minY > canvasH || maxY < clearTopY || minY > clearBottomY) return; // off screen
         gridCol0 = LatticeRaster.firstCell(minX, step, 0f);
         gridRow0 = LatticeRaster.firstCell(minY, step, 0f);
         gridCols = LatticeRaster.cellCount(minX, maxX, step, 0f);
@@ -745,7 +748,7 @@ final class DotRenderer {
         lattice.setAlpha(Math.round(fade * 255));
         for (int row = 0; row < gridRows; row++) {
             float cy = (gridRow0 + row + 0.5f) * step;
-            if (cy < 0 || cy > canvasH || cy < clearTopY) continue;
+            if (cy < 0 || cy > canvasH || cy < clearTopY || cy > clearBottomY) continue;
             for (int col = 0; col < gridCols; col++) {
                 float cov = grid[row * gridCols + col];
                 if (cov < MIN_COVERAGE) continue;
@@ -768,6 +771,7 @@ final class DotRenderer {
      */
     private void outlineRock(Canvas c, GameWorld.Rock r, float fade) {
         if (clearTopY >= 0 && sy(r.y + 1.12f * r.r) + rReg < clearTopY) return;
+        if (sy(r.y - 1.12f * r.r) - rReg > clearBottomY) return;
         RockDots d = rockCache.get(r);
         if (d == null) {
             d = new RockDots();
@@ -779,7 +783,7 @@ final class DotRenderer {
         for (int j = 0; j < d.n; j++) {
             float px = d.pts[3 * j], py = d.pts[3 * j + 1];
             float x = sx(r.x + px * cs - py * sn), y = sy(r.y + px * sn + py * cs);
-            if (y < clearTopY) continue;
+            if (y < clearTopY || y > clearBottomY) continue;
             dot65.draw(c, x, y, d.pts[3 * j + 2] == 1f ? rReg : rLight, fade);
         }
     }
@@ -809,7 +813,7 @@ final class DotRenderer {
             prevCol = col;
             prevRow = row;
             float dx = (col + 0.5f) * step, dy = (row + 0.5f) * step;
-            if (dx < 0 || dy < 0 || dx > canvasW || dy > canvasH || dy < clearTopY) continue;
+            if (dx < 0 || dy < 0 || dx > canvasW || dy > canvasH || dy < clearTopY || dy > clearBottomY) continue;
             c.drawCircle(dx, dy, rReg, lattice);
         }
     }
