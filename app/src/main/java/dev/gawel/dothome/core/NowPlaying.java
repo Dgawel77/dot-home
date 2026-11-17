@@ -23,6 +23,8 @@ public final class NowPlaying {
     public Object sessionActivity;
     /** The session supports ACTION_SEEK_TO and knows its duration: the widget attaches its seek zones. */
     public boolean canSeek;
+    /** ArtMath.key of this track (package, title, artist, album); the widget looks its art up by it. */
+    public String artKey;
 
     /** What a tap on the album art opens. */
     public enum ArtTarget { NONE, SESSION, LAUNCH }
@@ -76,7 +78,7 @@ public final class NowPlaying {
     public static boolean sameDisplayed(NowPlaying a, NowPlaying b) {
         if (a == b) return true;
         if (a == null || b == null) return false;
-        return sameClickTarget(a, b) && a.playing == b.playing && a.stopped == b.stopped && a.durationMs == b.durationMs && a.canSeek == b.canSeek
+        return sameClickTarget(a, b) && a.playing == b.playing && a.stopped == b.stopped && a.durationMs == b.durationMs && a.canSeek == b.canSeek && eq(a.artKey, b.artKey)
             && eq(a.title, b.title) && eq(a.artist, b.artist);
     }
 
@@ -85,7 +87,7 @@ public final class NowPlaying {
         NowPlaying n = new NowPlaying();
         n.title = title; n.artist = artist; n.playing = playing; n.durationMs = durationMs;
         n.changedAtMs = changedAtMs; n.sessionKey = sessionKey; n.stopped = stopped; n.speed = speed;
-        n.pkg = pkg; n.sessionActivity = sessionActivity; n.canSeek = canSeek;
+        n.pkg = pkg; n.sessionActivity = sessionActivity; n.canSeek = canSeek; n.artKey = artKey;
         n.positionMs = pos; n.positionAtElapsedMs = nowElapsedMs;
         return n;
     }

@@ -16,6 +16,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 
+import dev.gawel.dothome.core.ArtMath;
 import dev.gawel.dothome.core.MusicSeek;
 import dev.gawel.dothome.core.NowPlaying;
 
@@ -149,6 +150,7 @@ public class MediaWatcher extends NotificationListenerService {
             }
             NowPlaying pick = NowPlaying.choose(NowPlaying.eligible(items));
             chosen = pick == null ? null : byKey.get(pick.sessionKey);
+            if (pick != null && chosen != null) ensureArt(chosen, pick);
             if (NowPlaying.sameDisplayed(MusicWidget.last(), pick)) {
                 MusicWidget.remember(pick); // fresh position anchor, no redundant widget push
             } else {
@@ -156,6 +158,62 @@ public class MediaWatcher extends NotificationListenerService {
             }
         } catch (RuntimeException e) {
             Log.w(TAG, "media refresh failed: " + e);
+        }
+    }
+
+    private static final java.util.concurrent.ExecutorService ART_POOL = java.util.concurrent.Executors.newSingleThreadExecutor();
+    /** Keys whose art was already looked up (found or not), so frequent refreshes never redo the work. */
+    private static final java.util.Set<String> ART_TRIED = new java.util.HashSet<>();
+
+    /**
+     * Sets pick.artKey and makes sure that track's art is cached. Only ever called for the chosen, eligible session
+     * (never a work-app one). Metadata bitmaps are used at once; content:// art URIs load on a worker thread and push
+     * a widget update when they arrive.
+     */
+    private void ensureArt(MediaController c, NowPlaying pick) {
+        try {
+            if (!NowPlaying.packageAllowed(c.getPackageName())) return;
+            MediaMetadata md = c.getMetadata();
+            if (md == null) return;
+            String key = ArtMath.key(c.getPackageName(), pick.title, pick.artist, md.getString(MediaMetadata.METADATA_KEY_ALBUM));
+            pick.artKey = key;
+            synchronized (ART_TRIED) {
+                if (ArtCache.get(key) != null || ART_TRIED.contains(key)) return;
+                if (ART_TRIED.size() > 64) ART_TRIED.clear();
+                ART_TRIED.add(key);
+            }
+            int[] px = null;
+            String[] bmpKeys = {MediaMetadata.METADATA_KEY_ALBUM_ART, MediaMetadata.METADATA_KEY_ART,
+                MediaMetadata.METADATA_KEY_DISPLAY_ICON};
+            for (String k : bmpKeys) {
+                px = ArtCache.fromBitmap(md.getBitmap(k));
+                if (px != null) break;
+            }
+            if (px != null) {
+                ArtCache.put(key, px);
+                return;
+            }
+            String[] uriKeys = {MediaMetadata.METADATA_KEY_ALBUM_ART_URI, MediaMetadata.METADATA_KEY_ART_URI,
+                MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI};
+            String uri = null;
+            for (String k : uriKeys) {
+                String u = md.getString(k);
+                if (u != null && (u.startsWith("content://") || u.startsWith("android.resource://"))) { uri = u; break; }
+            }
+            if (uri == null) return;
+            final String fUri = uri;
+            final android.content.Context app = getApplicationContext();
+            ART_POOL.execute(() -> {
+                int[] loaded = ArtCache.fromUri(app, fUri);
+                if (loaded == null) return;
+                ArtCache.put(key, loaded);
+                main.post(() -> {
+                    NowPlaying last = MusicWidget.last();
+                    if (last != null && key.equals(last.artKey)) MusicWidget.update(app, last);
+                });
+            });
+        } catch (RuntimeException e) {
+            Log.w(TAG, "album art failed: " + e);
         }
     }
 

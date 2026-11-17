@@ -270,6 +270,23 @@ final class WidgetArt {
         return artDotsCache;
     }
 
+    private static final dev.gawel.dothome.core.ArtMath.Lru<String, float[]> TRACK_DOTS =
+        new dev.gawel.dothome.core.ArtMath.Lru<>(dev.gawel.dothome.core.ArtMath.MAX_TRACKS);
+
+    /** Halftone of the track's real art (1 px per dp, step 4, so density-independent), cached per track; else the placeholder. */
+    private static synchronized float[] artDotsFor(NowPlaying np) {
+        String key = np.artKey;
+        if (key == null) return artDots();
+        float[] cached = TRACK_DOTS.get(key);
+        if (cached != null) return cached;
+        int[] px = ArtCache.get(key);
+        if (px == null) return artDots();
+        int n = dev.gawel.dothome.core.ArtMath.STORE_PX, m = dev.gawel.dothome.core.ArtMath.HALFTONE_PX;
+        float[] d = Halftone.dots(dev.gawel.dothome.core.ArtMath.resample(px, n, n, m, m), m, m, 4);
+        TRACK_DOTS.put(key, d);
+        return d;
+    }
+
     /** Whether a disc at (cx, cy) with radius rd lies wholly inside a size x size square with corner radius rad. */
     private static boolean discInsideRounded(float cx, float cy, float rd, float size, float rad) {
         if (cx - rd < 0 || cy - rd < 0 || cx + rd > size || cy + rd > size) return false;
@@ -291,7 +308,7 @@ final class WidgetArt {
         float artS = 64f * dens;
         float artX = 16f * dens, artY = Lattice.snap((hPx - artS) / 2f, dens);
 
-        float[] dots = artDots();
+        float[] dots = artDotsFor(np);
         float sc = s4 / 4f, rad = ART_RADIUS_DP * dens;
         Paint p = fill(DotStyle.L100);
         for (int i = 0; i < dots.length; i += 3) {
