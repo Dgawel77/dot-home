@@ -1097,6 +1097,8 @@ public final class GameWorld {
      * on, the side the nose is already turned to), within DODGE_CONE of square to their relative motion and as near
      * the nose as that allows, so the turn is short and the burn starts soon. Rocks the defence has a bolt in
      * flight at, and `shooting` (the threat it is turning to shoot this step, or null), are left to the defence.
+     * A deliberate trade-off: a bolt that misses hands its rock back only at the end of its engagement (flight plus
+     * DEFEND_ENGAGED), shortly before the predicted contact, so a miss is usually a bump rather than a dodge.
      */
     private boolean collisionCourse(float horizon, Rock shooting) {
         Ship s = ship;
@@ -1211,8 +1213,7 @@ public final class GameWorld {
         Ship s = ship;
         if (Math.abs(wrapAngle((float) Math.atan2(defY - s.y, defX - s.x) - s.angle)) > cfg.gunCone) return;
         int slot = freeEngagement();
-        if (slot < 0) return;
-        shoot(defX, defY, true);
+        if (slot < 0 || !shoot(defX, defY, true)) return; // no bolt (MAX_SHOTS flying): no engagement
         defenceShots++;
         engRock[slot] = defRock;
         engT[slot] = defFlight + DEFEND_ENGAGED;

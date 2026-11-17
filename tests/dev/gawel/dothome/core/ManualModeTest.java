@@ -210,52 +210,64 @@ public final class ManualModeTest {
     }
 
     /**
-     * A big rock crossing the straight path square to it at 220 px/s, timed to cross 20 px ahead of the ship as it
-     * reaches the midpoint: it comes from about 50 degrees off the heading (more than the 40 degrees manual mode
-     * turns to shoot), so it is left to the emergency dodge, which fires; the ship takes at most a bump and still
-     * reaches the waypoint.
+     * The lead-aim bearing of rock r from the ship, off its heading (radians, 0..PI): where a 900 px/s bolt from
+     * the ship's centre meets it.
      */
-    public static void testRockOnTheStraightPathOnlyBumpsIt() {
+    private static float leadOff(GameWorld g, GameWorld.Rock r) {
+        GameWorld.Ship s = g.ship();
+        float px = r.x - s.x, py = r.y - s.y, sp = g.config().shotSpeed;
+        double a = r.vx * r.vx + r.vy * r.vy - sp * sp, b = px * r.vx + py * r.vy, c = px * px + py * py;
+        double t = (-b - Math.sqrt(b * b - a * c)) / a; // a < 0: the one positive root
+        return Math.abs(GameWorld.wrapAngle((float) Math.atan2(py + r.vy * t, px + r.vx * t) - s.angle));
+    }
+
+    /**
+     * Mid-flight, a big rock comes at the ship square to its path, from the side toward the screen centre, set to
+     * pass 15 px behind its centre (inside the 46.5 px reach). Its lead-aim bearing stays well past the 40 degrees
+     * manual mode turns to shoot, so it is left to the emergency dodge, which fires; the ship takes at most a bump
+     * and still reaches the waypoint. (A rock sitting on the straight path is now shot: DefenceTest.)
+     */
+    public static void testRockFromTheSideOnlyBumpsIt() { rockFromTheSide(200, 250, -15); }
+
+    /**
+     * Once the ship is 120 px along its flight, a big rock appears `side` px off it square to the path (`ahead` px
+     * further along it), keeping pace with the ship along the path and closing on it at `closing` px/s.
+     */
+    static void rockFromTheSide(float side, float closing, float ahead) {
         for (float[] f : FLIGHTS) {
             Count c = new Count();
             GameWorld g = live(4);
             g.setListener(c);
             place(g, f[0], f[1]);
-            float tx = f[2], ty = f[3], mx = (f[0] + tx) / 2, my = (f[1] + ty) / 2;
-            // when the ship reaches the midpoint, from a twin without the rock (the two fly alike until it comes)
-            GameWorld twin = live(4);
-            place(twin, f[0], f[1]);
-            twin.aim(tx, ty);
-            int meet = -1;
-            for (int i = 1; i <= Math.round(7f / DT) && meet < 0; i++) {
-                twin.step(DT);
-                twin.shots().clear();
-                keepOnly(twin);
-                if (dist(twin, mx, my) < 10) meet = i;
-            }
-            T.check(meet > 0, f[0] + "," + f[1] + ": the twin passes the midpoint");
-            // square to the path, on the side toward the screen centre, 1.2 s out, 20 px ahead of the midpoint
-            float px = tx - f[0], py = ty - f[1], pl = (float) Math.hypot(px, py), nx = py / pl, ny = -px / pl;
-            float cx = mx + px / pl * 20, cy = my + py / pl * 20;
-            if (nx * (310 - mx) + ny * (361 - my) < 0) { nx = -nx; ny = -ny; }
-            int start = meet - Math.round(1.2f / DT);
+            float tx = f[2], ty = f[3], pl = (float) Math.hypot(tx - f[0], ty - f[1]);
+            float ux = (tx - f[0]) / pl, uy = (ty - f[1]) / pl, nx = -uy, ny = ux;
+            String at = f[0] + "," + f[1] + ": ";
             GameWorld.Rock keep = null;
             g.aim(tx, ty);
-            float reached = -1;
+            GameWorld.Ship s = g.ship();
+            float reached = -1, nearest = (float) Math.PI;
             boolean dodged = false;
             for (int i = 1; i <= Math.round(7f / DT); i++) {
-                if (i == start) keep = g.addRock(3, cx + nx * 220 * 1.2f, cy + ny * 220 * 1.2f, -nx * 220, -ny * 220);
+                if (keep == null && dist(g, f[0], f[1]) >= 120) {
+                    if (nx * (310 - s.x) + ny * (361 - s.y) < 0) { nx = -nx; ny = -ny; }
+                    float along = s.vx * ux + s.vy * uy;
+                    keep = g.addRock(3, s.x + nx * side + ux * ahead, s.y + ny * side + uy * ahead,
+                        ux * along - nx * closing, uy * along - ny * closing);
+                }
+                if (keep != null && !dodged) nearest = Math.min(nearest, leadOff(g, keep));
                 g.step(DT);
                 g.shots().clear(); // only the flight is under test, not the guns
                 if (keep != null) keepOnly(g, keep);
                 else keepOnly(g);
-                T.eq(0, g.defenceShots(), f[0] + "," + f[1] + ": not shot at");
+                if (!dodged) T.eq(0, g.defenceShots(), at + "not shot at before the dodge");
                 dodged |= g.evading();
                 if (reached < 0 && dist(g, tx, ty) < 60) reached = i * DT;
             }
-            T.check(dodged, f[0] + "," + f[1] + ": the emergency dodge fires");
-            T.check(c.hits <= 1, f[0] + "," + f[1] + ": at most a bump: " + c.hits);
-            T.check(reached > 0, f[0] + "," + f[1] + ": still reaches the waypoint, now " + dist(g, tx, ty) + " px off");
+            T.check(keep != null, at + "the rock came");
+            T.check(nearest > 60 * DEG, at + "its lead bearing stayed past 40 degrees, nearest " + nearest / DEG);
+            T.check(dodged, at + "the emergency dodge fires");
+            T.check(c.hits <= 1, at + "at most a bump: " + c.hits);
+            T.check(reached > 0, at + "still reaches the waypoint, now " + dist(g, tx, ty) + " px off");
         }
     }
 
