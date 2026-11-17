@@ -12,9 +12,10 @@ import java.util.List;
  * that velocity error needs, burns only within 20 degrees of it, and so flips and burns to brake.
  *
  * <p>Rotate-to-aim (the prototype's aimMode "rotate"): a tap queues an aim target. The RCS turns the ship to face
- * it, with the engines off unless a rock is about to hit (avoidance wins), and one bolt leaves the nose along the
- * heading once that is within 5 degrees of the bearing; a target it cannot line up within 1.2 s is dropped.
- * Auto-fire aims the same way at the nearest rock. Bolts never leave sideways or backwards.
+ * it, with the engines off unless a rock is about to hit (avoidance wins), and once the heading is within 5 degrees
+ * of the bearing one bolt leaves a twin gun at the hull's forward shoulders, the guns taking turns. A bolt flies
+ * along the heading, toed in at most 3 degrees so the two streams converge on the target, never sideways or
+ * backwards. A target it cannot line up within 1.2 s is dropped. Auto-fire aims the same way at the nearest rock.
  *
  * <p>Thrusters are reported as per-step events the renderer reads (nozzle thrust levels, RCS firings), kept in
  * fixed arrays so a step allocates nothing for them. Angles are screen angles (y down): a growing angle turns
@@ -71,6 +72,8 @@ public final class GameWorld {
     private int aimN;
     /** Seconds spent on the current target. */
     private float aimClock;
+    /** The gun that fires next (ShipShape: 0 port, 1 starboard). */
+    private int gun;
     // laser hits of the last step, for the renderer's sparks
     private static final int MAX_HITS = 8;
     private final float[] hitX = new float[MAX_HITS], hitY = new float[MAX_HITS], hitA = new float[MAX_HITS];
@@ -330,7 +333,7 @@ public final class GameWorld {
 
     /**
      * A tap: queues (x, y) as an aim target; false during the intro. The ship turns to each target in turn and fires
-     * one bolt from the nose once its heading is within cfg.aimCone of the bearing (no sooner than the fire
+     * one bolt from a gun once its heading is within cfg.aimCone of the bearing (no sooner than the fire
      * cooldown allows), then moves on to the next; one it cannot line up within cfg.aimTimeout is dropped. Up to
      * AIM_QUEUE targets wait, the current one included; a tap on a full queue replaces the newest waiting target.
      */
@@ -360,9 +363,9 @@ public final class GameWorld {
             return;
         }
         aimClock += dt;
-        float bearing = (float) Math.atan2(aimTargetY() - s.y, aimTargetX() - s.x);
+        float tx = aimTargetX(), ty = aimTargetY(), bearing = (float) Math.atan2(ty - s.y, tx - s.x);
         if (fireT <= 0 && Math.abs(wrapAngle(bearing - s.angle)) <= cfg.aimCone) {
-            shoot();
+            shoot(tx, ty);
             nextTarget(bearing);
         } else if (aimClock > cfg.aimTimeout) {
             nextTarget(s.angle);
@@ -392,23 +395,30 @@ public final class GameWorld {
         aimClock = 0f;
     }
 
-    /** One bolt from the nose along the heading, with the muzzle flash there. */
-    private void shoot() {
+    /**
+     * One bolt from the next gun (they alternate), aimed from its muzzle at (tx, ty) but at most cfg.gunCone off the
+     * heading: lined up, a slight toe-in that puts both streams on the target. The muzzle flash shows at that gun.
+     */
+    private void shoot(float tx, float ty) {
         fireT = cfg.fireCooldown;
         Ship s = ship;
         float k = cfg.k, c = (float) Math.cos(s.angle), sn = (float) Math.sin(s.angle);
-        float lx = ShipShape.NOSE_X * k, ly = ShipShape.NOSE_Y * k;
+        float lx = ShipShape.GUN_X * k, ly = ShipShape.gunY(gun) * k;
+        gun = (gun + 1) % ShipShape.GUNS;
+        float mx = s.x + lx * c - ly * sn, my = s.y + lx * sn + ly * c;
+        float off = clamp(wrapAngle((float) Math.atan2(ty - my, tx - mx) - s.angle), -cfg.gunCone, cfg.gunCone);
+        float a = wrapAngle(s.angle + off);
         flash.x = lx;
         flash.y = ly;
-        flash.angle = 0f;
+        flash.angle = off;
         flash.t = cfg.muzzleFlash;
         if (shots.size() < MAX_SHOTS) {
             Shot b = shotPool.isEmpty() ? new Shot() : shotPool.remove(shotPool.size() - 1);
-            b.x = b.px = s.x + lx * c - ly * sn;
-            b.y = b.py = s.y + lx * sn + ly * c;
-            b.vx = c * cfg.shotSpeed;
-            b.vy = sn * cfg.shotSpeed;
-            b.angle = s.angle;
+            b.x = b.px = mx;
+            b.y = b.py = my;
+            b.vx = (float) Math.cos(a) * cfg.shotSpeed;
+            b.vy = (float) Math.sin(a) * cfg.shotSpeed;
+            b.angle = a;
             b.t = b.trav = b.hit = 0f;
             b.life = cfg.shotLife;
             shots.add(b);

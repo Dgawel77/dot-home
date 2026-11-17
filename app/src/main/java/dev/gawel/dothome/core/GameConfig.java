@@ -34,6 +34,11 @@ public final class GameConfig {
     public final float aimCone = (float) Math.toRadians(5);
     /** An aim target the ship cannot line up within this many seconds is dropped. */
     public final float aimTimeout = 1.2f;
+    /**
+     * A gun aims its bolt from its muzzle at the target, but at most this far off the heading, radians (3 degrees):
+     * lined up, that is a slight toe-in and the twin streams converge on the target.
+     */
+    public final float gunCone = (float) Math.toRadians(3);
     /** The red muzzle flash at the firing point, seconds. */
     public final float muzzleFlash = 0.08f;
     public final float hitCooldown = 0.4f;

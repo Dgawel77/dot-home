@@ -9,8 +9,14 @@ package dev.gawel.dothome.core;
 public final class ShipShape {
     private ShipShape() {}
 
-    /** The nose tip: the laser leaves from here along the heading. */
+    /** The nose tip. */
     public static final float NOSE_X = 19f, NOSE_Y = 0f;
+    /**
+     * The twin guns, one at each forward shoulder of the hull (the outline's corners where the sides meet the nose
+     * taper): gun 0 to port (-y), gun 1 to starboard (+y). Shots alternate between them.
+     */
+    public static final int GUNS = 2;
+    public static final float GUN_X = 8f, GUN_Y = 3f;
     /** Hit radius against rocks. */
     public static final float RADIUS = 11f;
 
@@ -29,6 +35,9 @@ public final class ShipShape {
     private static final float HEAVY = 3.4f;
     /** Dot levels as the prototype's alpha on L100: 1 is L100, 0.75 is L65. */
     public static final float LEVEL_L100 = 1f, LEVEL_L65 = 0.75f;
+
+    /** Gun i's y. */
+    public static float gunY(int i) { return i == 0 ? -GUN_Y : GUN_Y; }
 
     /** Nozzle i's centre y. */
     public static float nozzleY(int i) { return i == 0 ? -NOZZLE_Y : NOZZLE_Y; }
