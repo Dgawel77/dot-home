@@ -164,6 +164,12 @@ public class MediaWatcher extends NotificationListenerService {
         if (md == null && ps == null) return null;
         NowPlaying n = new NowPlaying();
         n.sessionKey = c.getPackageName() + "#" + c.getSessionToken().hashCode();
+        n.pkg = c.getPackageName();
+        try {
+            n.sessionActivity = c.getSessionActivity();
+        } catch (RuntimeException e) {
+            Log.w(TAG, "session activity unavailable: " + e);
+        }
         if (md != null) {
             n.title = md.getString(MediaMetadata.METADATA_KEY_TITLE);
             String artist = md.getString(MediaMetadata.METADATA_KEY_ARTIST);

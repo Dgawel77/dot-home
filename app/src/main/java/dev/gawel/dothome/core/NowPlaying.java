@@ -18,6 +18,28 @@ public final class NowPlaying {
     /** Playback speed and the SystemClock.elapsedRealtime() at which positionMs was valid. */
     public float speed = 1f;
     public long positionAtElapsedMs;
+    /** The player's package, and the session's own "open the player" activity (an opaque PendingIntent), or null. */
+    public String pkg;
+    public Object sessionActivity;
+
+    /** What a tap on the album art opens. */
+    public enum ArtTarget { NONE, SESSION, LAUNCH }
+
+    /**
+     * Prefers the session's own activity, else the package's launch intent, else nothing. A package that is not
+     * allowed (null, or on the work-app denylist) never gets a target.
+     */
+    public static ArtTarget artTarget(String pkg, boolean hasSessionActivity, boolean hasLaunchIntent) {
+        if (!packageAllowed(pkg)) return ArtTarget.NONE;
+        if (hasSessionActivity) return ArtTarget.SESSION;
+        return hasLaunchIntent ? ArtTarget.LAUNCH : ArtTarget.NONE;
+    }
+
+    /** True when a tap on the art would open the same thing: same package and the same session activity. */
+    public static boolean sameClickTarget(NowPlaying a, NowPlaying b) {
+        if (a == null || b == null) return a == b;
+        return eq(a.pkg, b.pkg) && (a.sessionActivity == null ? b.sessionActivity == null : a.sessionActivity.equals(b.sessionActivity));
+    }
 
     /** Position now: extrapolated while playing, clamped to [0, durationMs] (just >= 0 if duration unknown). */
     public long positionAt(long nowElapsedMs) {
@@ -52,7 +74,7 @@ public final class NowPlaying {
     public static boolean sameDisplayed(NowPlaying a, NowPlaying b) {
         if (a == b) return true;
         if (a == null || b == null) return false;
-        return a.playing == b.playing && a.stopped == b.stopped && a.durationMs == b.durationMs
+        return sameClickTarget(a, b) && a.playing == b.playing && a.stopped == b.stopped && a.durationMs == b.durationMs
             && eq(a.title, b.title) && eq(a.artist, b.artist);
     }
 

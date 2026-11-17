@@ -141,4 +141,31 @@ public final class NowPlayingTest {
         T.check(NowPlaying.sameDisplayed(null, null), "both null");
         T.check(!NowPlaying.sameDisplayed(a, null), "one null");
     }
+
+    public static void testArtTargetPrefersTheSessionActivityThenTheLaunchIntent() {
+        T.eq(NowPlaying.ArtTarget.SESSION, NowPlaying.artTarget("com.spotify.music", true, true), "session wins");
+        T.eq(NowPlaying.ArtTarget.SESSION, NowPlaying.artTarget("com.spotify.music", true, false), "session alone");
+        T.eq(NowPlaying.ArtTarget.LAUNCH, NowPlaying.artTarget("com.spotify.music", false, true), "launch fallback");
+        T.eq(NowPlaying.ArtTarget.NONE, NowPlaying.artTarget("com.spotify.music", false, false), "neither: not clickable");
+    }
+
+    public static void testArtTargetNeverPointsAtAWorkApp() {
+        for (String pkg : NowPlaying.BLOCKED_PACKAGES) {
+            T.eq(NowPlaying.ArtTarget.NONE, NowPlaying.artTarget(pkg, true, true), pkg);
+        }
+        T.eq(NowPlaying.ArtTarget.NONE, NowPlaying.artTarget(null, true, true), "no package");
+    }
+
+    public static void testClickTargetChangeIsADisplayChange() {
+        NowPlaying a = np("a", "T", true, 1), b = np("a", "T", true, 1);
+        a.pkg = b.pkg = "com.x";
+        Object pi = new Object();
+        a.sessionActivity = b.sessionActivity = pi;
+        T.eq(true, NowPlaying.sameDisplayed(a, b), "same app and activity");
+        b.pkg = "com.y";
+        T.eq(false, NowPlaying.sameDisplayed(a, b), "another app");
+        b.pkg = "com.x";
+        b.sessionActivity = new Object();
+        T.eq(false, NowPlaying.sameDisplayed(a, b), "another session activity");
+    }
 }

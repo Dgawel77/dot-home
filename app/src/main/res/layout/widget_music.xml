@@ -12,6 +12,14 @@
         android:layout_height="match_parent"
         android:scaleType="fitStart"
         android:contentDescription="@string/widget_music_desc" />
+    <!-- the album art's touch target: the 16 dp inset plus the 64 dp art square, the full widget height -->
+    <View
+        android:id="@+id/music_art_tap"
+        android:layout_width="80dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"
+        android:background="@android:color/transparent"
+        android:contentDescription="@string/music_open_player" />
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="match_parent"

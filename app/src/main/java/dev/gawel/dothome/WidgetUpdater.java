@@ -183,6 +183,8 @@ final class WidgetUpdater {
         Bitmap art = safe(h, w, () -> WidgetArt.music(ctx, w, h, np, eff, radiusDp));
         rv.setImageViewBitmap(R.id.music_img, art);
         rv.setImageViewResource(R.id.music_play, np.playing ? R.drawable.ic_pause : R.drawable.ic_play);
+        PendingIntent open = openPlayer(ctx, np);
+        if (open != null) rv.setOnClickPendingIntent(R.id.music_art_tap, open);
         rv.setOnClickPendingIntent(R.id.music_prev, commandIntent(ctx, 10, MediaCommandReceiver.PREV));
         rv.setOnClickPendingIntent(R.id.music_play, commandIntent(ctx, 11, MediaCommandReceiver.PLAY_PAUSE));
         rv.setOnClickPendingIntent(R.id.music_next, commandIntent(ctx, 12, MediaCommandReceiver.NEXT));
@@ -200,6 +202,40 @@ final class WidgetUpdater {
             if (Float.isNaN(raw)) raw = (float) o.getDouble(CardShape.OPTION_KEY, Double.NaN); // stored as a double
         }
         return CardShape.radiusDp(raw, wDp, hDp);
+    }
+
+    /** Launch PendingIntents by package (a package without a launch intent maps to null), so a render costs nothing. */
+    private static final java.util.Map<String, PendingIntent> LAUNCH = new java.util.HashMap<>();
+
+    /**
+     * What a tap on the album art opens: the playing session's own activity, else the player's launch intent, else
+     * null (not clickable). Only np's package is ever used, and never one that NowPlaying does not allow (work apps).
+     */
+    private static PendingIntent openPlayer(Context ctx, NowPlaying np) {
+        String pkg = np.pkg;
+        if (!NowPlaying.packageAllowed(pkg)) return null;
+        PendingIntent session = np.sessionActivity instanceof PendingIntent ? (PendingIntent) np.sessionActivity : null;
+        PendingIntent launch = null;
+        if (session == null) {
+            synchronized (LAUNCH) {
+                if (!LAUNCH.containsKey(pkg)) {
+                    Intent li = null;
+                    try {
+                        li = ctx.getPackageManager().getLaunchIntentForPackage(pkg);
+                    } catch (RuntimeException e) {
+                        Log.w("DotHome", "launch intent lookup failed: " + e);
+                    }
+                    LAUNCH.put(pkg, li == null ? null : PendingIntent.getActivity(ctx, pkg.hashCode() & 0x7fffffff,
+                        li.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), flags()));
+                }
+                launch = LAUNCH.get(pkg);
+            }
+        }
+        switch (NowPlaying.artTarget(pkg, session != null, launch != null)) {
+            case SESSION: return session;
+            case LAUNCH: return launch;
+            default: return null;
+        }
     }
 
     private static PendingIntent commandIntent(Context ctx, int code, String action) {
