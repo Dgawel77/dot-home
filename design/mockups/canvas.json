@@ -106,6 +106,14 @@
       "w": 1360,
       "x": 4270,
       "y": 640
+    },
+    "ForkedGuns.dc.html": {
+      "h": 700,
+      "is_interactive": true,
+      "title": "Forked-5 guns · recoil options",
+      "w": 1360,
+      "x": 4270,
+      "y": 1400
     }
   },
   "createdOnFiles": {
@@ -152,7 +160,8 @@
     "ShipV2.dc.html",
     "Ships.dc.html",
     "TiltGlass.dc.html",
-    "ShipsV3.dc.html"
+    "ShipsV3.dc.html",
+    "ForkedGuns.dc.html"
   ],
   "pages": [],
   "title": "Fold6 Dot Home Mockups"

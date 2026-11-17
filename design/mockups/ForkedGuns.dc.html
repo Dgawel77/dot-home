@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Forked-5 · guns</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.lb{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;line-height:16px;letter-spacing:1px;text-transform:uppercase;color:#757575;white-space:nowrap}
+.tm{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;line-height:16px;letter-spacing:1px;color:#A6A6A6;white-space:nowrap}
+.row{display:flex;justify-content:space-between}
+.vp{display:flex;flex-direction:column;align-items:center;gap:8px}
+.cv{display:block;border-radius:12px}
+.sel .cv{box-shadow:0 0 0 1px #1A1A1A}
+.fr{display:flex;flex-direction:column;gap:6px}
+.fr .cv{box-shadow:0 0 0 1px #1A1A1A}
+.fl{display:flex;gap:10px}
+.bt{height:32px;min-width:96px;flex-shrink:0;padding:0 16px;border-radius:16px;border:0;background:#1A1A1A;color:#DDDDDD;font:500 13px Inter,system-ui,sans-serif;cursor:pointer}
+.bt:hover{box-shadow:0 0 0 1px #757575}
+.bt:focus-visible{outline:2px solid #A6A6A6;outline-offset:2px}
+.bt[aria-pressed="true"]{background:#DDDDDD;color:#000000}
+</style>
+</helmet>
+<div style="width: 1360px; height: 700px; box-sizing: border-box; padding: 22px 32px; background: #000000; display: flex; flex-direction: column; justify-content: center; font-family: Inter, system-ui, sans-serif; color: #DDDDDD">
+<div class="row">
+<div class="lb" style="color: #A6A6A6">Forked-5 · gun placements</div>
+<div class="lb">5.2× game size · auto-fire every 0.35 s, left / right · grey guns, red for bolts and flashes only</div>
+</div>
+<div class="row" style="margin-top: 12px">
+<div class="{{ clsA }}"><canvas id="dh-fg-a" class="cv" ref="{{ setTop }}" width="312" height="330" role="img" aria-label="Variant A: forked-5 nose-up with two short grey barrels at the front shoulders, parallel to the heading, firing red bolts left and right; each barrel slides back on its shot and the hull kicks slightly" style="width: 312px; height: 330px"></canvas><div class="lb">A · shoulder barrels</div></div>
+<div class="{{ clsB }}"><canvas id="dh-fg-b" class="cv" ref="{{ setTop }}" width="312" height="330" role="img" aria-label="Variant B: forked-5 nose-up with a thicker two-dot-wide grey cannon at the front corner of each boom, firing red bolts left and right with recoil" style="width: 312px; height: 330px"></canvas><div class="lb">B · boom-tip cannons</div></div>
+<div class="{{ clsC }}"><canvas id="dh-fg-c" class="cv" ref="{{ setTop }}" width="312" height="330" role="img" aria-label="Variant C: forked-5 nose-up with small grey barrels on the angular wingtips, toed in 1.5 degrees, firing red bolts left and right with recoil" style="width: 312px; height: 330px"></canvas><div class="lb">C · wingtip guns</div></div>
+<div class="{{ clsD }}"><canvas id="dh-fg-d" class="cv" ref="{{ setTop }}" width="312" height="330" role="img" aria-label="Variant D: forked-5 nose-up with two close parallel grey barrels slung under the nose on the centreline, poking past the tip like a twin autocannon, firing red bolts left and right with recoil" style="width: 312px; height: 330px"></canvas><div class="lb">D · under-nose twin</div></div>
+</div>
+<div class="row" style="margin-top: 14px">
+<div class="lb" style="color: #A6A6A6">{{ stripTitle }}</div>
+<div class="lb">Back 40% in 0.06 s · cubic ease-out return in 0.22 s · dotted line: tip at rest</div>
+</div>
+<div class="row" style="margin-top: 8px">
+<div class="fr"><canvas id="dh-fg-sm-0" class="cv" ref="{{ setStrip }}" width="206" height="150" role="img" aria-label="Slow motion at 0.00 s: the selected gun fires, barrel at rest, red flash at its tip" style="width: 206px; height: 150px"></canvas><div class="fl"><div class="tm">0.00 s</div><div class="lb">Fire</div></div></div>
+<div class="fr"><canvas id="dh-fg-sm-1" class="cv" ref="{{ setStrip }}" width="206" height="150" role="img" aria-label="Slow motion at 0.03 s: barrel three quarters of the way back, the bolt leaving the tip" style="width: 206px; height: 150px"></canvas><div class="fl"><div class="tm">0.03 s</div><div class="lb">Recoil</div></div></div>
+<div class="fr"><canvas id="dh-fg-sm-2" class="cv" ref="{{ setStrip }}" width="206" height="150" role="img" aria-label="Slow motion at 0.06 s: barrel fully back by 40% of its length, hull kicked back, the bolt nearly gone" style="width: 206px; height: 150px"></canvas><div class="fl"><div class="tm">0.06 s</div><div class="lb">Full back</div></div></div>
+<div class="fr"><canvas id="dh-fg-sm-3" class="cv" ref="{{ setStrip }}" width="206" height="150" role="img" aria-label="Slow motion at 0.12 s: barrel springing forward, about 40% of the stroke left" style="width: 206px; height: 150px"></canvas><div class="fl"><div class="tm">0.12 s</div><div class="lb">Returning</div></div></div>
+<div class="fr"><canvas id="dh-fg-sm-4" class="cv" ref="{{ setStrip }}" width="206" height="150" role="img" aria-label="Slow motion at 0.20 s: barrel almost home, settling" style="width: 206px; height: 150px"></canvas><div class="fl"><div class="tm">0.20 s</div><div class="lb">Settling</div></div></div>
+<div class="fr"><canvas id="dh-fg-sm-5" class="cv" ref="{{ setStrip }}" width="206" height="150" role="img" aria-label="Slow motion at 0.28 s: barrel back at rest, ready for the next shot" style="width: 206px; height: 150px"></canvas><div class="fl"><div class="tm">0.28 s</div><div class="lb">At rest</div></div></div>
+</div>
+<div style="margin-top: 14px; display: flex; align-items: flex-start; gap: 12px">
+<button class="bt" aria-label="Fire one shot on every variant" onClick="{{ fire }}">Fire</button>
+<button class="bt" aria-pressed="{{ autoPressed }}" onClick="{{ toggleAuto }}">{{ autoText }}</button>
+<div style="margin-left: 4px; display: flex; flex-direction: column; gap: 0">
+<div style="font-size: 13px; line-height: 20px; color: #A6A6A6">Guns recoil back on every shot and spring forward. Shots alternate left/right. Pick A, B, C or D.</div>
+<div style="font-size: 13px; line-height: 20px; color: #757575">Fire: one shot on all four. Auto: the 0.35 s loop. Tweak variant (A–D) sets the slow-motion strip. The hull kick is 1 px at game size.</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"variant":{"editor":"enum","default":"A","options":["A","B","C","D"],"section":"Guns"},"$preview":{"width":1360,"height":700}}'>
+class Component extends DCLogic {
+  componentDidMount() { this._alive = true; this._find(0); }
+  componentDidUpdate() { this._paintStrip(); }
+  componentWillUnmount() { this._alive = false; this._running = false; if (this._raf) cancelAnimationFrame(this._raf); }
+  _dpr() { return Math.min(2, Math.max(1, window.devicePixelRatio || 1)); }
+  _sel() { const v = this.props && this.props.variant; return v === 'B' || v === 'C' || v === 'D' ? v : 'A'; }
+  _isAuto() { return this._auto !== false; }
+  _find(n) {
+    if (!this._alive) return;
+    const tc = this._tc || (this._tc = {}), sc = this._sc || (this._sc = {});
+    let left = 0;
+    for (const k of ['a', 'b', 'c', 'd']) { if (!tc[k]) { const el = document.getElementById('dh-fg-' + k); if (el) tc[k] = el; else left++; } }
+    for (let i = 0; i < 6; i++) { if (!sc[i]) { const el = document.getElementById('dh-fg-sm-' + i); if (el) sc[i] = el; else left++; } }
+    this._start();
+    this._paintStrip();
+    if (left && n < 40) setTimeout(() => this._find(n + 1), 100);
+  }
+  // Seeded random, so the slow-motion plume is the same in every frame
+  _rng(seed) {
+    let a = seed >>> 0;
+    return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  // Collects round dots (centre, diameter, alpha on #DDDDDD) and fills them in one pass per alpha level
+  _batch() {
+    const bk = [];
+    for (let i = 0; i <= 100; i++) bk.push([]);
+    const put = (x, y, d, a) => {
+      if (!(d > 0.3) || !(a > 0.005)) return;
+      let q = Math.round(a * 100);
+      if (q > 100) q = 100;
+      if (q < 1) return;
+      bk[q].push(x, y, d * 0.5);
+    };
+    put.flush = (ctx) => {
+      ctx.fillStyle = '#DDDDDD';
+      for (let q = 1; q <= 100; q++) {
+        const L = bk[q];
+        if (!L.length) continue;
+        ctx.globalAlpha = q / 100;
+        ctx.beginPath();
+        for (let i = 0; i < L.length; i += 3) { ctx.moveTo(L[i] + L[i + 2], L[i + 1]); ctx.arc(L[i], L[i + 1], L[i + 2], 0, 6.2832); }
+        ctx.fill();
+        L.length = 0;
+      }
+      ctx.globalAlpha = 1;
+    };
+    return put;
+  }
+  // Opaque dots in one colour: [x, y, r] triples, each grown by g px (a black knockout ring when g > 0)
+  _dots(ctx, a, col, g) {
+    if (!a.length) return;
+    ctx.globalAlpha = 1; ctx.fillStyle = col; ctx.beginPath();
+    for (let i = 0; i < a.length; i += 3) { const r = a[i + 2] + g; ctx.moveTo(a[i] + r, a[i + 1]); ctx.arc(a[i], a[i + 1], r, 0, 6.2832); }
+    ctx.fill();
+  }
+  // Forked-5, as on Ship v2. Local axes: nose along +x, +y to starboard. pts: [x, y, dot, alpha];
+  // noz: [x, y, plume spread, dot, flat half-width]; mk: the nozzle bars [x, y, dot, scale].
+  _hull() {
+    if (this._hl) return this._hl;
+    const poly = (out, v, d, a, open) => {
+      const m = open ? v.length - 1 : v.length;
+      for (let i = 0; i < m; i++) {
+        const p = v[i], q = v[(i + 1) % v.length], n = Math.max(1, Math.round(Math.hypot(q[0] - p[0], q[1] - p[1]) / 4));
+        const dp = p.length > 2 ? p[2] : d, dq = q.length > 2 ? q[2] : d;
+        for (let j = 0; j < n; j++) { const t = j / n; out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, dp + (dq - dp) * t, a]); }
+      }
+      if (open) { const p = v[v.length - 1]; out.push([p[0], p[1], p.length > 2 ? p[2] : d, a]); }
+      return out;
+    };
+    const sym = (v) => v.concat(v.slice(0, -1).reverse().map((p) => [p[0], -p[1]].concat(p.slice(2))));
+    const pts = poly(poly([], [[-13, 3.5], [-5, 3.5], [-2, 0], [-5, -3.5], [-13, -3.5]], 3.4, 1, true), sym([[-13, 7.5], [-11.5, 12.5, 2.4], [-7, 7.5], [-2, 7.5], [8, 3], [19, 0, 1.4]]), 3.4, 1, true);
+    pts.push([7, 0, 2.2, 0.75], [3.5, 0, 2.2, 0.75]);
+    const noz = [[-12, -5.5, 0.8, 1.6, 1], [-12, 5.5, 0.8, 1.6, 1]], mk = [];
+    for (const nz of noz) {
+      const w = nz[4], n = Math.max(2, Math.ceil((2 * w) / 1.2));
+      for (let j = 0; j <= n; j++) mk.push([nz[0], nz[1] - w + (2 * w * j) / n, nz[3], 0.75]);
+    }
+    this._hl = { pts: pts, noz: noz, mk: mk };
+    return this._hl;
+  }
+  // The four gun placements, given for the starboard gun (port mirrors y). x, y: the breech dot's centre. toe: inward angle, degrees.
+  // n dots along the barrel, sp apart, dot size d; rows dots across, rg apart. under: slung below the hull, which draws over it.
+  // L: barrel length end to end; back: the recoil stroke, 40% of L; tipA: breech centre to muzzle along the axis.
+  _V() {
+    if (this._vv) return this._vv;
+    const g = (name, x, y, toe, n, sp, d, rows, rg, under) => {
+      const L = (n - 1) * sp + d;
+      return { name: name, x: x, y: y, toe: (toe * Math.PI) / 180, n: n, sp: sp, d: d, rows: rows, rg: rg, under: under, L: L, back: 0.4 * L, tipA: (n - 1) * sp + d / 2 };
+    };
+    this._vv = {
+      a: g('A · shoulder barrels', 8.4, 3.9, 0, 4, 2.1, 1.9, 1, 0, false),
+      b: g('B · boom-tip cannons', -2.6, 8.9, 0, 4, 2.2, 1.9, 2, 1.75, false),
+      c: g('C · wingtip guns', -10.4, 12.5, 1.5, 3, 1.9, 1.7, 1, 0, false),
+      d: g('D · under-nose twin', 14.2, 1.25, 0, 5, 2.1, 1.7, 1, 0, true)
+    };
+    return this._vv;
+  }
+  // One gun: side 0 = port (left on screen), 1 = starboard. c, s: its axis; tx, ty: the muzzle tip at rest.
+  _gun(V, sd) {
+    const sg = sd ? 1 : -1, an = -sg * V.toe, c = Math.cos(an), s = Math.sin(an), y = sg * V.y;
+    return { x: V.x, y: y, c: c, s: s, tx: V.x + c * V.tipA, ty: y + s * V.tipA };
+  }
+  // Barrel stroke, 0..1: back over 0.06 s (fast impulse, ease-out), then forward over 0.22 s with a cubic ease-out
+  _rp(a) {
+    if (!(a >= 0) || a >= 0.28) return 0;
+    if (a < 0.06) { const u = 1 - a / 0.06; return 1 - u * u; }
+    const u = 1 - (a - 0.06) / 0.22;
+    return u * u * u;
+  }
+  // Hull kick, in ship units (1 = 1 px at game size): back over 0.06 s, a slower 0.3 s cubic settle
+  _kp(a) {
+    if (!(a >= 0) || a >= 0.36) return 0;
+    if (a < 0.06) { const u = 1 - a / 0.06; return 1 - u * u; }
+    const u = 1 - (a - 0.06) / 0.3;
+    return u * u * u;
+  }
+  // One ship on a black panel. vw: S scale, (X0, Y0) the screen spot of ship point (xc, yc), nose up.
+  // st: kick, off (recoil per side, units), shots [side, age], thr (engine 0..1), plume [x, y, dot, alpha], guide (y px or null)
+  _scene(ctx, W, H, vw, V, st) {
+    const hl = this._hull(), S = vw.S, k = st.kick || 0;
+    const T = (lx, ly) => [vw.X0 + (ly - vw.yc) * S, vw.Y0 - (lx - vw.xc) * S];
+    ctx.globalAlpha = 1; ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, W, H);
+    const put = this._batch();
+    if (st.guide != null) for (let x = 7; x < W - 4; x += 7) put(x, st.guide, 1.6, 0.53);
+    for (const p of st.plume) { const q = T(p[0], p[1]); put(q[0], q[1], p[2] * S, p[3]); }
+    put.flush(ctx);
+    // Barrel dots slide back along their own axis by the recoil; the whole ship shifts back by the kick
+    const gd = [];
+    for (let sd = 0; sd < 2; sd++) {
+      const g = this._gun(V, sd), off = st.off[sd];
+      for (let i = 0; i < V.n; i++) {
+        const a = i * V.sp - off;
+        for (let r = 0; r < V.rows; r++) {
+          const w = (r - (V.rows - 1) / 2) * V.rg, q = T(g.x + g.c * a - g.s * w - k, g.y + g.s * a + g.c * w);
+          gd.push(q[0], q[1], V.d * S * 0.5);
+        }
+      }
+    }
+    // #A6A6A6 hardware: under the hull for the chin twin, otherwise on top with a thin black knockout ring
+    if (V.under) this._dots(ctx, gd, '#A6A6A6', 0);
+    for (const p of hl.pts) { const q = T(p[0] - k, p[1]); put(q[0], q[1], p[2] * S, p[3]); }
+    for (const m of hl.mk) { const q = T(m[0] - k, m[1]); put(q[0], q[1], (m[2] + 1.4 * st.thr) * m[3] * S, 0.53 + 0.47 * st.thr); }
+    put.flush(ctx);
+    if (!V.under) { this._dots(ctx, gd, '#000000', 0.25 * S); this._dots(ctx, gd, '#A6A6A6', 0); }
+    // Red, for lasers only: each bolt grows out of its muzzle tip and flies along the barrel axis; a flash sits at the tip
+    const segs = [], fl = [];
+    for (const sh of st.shots) {
+      const age = sh[1];
+      if (!(age >= 0)) continue;
+      const g = this._gun(V, sh[0]), tr = 230 * age, s1 = 1 + 0.35 * Math.max(0, 1 - age / 0.1);
+      const len = Math.max(0.05, Math.min(11.25 * s1, tr)), hd = 0.8 + tr;
+      const h = T(g.tx + g.c * hd, g.ty + g.s * hd), tl = T(g.tx + g.c * (hd - len), g.ty + g.s * (hd - len));
+      if (h[1] > -80 || tl[1] > -80) segs.push([tl[0], tl[1], h[0], h[1], (2.25 / Math.sqrt(s1)) * S]);
+      if (age < 0.08) { const q = 1 - age / 0.08, p = T(g.tx + g.c, g.ty + g.s); fl.push([p[0], p[1], (0.7 + 1.1 * q) * S, q]); }
+    }
+    if (!segs.length && !fl.length) return;
+    ctx.save();
+    ctx.lineCap = 'round'; ctx.strokeStyle = '#FF3B30'; ctx.fillStyle = '#FF3B30';
+    // Soft glow: a 3x pass at 18% and a 2x pass at 22% stack to about 35% beside the core
+    for (const pass of [[3, 0.18], [2, 0.22], [1, 1]]) {
+      for (const q of segs) { ctx.globalAlpha = pass[1]; ctx.lineWidth = q[4] * pass[0]; ctx.beginPath(); ctx.moveTo(q[0], q[1]); ctx.lineTo(q[2], q[3]); ctx.stroke(); }
+    }
+    for (const f of fl) {
+      ctx.globalAlpha = 0.35 * f[3]; ctx.beginPath(); ctx.arc(f[0], f[1], f[2] * 2.5, 0, 6.2832); ctx.fill();
+      ctx.globalAlpha = f[3]; ctx.beginPath(); ctx.arc(f[0], f[1], f[2], 0, 6.2832); ctx.fill();
+    }
+    ctx.restore();
+  }
+  // Shared firing state: all four ships fire together, so they compare shot for shot
+  _st() {
+    if (!this._fs) { this._fs = { side: 0, gunT: [-9, -9], shots: [] }; this._t = 0; this._next = 0.5; this._pl = {}; }
+    return this._fs;
+  }
+  _fireAll() {
+    const st = this._st(), t = this._t, sd = st.side;
+    st.side = sd ^ 1;
+    st.gunT[sd] = t;
+    st.shots.push([sd, t]);
+    this._next = t + 0.35;
+  }
+  _start() {
+    if (this._running || !this._alive) return;
+    this._running = true;
+    this._st();
+    let last = performance.now();
+    const step = (now) => {
+      if (!this._alive) { this._running = false; return; }
+      let dt = (now - last) / 1000; last = now;
+      if (dt > 0.05) dt = 0.05; if (dt < 0) dt = 0;
+      this._tick(dt);
+      this._raf = requestAnimationFrame(step);
+    };
+    this._raf = requestAnimationFrame(step);
+  }
+  // Idle engine plume, one particle list per panel, in ship units: dots stream aft from both nozzles, shrinking and fading
+  _plume(P, dt, thr, kick) {
+    const hl = this._hull();
+    P.acc += dt * 76 * (0.7 + thr);
+    let guard = 0;
+    while (P.acc >= 1 && guard++ < 20) {
+      P.acc -= 1; P.i = (P.i + 1) % 2;
+      const nz = hl.noz[P.i], l = 0.26 + Math.random() * 0.14;
+      if (P.a.length < 160) P.a.push({ x: nz[0] - 0.6 - kick, y: nz[1] + (Math.random() * 2 - 1) * 0.9, vx: -(15 + Math.random() * 9) * (0.75 + thr), vy: (Math.random() - 0.5) * 2.6, life: l, l0: l, d: 1.7 + thr * 1.2 });
+    }
+    for (const p of P.a) { p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; }
+    P.a = P.a.filter((p) => p.life > 0);
+    const out = [];
+    for (const p of P.a) { const q = p.life / p.l0; out.push([p.x, p.y, 0.55 + (p.d - 0.55) * q, 0.85 * q]); }
+    return out;
+  }
+  _tick(dt) {
+    const st = this._st();
+    this._t += dt;
+    const t = this._t;
+    if (this._isAuto() && t >= this._next) this._fireAll();
+    st.shots = st.shots.filter((s) => t - s[1] < 0.7);
+    let kick = 0;
+    for (const s of st.shots) kick += this._kp(t - s[1]);
+    if (kick > 1.6) kick = 1.6;
+    const keys = ['a', 'b', 'c', 'd'], VV = this._V(), tc = this._tc || {}, dpr = this._dpr();
+    const W = 312, H = 330, vw = { S: 5.2, X0: W / 2, Y0: 98 + 19 * 5.2, xc: 0, yc: 0 };
+    const shots = st.shots.map((s) => [s[0], t - s[1]]);
+    for (let i = 0; i < 4; i++) {
+      const key = keys[i], el = tc[key], V = VV[key];
+      const P = this._pl[key] || (this._pl[key] = { a: [], acc: 0, i: i % 2 });
+      const thr = 0.3 + 0.05 * Math.sin(t * 9.1 + i * 1.7) + 0.04 * Math.sin(t * 23.3 + i * 2.9);
+      const plume = this._plume(P, dt, thr, kick);
+      if (!el) continue;
+      if (el._dhPx !== dpr) { el._dhPx = dpr; el.width = Math.round(W * dpr); el.height = Math.round(H * dpr); }
+      const ctx = el.getContext('2d'); if (!ctx) continue;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      this._scene(ctx, W, H, vw, V, { kick: kick, off: [this._rp(t - st.gunT[0]) * V.back, this._rp(t - st.gunT[1]) * V.back], shots: shots, thr: thr, plume: plume });
+    }
+  }
+  // A fixed idle plume for the frozen frames
+  _stillPlume() {
+    if (this._sp) return this._sp;
+    const rnd = this._rng(4242), hl = this._hull(), out = [];
+    for (const nz of hl.noz) {
+      for (let i = 0; i < 7; i++) { const t = (i + 0.2 + rnd() * 0.6) / 7; out.push([nz[0] - 0.6 - t * 7, nz[1] + (rnd() * 2 - 1) * (0.8 + t * 1.2), 0.55 + 1.6 * (1 - t), 0.85 * (1 - t)]); }
+    }
+    this._sp = out;
+    return out;
+  }
+  // The slow-motion strip: the selected variant's starboard gun, one shot, frozen at six moments. Same crop in every frame,
+  // centred on that gun at a closer 6x, with its muzzle at rest on the dotted guide line.
+  _paintStrip() {
+    const sc = this._sc;
+    if (!sc) return;
+    const sel = this._sel(), V = this._V()[sel.toLowerCase()], dpr = this._dpr(), key = sel + '|' + dpr;
+    const W = 206, H = 150, ages = [0, 0.03, 0.06, 0.12, 0.2, 0.28], g = this._gun(V, 1);
+    const vw = { S: 6, X0: W / 2, Y0: H * 0.4, xc: g.tx, yc: g.ty * 0.55 };
+    for (let i = 0; i < 6; i++) {
+      const el = sc[i];
+      if (!el || el._dhKey === key) continue;
+      const ctx = el.getContext('2d'); if (!ctx) continue;
+      el._dhKey = key;
+      el.width = Math.round(W * dpr); el.height = Math.round(H * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const a = ages[i];
+      this._scene(ctx, W, H, vw, V, { kick: this._kp(a), off: [0, this._rp(a) * V.back], shots: [[1, a]], thr: 0.35, plume: this._stillPlume(), guide: H * 0.4 });
+    }
+  }
+  renderVals() {
+    if (!this._h) {
+      this._h = {
+        setTop: (el) => { if (el && el.id) { (this._tc || (this._tc = {}))[el.id.slice(6)] = el; if (this._alive) this._start(); } },
+        setStrip: (el) => { if (el && el.id) { (this._sc || (this._sc = {}))[el.id.slice(9)] = el; if (this._alive) this._paintStrip(); } },
+        fire: () => { this._fireAll(); if (this._alive) this._start(); },
+        toggleAuto: () => {
+          this._auto = !this._isAuto();
+          if (this._auto) this._next = (this._t || 0) + 0.15;
+          this.setState({ auto: this._auto });
+        }
+      };
+    }
+    const sel = this._sel(), on = this._isAuto();
+    return {
+      setTop: this._h.setTop, setStrip: this._h.setStrip, fire: this._h.fire, toggleAuto: this._h.toggleAuto,
+      autoText: on ? 'Auto · on' : 'Auto · off', autoPressed: on ? 'true' : 'false',
+      clsA: sel === 'A' ? 'vp sel' : 'vp', clsB: sel === 'B' ? 'vp sel' : 'vp', clsC: sel === 'C' ? 'vp sel' : 'vp', clsD: sel === 'D' ? 'vp sel' : 'vp',
+      stripTitle: 'Slow motion · ' + this._V()[sel.toLowerCase()].name + ' · starboard gun, one shot'
+    };
+  }
+}
+</script>
+</body>
+</html>
