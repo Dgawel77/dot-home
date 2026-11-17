@@ -350,8 +350,23 @@ public final class GameWorld {
     public float width() { return w; }
     public float height() { return h; }
 
+    // the fold/unfold burst: start scales and the time since it was armed (idle when burstT >= FoldBurst.SECONDS)
+    private float burstSx0 = 1f, burstSy0 = 1f, burstT = FoldBurst.SECONDS;
+
+    /** Scene scale about the centre while a fold/unfold burst runs; 1 when idle. */
+    public float burstScaleX() { return FoldBurst.scaleAt(burstSx0, burstT); }
+    public float burstScaleY() { return FoldBurst.scaleAt(burstSy0, burstT); }
+
     public void resize(float nw, float nh) {
         if (!(nw > 0 && nh > 0)) return;
+        if (cfg != null && w > 0 && h > 0) {
+            float[] b = FoldBurst.startScale(w, h, nw, nh);
+            if (b[0] != 1f || b[1] != 1f) {
+                burstSx0 = b[0];
+                burstSy0 = b[1];
+                burstT = 0f;
+            }
+        }
         GameConfig old = cfg;
         cfg = GameConfig.forSize(nw, nh);
         if (old == null) {
@@ -717,6 +732,7 @@ public final class GameWorld {
         if (dt > 0.05f) dt = 0.05f;
         if (dt < 0) dt = 0;
         time += dt;
+        if (burstT < FoldBurst.SECONDS) burstT += dt;
         for (int i = 0; i < ShipShape.GUNS; i++) gunAge[i] = Math.min(GUN_IDLE, gunAge[i] + dt);
         if (!introHeld) introT += dt;
         if (barrageCool > 0) barrageCool -= dt;

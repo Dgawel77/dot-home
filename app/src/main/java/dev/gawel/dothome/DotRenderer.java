@@ -146,7 +146,7 @@ final class DotRenderer {
     private String scoreText = "";
 
     // the current draw: screen = (vx, vy) + vs * world; identity live, a centred cover fit for stills
-    private float vs = 1f, vx, vy;
+    private float vs = 1f, vsx = 1f, vsy = 1f, vx, vy;
     private float canvasW, canvasH;
     private boolean still;
     /** Screen y above which (stills only) rock, particle, shot, ship and ring dots are skipped; negative draws everything. */
@@ -370,7 +370,10 @@ final class DotRenderer {
         }
         still = false;
         vs = 1f;
-        vx = vy = 0f;
+        vsx = w.burstScaleX();
+        vsy = w.burstScaleY();
+        vx = (1f - vsx) * c.getWidth() / 2f;
+        vy = (1f - vsy) * c.getHeight() / 2f;
         clearTopY = -1f;
         canvasW = c.getWidth();
         canvasH = c.getHeight();
@@ -400,7 +403,7 @@ final class DotRenderer {
             metrics();
             float s = Math.max(width / w.width(), height / w.height());
             still = true;
-            vs = s;
+            vs = vsx = vsy = s;
             vx = (width - s * w.width()) / 2f;
             vy = (height - s * w.height()) / 2f;
             canvasW = width;
@@ -410,7 +413,7 @@ final class DotRenderer {
                 drawScene(c, w);
             } finally {
                 still = false;
-                vs = 1f;
+                vs = vsx = vsy = 1f;
                 vx = vy = 0f;
                 clearTopY = -1f;
             }
@@ -668,7 +671,7 @@ final class DotRenderer {
                     len = Math.min(BOLT_LEN * st * k, b.trav);
                     th = BOLT_THICK / (float) Math.sqrt(st);
                 }
-                float ux = (float) Math.cos(b.angle) * len * vs, uy = (float) Math.sin(b.angle) * len * vs;
+                float ux = (float) Math.cos(b.angle) * len * vsx, uy = (float) Math.sin(b.angle) * len * vsy;
                 red.setAlpha(Math.round(255f * clamp(share * al * dim, 0f, 1f)));
                 red.setStrokeWidth(th * wide * mock);
                 c.drawLine(x1 - ux, y1 - uy, x1, y1, red);
@@ -852,9 +855,9 @@ final class DotRenderer {
         d.radius = rock.r;
     }
 
-    private float sx(float x) { return vx + vs * x; }
+    private float sx(float x) { return vx + vsx * x; }
 
-    private float sy(float y) { return vy + vs * y; }
+    private float sy(float y) { return vy + vsy * y; }
 
     private static float scaleK(GameWorld w) { return (float) Math.sqrt((double) w.width() * w.height()) / 669f; }
 
