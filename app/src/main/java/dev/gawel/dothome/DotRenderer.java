@@ -12,6 +12,7 @@ import dev.gawel.dothome.core.DotStyle;
 import dev.gawel.dothome.core.GameConfig;
 import dev.gawel.dothome.core.GameWorld;
 import dev.gawel.dothome.core.Lattice;
+import dev.gawel.dothome.core.MoonPhase;
 import dev.gawel.dothome.core.LatticeRaster;
 import dev.gawel.dothome.core.Precip;
 import dev.gawel.dothome.core.Rng;
@@ -90,6 +91,7 @@ final class DotRenderer {
     private static final float PRECIP_ALPHA = 0.9f;
     private final SoftDot dot65 = new SoftDot(DotStyle.L65);
     private final SoftDot dot46 = new SoftDot(DotStyle.L46);
+    private final SoftDot dot10 = new SoftDot(DotStyle.L10);
     private final Paint lattice = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final android.content.res.Resources res;
@@ -161,6 +163,7 @@ final class DotRenderer {
         knock.setColor(DotStyle.GROUND);
         metrics();
         dot65.prewarm(rReg);
+        dot10.prewarm(rLight);
         dot100.prewarm(rHeavy);
     }
 
@@ -435,6 +438,33 @@ final class DotRenderer {
         }
     }
 
+    /**
+     * The night moon: light dots on the 4 dp lattice within the moon's radius, lit cells L65 and unlit L10 (both
+     * within the still cap). It fades out as the day comes and is not drawn when the sun times are unknown.
+     */
+    private void drawMoon(Canvas c, GameWorld w, GameConfig cfg, float fade) {
+        float d = w.dayness();
+        if (d != d) return;
+        float alpha = clamp(1f - 2f * d, 0f, 1f) * fade;
+        if (alpha <= 0f) return;
+        float rad = cfg.moonRadiusDp * density;
+        float cx = GameConfig.moonCentreX(w.width(), w.height()), cy = GameConfig.moonCentreY(w.height());
+        float phase = MoonPhase.phase(System.currentTimeMillis());
+        int n = (int) Math.ceil(rad / step) + 1;
+        float ox = Lattice.snap(cx, density), oy = Lattice.snap(cy, density);
+        for (int j = -n; j <= n; j++) {
+            for (int i = -n; i <= n; i++) {
+                float px = ox + i * step, py = oy + j * step;
+                float ux = (px - cx) / rad, uy = (py - cy) / rad;
+                int cell = MoonPhase.cell(ux, uy, phase);
+                if (cell == 0) continue;
+                float qx = sx(px), qy = sy(py);
+                if (qy < clearTopY) continue;
+                (cell == 2 ? dot65 : dot10).draw(c, qx, qy, rLight, alpha);
+            }
+        }
+    }
+
     private void drawScene(Canvas c, GameWorld w) {
         GameConfig cfg = w.config();
         if (cfg == null) return;
@@ -449,7 +479,12 @@ final class DotRenderer {
 
         float fog = w.weather().fog ? cfg.fogStarDim : 1f;
         List<GameWorld.Star> stars = w.stars();
-        for (int i = 0; i < stars.size(); i++) {
+        // by day fewer, dimmer stars (the sun's real times); unknown counts as night
+        float day = w.dayness();
+        if (day != day) day = 0f;
+        int starsShown = Math.round(stars.size() * (1f + (cfg.dayStarCount - 1f) * day));
+        float dayDim = 1f + (cfg.dayStarBright - 1f) * day;
+        for (int i = 0; i < starsShown && i < stars.size(); i++) {
             GameWorld.Star st = stars.get(i);
             float x = st.x, y = st.y;
             if (!still) {
@@ -471,8 +506,9 @@ final class DotRenderer {
                 float[] cx = {cs, -cs, 0, 0}, cy = {0, 0, cs, -cs};
                 for (int q = 0; q < 4; q++) dot65.draw(c, qx + cx[q], qy + cy[q], cr, e * g * fade);
             }
-            sd.draw(c, qx, qy, r, a * fog * fade);
+            sd.draw(c, qx, qy, r, a * fog * dayDim * fade);
         }
+        drawMoon(c, w, cfg, fade);
         drawPrecip(c, w, fade);
 
         GameWorld.Meteor m = still ? null : w.meteor();

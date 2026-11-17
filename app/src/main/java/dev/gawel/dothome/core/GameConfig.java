@@ -76,6 +76,20 @@ public final class GameConfig {
     public final float snowFall, snowDrift, rainFall, rainSlant, windRockBias;
     public final float fogStarDim = 0.5f;
 
+    /** By day the stars thin to this fraction of their count and dim to this fraction of their alpha. */
+    public final float dayStarCount = 0.6f, dayStarBright = 0.75f;
+    /** The night moon's radius, dp (a 40 dp disc). */
+    public final float moonRadiusDp = 20f;
+
+    /** The moon's centre in px: clear of the widget zones, a little further in on the cover screen. */
+    public static float[] moonCentre(float w, float h) {
+        return new float[] {moonCentreX(w, h), moonCentreY(h)};
+    }
+
+    /** The two coordinates alone, so the frame loop need not allocate the pair. */
+    public static float moonCentreX(float w, float h) { return (Zones.isCover(w, h) ? 0.80f : 0.84f) * w; }
+    public static float moonCentreY(float h) { return 0.33f * h; }
+
     /**
      * Device pixels per "mockup unit". The mockup surfaces (620x722 main, 330x810 cover) map to the
      * Fold6's 1856x2160 / 968x2376 at about 2.95 px per unit, so counts defined per mockup area stay at

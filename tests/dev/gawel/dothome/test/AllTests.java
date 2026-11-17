@@ -41,6 +41,7 @@ public final class AllTests {
         dev.gawel.dothome.core.WeatherFxTest.class,
         dev.gawel.dothome.core.BarrageTest.class,
         dev.gawel.dothome.core.StarsTest.class,
+        dev.gawel.dothome.core.SkyTest.class,
         dev.gawel.dothome.core.MusicSeekTest.class,
         dev.gawel.dothome.core.ArtMathTest.class,
         dev.gawel.dothome.core.PrecipTest.class,

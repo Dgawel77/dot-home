@@ -126,6 +126,7 @@ public final class GameWorld {
     private final Rng precipRng;
     private final Precip precip = new Precip();
     private WeatherFx weather = WeatherFx.NONE;
+    private float dayness = Float.NaN;
     public static final float GLINT_SECONDS = 0.3f, METEOR_SECONDS = 0.7f;
     public static final float METEOR_MIN_GAP = 20f, METEOR_MAX_GAP = 60f;
     private final Meteor meteor = new Meteor();
@@ -180,6 +181,9 @@ public final class GameWorld {
     /** What the sky does now (from the cached weather); null clears it. */
     public void setWeather(WeatherFx f) { weather = f == null ? WeatherFx.NONE : f; }
     public WeatherFx weather() { return weather; }
+    /** 0 night .. 1 day from the real sun times; NaN when unknown. */
+    public void setDayness(float d) { dayness = d; }
+    public float dayness() { return dayness; }
     public Precip precip() { return precip; }
     public void setTilt(float tx, float ty) { tiltX = clamp(tx, -1f, 1f); tiltY = clamp(ty, -1f, 1f); }
     /** Off, nothing flies the ship: the engines and RCS stay idle and it coasts (tests). */

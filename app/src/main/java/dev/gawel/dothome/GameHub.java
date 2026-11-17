@@ -12,6 +12,7 @@ import dev.gawel.dothome.core.FireMode;
 import dev.gawel.dothome.core.GameWorld;
 import dev.gawel.dothome.core.IntroGate;
 import dev.gawel.dothome.core.Rng;
+import dev.gawel.dothome.core.Sky;
 import dev.gawel.dothome.core.Weather;
 import dev.gawel.dothome.core.WeatherFx;
 import dev.gawel.dothome.core.TiltInput;
@@ -42,6 +43,8 @@ final class GameHub {
     private long lastKeyguardPollNanos;
     private static final long WEATHER_REFRESH_MS = 10L * 60 * 1000;
     private long weatherFxAtMs;
+    /** The sun's times from the cached weather (0 = unknown), for the day/night ramp. */
+    private long sunriseMs, sunsetMs;
 
     static synchronized GameHub get(Context context) {
         if (instance == null) instance = new GameHub(context.getApplicationContext());
@@ -127,12 +130,17 @@ final class GameHub {
     void tick1s(long nowMs) {
         scoreBook.refresh(); // rolls the day over at midnight while visible
         if (nowMs - weatherFxAtMs >= WEATHER_REFRESH_MS) refreshWeatherFx(nowMs);
+        world.setDayness(Sky.dayness(nowMs, sunriseMs, sunsetMs));
     }
 
     /** Recomputes the game's weather from the cache (it allocates, so only on a refresh, never per frame). */
     private void refreshWeatherFx(long nowMs) {
         weatherFxAtMs = nowMs;
-        world.setWeather(WeatherFx.from(WeatherRepo.cached(appContext), nowMs));
+        Weather wx = WeatherRepo.cached(appContext);
+        world.setWeather(WeatherFx.from(wx, nowMs));
+        sunriseMs = wx == null ? 0 : wx.sunriseMs;
+        sunsetMs = wx == null ? 0 : wx.sunsetMs;
+        world.setDayness(Sky.dayness(nowMs, sunriseMs, sunsetMs));
     }
 
     /** Restarts (recalibrates) tilt with the active engine's current rotation. */
