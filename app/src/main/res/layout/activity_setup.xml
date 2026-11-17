@@ -112,6 +112,40 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
 
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="20dp"
+            android:text="Blue Line"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp" />
+        <TextView
+            android:id="@+id/cta_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="The Dot Blue Line widget needs a free CTA Train Tracker API key. It shows the pinned station, or the nearest one within 10 km."
+            android:textColor="#AAAAAA"
+            android:textSize="13sp" />
+        <EditText
+            android:id="@+id/cta_key"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="CTA Train Tracker key"
+            android:importantForAutofill="no"
+            android:inputType="textPassword"
+            android:singleLine="true"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#888888" />
+        <Button
+            android:id="@+id/btn_cta_save"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Save key" />
+        <Spinner
+            android:id="@+id/cta_station"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
         <Button
             android:id="@+id/btn_export"
             android:layout_width="wrap_content"

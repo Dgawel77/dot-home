@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dot Blue Line with nothing to show: nothing at all (no card), only the wallpaper shows. As widget_music_empty. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/blueline_empty"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" />

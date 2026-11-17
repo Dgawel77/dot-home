@@ -12,7 +12,7 @@ import dev.gawel.dothome.core.EspnParser;
 /**
  * The Bears schedule and the live scoreboard game, cached in prefs in BearsGame's compact form (not ESPN's JSON):
  * "bears.schedule" (the season), "bears.board" (the last scoreboard game) and "bears.at" (when the schedule was
- * fetched). A failed or empty fetch keeps the cache.
+ * last fetched with a 2xx). A failed or empty fetch keeps the cache.
  */
 final class BearsRepo {
     private static final String K_SCHED = "bears.schedule", K_BOARD = "bears.board", K_AT = "bears.at";
@@ -49,10 +49,10 @@ final class BearsRepo {
             schedTriedMs = nowMs;
             String json = LiveFeeds.get(EspnParser.SCHEDULE_URL, "espn schedule");
             List<BearsGame> games = json == null ? null : EspnParser.schedule(json);
-            if (games != null && !games.isEmpty()) {
-                prefs.put(K_SCHED, BearsGame.encodeAll(games));
-                prefs.put(K_AT, String.valueOf(nowMs));
-            }
+            if (games != null && !games.isEmpty()) prefs.put(K_SCHED, BearsGame.encodeAll(games));
+            // a 2xx counts as fetched even when it parses to nothing (off-season, or a format change): the next try
+            // waits the normal 6 h, not the 15 min failure retry; the cached schedule is kept
+            if (json != null) prefs.put(K_AT, String.valueOf(nowMs));
         }
         BearsGame g = current(ctx, nowMs, TimeZone.getDefault());
         if (g == null) return; // not game day: no scoreboard

@@ -88,6 +88,19 @@ public final class BlueLineTest {
         T.check(none.isEmpty(), "unparseable times skipped");
     }
 
+    /** CTA's JSON is converted from XML: a single prediction arrives as an object, not a one-element array. */
+    public static void testSingleEtaObject() {
+        String json = "{\"ctatt\":{\"tmst\":\"2026-11-17T08:00:00\",\"errCd\":\"0\",\"eta\":"
+            + "{\"destNm\":\"Forest Park\",\"trDr\":\"5\",\"arrT\":\"2026-11-17T08:06:30\",\"isApp\":\"0\"}}}";
+        CtaBoard b = CtaParser.parse(json);
+        T.eq(0, b.errCd, "errCd");
+        T.check(b.ohare.isEmpty(), "no o'hare trains");
+        T.eq(1, b.forestPark.size(), "one forest park train");
+        T.eq("FOREST PARK", b.forestPark.get(0).dest, "dest");
+        T.eq(6, b.forestPark.get(0).minutes, "minutes");
+        T.check(!b.forestPark.get(0).due, "not due");
+    }
+
     public static void testUrlEncodesKey() {
         String u = CtaUrls.arrivals("a b&c", 40380);
         T.check(u.startsWith("https://lapi.transitchicago.com/api/1.0/ttarrivals.aspx?key=a+b%26c&"), "key " + u);

@@ -12,14 +12,23 @@ import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.util.Log;
+import android.view.View;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
+import android.widget.EditText;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
+import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
 
+import dev.gawel.dothome.core.BlueLineStations;
 import dev.gawel.dothome.core.FireMode;
 
-/** Setup checklist: permissions, wallpaper, fire mode, rock style. Done states refresh in onResume. */
+/**
+ * Setup checklist: permissions, wallpaper, fire mode, rock style, the Blue Line key and station. Done states refresh
+ * in onResume.
+ */
 public class SetupActivity extends Activity {
     private static final int REQ_LOCATION = 1;
 
@@ -107,6 +116,7 @@ public class SetupActivity extends Activity {
             prefs.put("widget.backdrop", on ? "true" : "false");
             WidgetUpdater.updateAll(this);
             WeatherJob.refreshSoon(this); // the radar widget re-renders in that job
+            LiveFeeds.kick(this); // Dot Bears and Dot Blue Line redraw now
         });
         android.view.ViewGroup parent = (android.view.ViewGroup) rocks.getParent();
         parent.addView(backdrop, parent.indexOfChild(rocks) + 1);
@@ -118,8 +128,58 @@ public class SetupActivity extends Activity {
         lockLive.setOnCheckedChangeListener((b, on) -> prefs.put(PrefsStore.KEY_LOCK_LIVE, on ? "true" : "false"));
         parent.addView(lockLive, parent.indexOfChild(backdrop) + 1);
 
+        setupBlueLine();
+
         WeatherJob.schedule(this);
         WeatherJob.refreshSoon(this);
+    }
+
+    /** CTA key (password field, never pre-filled with the stored key) and the station pin. */
+    private void setupBlueLine() {
+        EditText keyField = findViewById(R.id.cta_key);
+        keyHint(keyField);
+        findViewById(R.id.btn_cta_save).setOnClickListener(v -> {
+            String key = keyField.getText().toString().trim();
+            if (key.isEmpty()) { // an empty field never clears a saved key
+                android.widget.Toast.makeText(this, "Type a key first", android.widget.Toast.LENGTH_SHORT).show();
+                return;
+            }
+            CtaRepo.saveKey(this, key);
+            keyField.setText("");
+            keyHint(keyField);
+            LiveFeeds.kick(this);
+            android.widget.Toast.makeText(this, "CTA key saved", android.widget.Toast.LENGTH_SHORT).show();
+        });
+
+        int n = BlueLineStations.IDS.length;
+        String[] labels = new String[n + 1];
+        labels[0] = "Nearest (auto)";
+        for (int i = 0; i < n; i++) labels[i + 1] = BlueLineStations.label(BlueLineStations.IDS[i]);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, labels);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        Spinner station = findViewById(R.id.cta_station);
+        station.setAdapter(adapter);
+        int pin = CtaRepo.pinned(this);
+        int sel = pin == -1 ? 0 : BlueLineStations.index(pin) + 1;
+        station.setSelection(sel, false);
+        station.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            private int last = sel; // the initial selection callback is not a change
+
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                if (position == last) return;
+                last = position;
+                CtaRepo.pin(SetupActivity.this, position == 0 ? -1 : BlueLineStations.IDS[position - 1]);
+                LiveFeeds.kick(SetupActivity.this);
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {}
+        });
+    }
+
+    private void keyHint(EditText keyField) {
+        keyField.setHint(CtaRepo.hasKey(this) ? "Key saved (type a new one to replace it)" : "CTA Train Tracker key");
     }
 
     @Override

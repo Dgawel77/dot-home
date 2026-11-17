@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dot Blue Line (widget_blueline_empty when there is no station or no recent board): the glass card bitmap and,
+     over it, the platform board bitmap from BoardArt (One UI ignores widget fonts, so all text is drawn into the
+     bitmap). -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/blueline_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+    <ImageView
+        android:id="@+id/card_img"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:importantForAccessibility="no" />
+    <ImageView
+        android:id="@+id/blueline_img"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:contentDescription="@string/widget_blueline_desc" />
+</FrameLayout>

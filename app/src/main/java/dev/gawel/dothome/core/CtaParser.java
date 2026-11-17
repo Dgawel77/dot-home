@@ -32,7 +32,10 @@ public final class CtaParser {
                 return new CtaBoard(-1, oh, fp);
             }
             if (err != 0) return new CtaBoard(err, oh, fp);
-            List<Object> eta = MiniJson.arr(tt.get("eta"));
+            Object etaRaw = tt.get("eta");
+            List<Object> eta = MiniJson.arr(etaRaw);
+            // the JSON is converted from XML: a lone prediction is an object, not a one-element array
+            if (eta == null && MiniJson.obj(etaRaw) != null) eta = Collections.singletonList(etaRaw);
             LocalDateTime now = time(tt.get("tmst"));
             if (eta != null && now != null) {
                 for (Object o : eta) {

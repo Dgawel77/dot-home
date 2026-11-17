@@ -13,9 +13,10 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * The live widget feeds (ESPN for Dot Bears): one background executor does every fetch and render, never the main
- * thread. {@link #onMinute} runs on each TIME_TICK while the screen is on, FeedJob every 6 h. A fetch only happens
- * when it is due (the repo decides), and a failed fetch keeps the cache.
+ * The live widget feeds (ESPN for Dot Bears, CTA Train Tracker for Dot Blue Line): one background executor does
+ * every fetch and render, never the main thread. {@link #onMinute} runs on each TIME_TICK while the screen is on
+ * (and on SCREEN_ON), FeedJob every 6 h. A fetch only happens when it is due (the repo decides), and a failed fetch
+ * keeps the cache.
  */
 final class LiveFeeds {
     private static final String TAG = "DotHome";
@@ -33,7 +34,7 @@ final class LiveFeeds {
 
     /** Main thread, once a minute while the screen is on. No network unless a feed widget exists. */
     static void onMinute(Context ctx) {
-        if (!BearsWidget.exists(ctx)) return;
+        if (!BearsWidget.exists(ctx) && !BlueLineWidget.exists(ctx)) return;
         if (!MINUTE_PENDING.compareAndSet(false, true)) return;
         final Context app = ctx.getApplicationContext();
         submit(() -> {
@@ -81,6 +82,14 @@ final class LiveFeeds {
                 BearsWidget.push(app, force);
             }
         } catch (Throwable e) { // an Error here would otherwise kill the shared wallpaper process
+            Log.w(TAG, "feeds error: " + e.getClass().getSimpleName());
+        }
+        try { // its own try: a Bears failure does not stop the board, nor the reverse
+            if (BlueLineWidget.exists(app)) {
+                CtaRepo.refresh(app, System.currentTimeMillis()); // only with a key, at most every 55 s
+                BlueLineWidget.push(app, force);
+            }
+        } catch (Throwable e) {
             Log.w(TAG, "feeds error: " + e.getClass().getSimpleName());
         }
     }

@@ -1,8 +1,14 @@
+import dev.gawel.dothome.core.Arrival;
 import dev.gawel.dothome.core.BearsGame;
 import dev.gawel.dothome.core.BearsView;
+import dev.gawel.dothome.core.BlueLineStations;
+import dev.gawel.dothome.core.CtaBoard;
+import dev.gawel.dothome.core.CtaParser;
 import dev.gawel.dothome.core.DotMatrixFont;
 import dev.gawel.dothome.core.DotStyle;
 import dev.gawel.dothome.core.Lattice;
+import dev.gawel.dothome.core.PlatformBoard;
+import dev.gawel.dothome.core.TextFit;
 
 import java.awt.Color;
 import java.awt.Font;
@@ -16,17 +22,22 @@ import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 import javax.imageio.ImageIO;
 
 /**
  * Picker preview images for the feed widgets, drawn on the JVM (no device needed).
- * Usage: java -cp build/test:tools WidgetPreview kind out.png, with kind bears (Task 11 adds blueline).
+ * Usage: java -cp build/test WidgetPreview kind out.png, with kind bears or blueline.
  * Build: ./test.sh && javac -cp build/test -d build/test tools/WidgetPreview.java (run from the repo root).
  * Renders at density 2.625 on a 24 dp-corner card (the glass approximated as a flat L10 fill) with JetBrains Mono
- * from the app's assets, mirroring the widget's own art (BearsArt) in a plausible state.
+ * from the app's assets, mirroring the widget's own art (BearsArt, BoardArt) in a plausible state. The Blue Line
+ * preview is the tests/fixtures/cta-arrivals.json board at Clark/Lake.
  */
 public final class WidgetPreview {
     static final float DENS = 2.625f;
@@ -37,6 +48,14 @@ public final class WidgetPreview {
     static final float PAD_DP = 16f, LABEL_DP = 13f, STATUS_DP = 11f;
     static final float LABEL_GAP_DP = 8f, TEAM_GAP_DP = 24f, ROW_GAP_DP = 8f, STATUS_LINE_DP = 16f;
     static final int BEARS_W_DP = 300, BEARS_H_DP = 120;
+
+    // BoardArt's layout (dp)
+    static final float SMALL_DP = 11f, LABEL_LINE_DP = 20f, HEAD_LINE_DP = 16f, GAP_DP = 4f;
+    static final float COL_GAP_DP = 16f, DEST_GAP_DP = 8f;
+    static final int BOARD_STEP_DP = 4;
+    static final int BLUELINE_W_DP = 300, BLUELINE_H_DP = 180;
+    static final String CTA_FIXTURE = "tests/fixtures/cta-arrivals.json";
+    static final int CTA_FIXTURE_MAPID = 40380;
 
     private WidgetPreview() {}
 
@@ -51,8 +70,11 @@ public final class WidgetPreview {
             case "bears":
                 img = bears(mono);
                 break;
+            case "blueline":
+                img = blueline(mono);
+                break;
             default:
-                System.err.println("unknown kind: " + args[0] + " (blueline arrives with its widget)");
+                System.err.println("unknown kind: " + args[0]);
                 System.exit(2);
                 return;
         }
@@ -92,6 +114,75 @@ public final class WidgetPreview {
         return img;
     }
 
+    /** The fixture board at Clark/Lake, as BoardArt draws it at 300 x 180 dp (three rows). */
+    static BufferedImage blueline(Font mono) throws IOException {
+        CtaBoard b = CtaParser.parse(new String(Files.readAllBytes(Paths.get(CTA_FIXTURE)), StandardCharsets.UTF_8));
+        if (b.errCd != 0) throw new IOException("fixture board errCd " + b.errCd);
+        int w = Math.round(BLUELINE_W_DP * DENS), h = Math.round(BLUELINE_H_DP * DENS);
+        BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D c = canvas(img);
+        card(c, w, h);
+
+        float pad = PAD_DP * DENS, innerW = w - 2 * pad;
+        Font label = mono(mono, LABEL_DP), small = mono(mono, SMALL_DP);
+        FontMetrics lm = c.getFontMetrics(label), sm = c.getFontMetrics(small);
+        text(c, label, TextFit.fit(BlueLineStations.label(CTA_FIXTURE_MAPID), innerW, lm::stringWidth), pad, pad,
+            LABEL_LINE_DP * DENS, DotStyle.L65);
+        float headTop = pad + (LABEL_LINE_DP + GAP_DP) * DENS;
+        float rowsTop = headTop + (HEAD_LINE_DP + GAP_DP) * DENS;
+        float colW = Lattice.snap((innerW - COL_GAP_DP * DENS) / 2f, DENS);
+        float x0 = pad, x1 = pad + colW + COL_GAP_DP * DENS;
+        float rowsTopDp = PAD_DP + LABEL_LINE_DP + GAP_DP + HEAD_LINE_DP + GAP_DP;
+        int rows = Math.max(0, Math.min(PlatformBoard.ROWS, (int) Math.floor(
+            (BLUELINE_H_DP - PAD_DP - rowsTopDp + GAP_DP) / (DotMatrixFont.ROWS * BOARD_STEP_DP + GAP_DP))));
+        float step = BOARD_STEP_DP * DENS, rowH = DotMatrixFont.ROWS * step;
+
+        text(c, small, "O'HARE", x0, headTop, HEAD_LINE_DP * DENS, DotStyle.L46);
+        text(c, small, "FOREST PK", x1, headTop, HEAD_LINE_DP * DENS, DotStyle.L46);
+        column(c, b.ohare, x0, colW, rowsTop, rows, step, rowH, small, sm);
+        column(c, b.forestPark, x1, colW, rowsTop, rows, step, rowH, small, sm);
+
+        float dx = pad + colW + COL_GAP_DP * DENS / 2f;
+        float bottom = rows > 0 ? rowsTop + rows * rowH + (rows - 1) * GAP_DP * DENS : headTop + HEAD_LINE_DP * DENS;
+        float r = step * Lattice.Weight.LIGHT.ratio / 2f;
+        c.setColor(new Color(DotStyle.L46, true));
+        for (float y = headTop + step / 2f; y < bottom; y += step) {
+            c.fill(new Ellipse2D.Float(dx - r, y - r, 2 * r, 2 * r));
+        }
+        c.dispose();
+        return img;
+    }
+
+    static void column(Graphics2D c, List<Arrival> trains, float x, float colW, float top, int rows, float step,
+                       float rowH, Font small, FontMetrics sm) {
+        float r = step * Lattice.Weight.REGULAR.ratio / 2f, right = x + colW;
+        for (int i = 0; i < Math.min(rows, trains.size()); i++) {
+            Arrival a = trains.get(i);
+            float y = top + i * (rowH + GAP_DP * DENS);
+            String t = PlatformBoard.text(a);
+            float timeW;
+            if (a.due) {
+                timeW = sm.stringWidth(t);
+                text(c, small, t, right - timeW, y, rowH, DotStyle.L100);
+            } else {
+                byte[] cells = DotMatrixFont.cells(t);
+                int cols = cells.length / DotMatrixFont.ROWS;
+                timeW = cols * step;
+                float left = right - timeW;
+                c.setColor(new Color(DotStyle.L65, true));
+                for (int row = 0; row < DotMatrixFont.ROWS; row++) {
+                    for (int col = 0; col < cols; col++) {
+                        if (cells[row * cols + col] != 1) continue;
+                        float cx = left + (col + 0.5f) * step, cy = y + (row + 0.5f) * step;
+                        c.fill(new Ellipse2D.Float(cx - r, cy - r, 2 * r, 2 * r));
+                    }
+                }
+            }
+            float destW = Math.max(1f, colW - timeW - DEST_GAP_DP * DENS);
+            text(c, small, TextFit.fit(a.dest, destW, sm::stringWidth), x, y, rowH, DotStyle.L65);
+        }
+    }
+
     static float blockH(int stepDp) {
         return (DotMatrixFont.ROWS * stepDp + ROW_GAP_DP + STATUS_LINE_DP) * DENS;
     }
@@ -115,9 +206,14 @@ public final class WidgetPreview {
 
     /** L65 text, vertically centred in a line box of lineH starting at top. */
     static void text(Graphics2D c, Font f, String s, float x, float top, float lineH) {
+        text(c, f, s, x, top, lineH, DotStyle.L65);
+    }
+
+    /** Text in colour, vertically centred in a line box of lineH starting at top. */
+    static void text(Graphics2D c, Font f, String s, float x, float top, float lineH, int colour) {
         FontMetrics m = c.getFontMetrics(f);
         c.setFont(f);
-        c.setColor(new Color(DotStyle.L65, true));
+        c.setColor(new Color(colour, true));
         c.drawString(s, x, top + (lineH - (m.getAscent() + m.getDescent())) / 2f + m.getAscent());
     }
 

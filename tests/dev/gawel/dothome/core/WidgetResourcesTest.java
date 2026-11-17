@@ -107,6 +107,31 @@ public final class WidgetResourcesTest {
         T.check(Files.exists(Paths.get(RES + "drawable-nodpi/preview_bears.png")), "preview png");
     }
 
+    public static void testBlueLineWidgetResources() {
+        String info = read("xml/widget_blueline_info.xml");
+        T.check(info.contains("android:previewImage=\"@drawable/preview_blueline\""), "picker preview");
+        T.check(info.contains("android:initialLayout=\"@layout/widget_blueline_empty\""),
+            "a new Blue Line widget starts blank");
+        T.check(info.contains("android:minWidth=\"250dp\"") && info.contains("android:minHeight=\"110dp\""),
+            "min 250 x 110 dp");
+        String empty = read("layout/widget_blueline_empty.xml");
+        T.eq(1, elements(empty, "FrameLayout").size(), "one view");
+        T.check(!empty.contains("ImageView"), "no card, no image");
+        byId(elements(read("layout/widget_blueline.xml"), "ImageView"), "blueline_img");
+        T.check(read("values/strings.xml").contains("<string name=\"widget_blueline_label\">Dot Blue Line</string>"),
+            "label");
+        T.check(Files.exists(Paths.get(RES + "drawable-nodpi/preview_blueline.png")), "preview png");
+    }
+
+    private static final Pattern PLAIN_VIEW = Pattern.compile("<View[\\s/>]");
+
+    public static void testPlainViewPatternCatchesNewline() {
+        T.check(PLAIN_VIEW.matcher("<View\n    android:id=\"@+id/x\" />").find(), "newline after <View");
+        T.check(PLAIN_VIEW.matcher("<View />").find() && PLAIN_VIEW.matcher("<View/>").find()
+            && PLAIN_VIEW.matcher("<View>").find() && PLAIN_VIEW.matcher("<View\t").find(), "space, slash, >, tab");
+        T.check(!PLAIN_VIEW.matcher("<ViewFlipper android:id=\"@+id/x\">").find(), "ViewFlipper is not a View");
+    }
+
     public static void testNoPlainViewInWidgetLayouts() {
         try (java.util.stream.Stream<java.nio.file.Path> files = Files.list(Paths.get(RES + "layout"))) {
             int n = 0;
@@ -114,10 +139,10 @@ public final class WidgetResourcesTest {
                 String name = f.getFileName().toString();
                 if (!name.startsWith("widget_") || !name.endsWith(".xml")) continue;
                 String xml = read("layout/" + name);
-                T.check(!xml.contains("<View ") && !xml.contains("<View>"), name + " has no plain View");
+                T.check(!PLAIN_VIEW.matcher(xml).find(), name + " has no plain View");
                 n++;
             }
-            T.check(n >= 5, "widget layouts found");
+            T.check(n >= 7, "widget layouts found");
         } catch (IOException e) {
             throw new AssertionError("cannot list layouts: " + e);
         }

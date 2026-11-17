@@ -12,6 +12,8 @@
     <string name="widget_radar_desc">Weather radar in dots, centred on you</string>
     <string name="widget_bears_label">Dot Bears</string>
     <string name="widget_bears_desc">Bears score on game day · hidden otherwise</string>
+    <string name="widget_blueline_label">Dot Blue Line</string>
+    <string name="widget_blueline_desc">Blue Line arrivals at your station (CTA Train Tracker)</string>
     <string name="radar_toggle_desc">Switch the radar between local and region</string>
     <string name="music_prev">Previous</string>
     <string name="music_play_pause">Play or pause</string>
