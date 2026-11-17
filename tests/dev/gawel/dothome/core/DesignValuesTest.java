@@ -15,6 +15,16 @@ public final class DesignValuesTest {
         T.eq(0xFF1A1A1A, DotStyle.L10, "L10");
     }
 
+    public static void testLaserIsTheOneColour() {
+        T.eq(0xFFFF3B30, DotStyle.LASER, "laser red");
+        T.eq(DotStyle.LASER & 0xFFFFFF, DotStyle.LASER_GLOW & 0xFFFFFF, "the glow is the same red");
+        T.near(0.35, (DotStyle.LASER_GLOW >>> 24) / 255.0, 0.005, "glow at 35% alpha");
+        int[] greys = {DotStyle.GROUND, DotStyle.L100, DotStyle.L65, DotStyle.L46, DotStyle.L10};
+        for (int g : greys) {
+            T.check(((g >> 16) & 0xFF) == (g & 0xFF) && ((g >> 8) & 0xFF) == (g & 0xFF), "grey " + Integer.toHexString(g));
+        }
+    }
+
     public static void testLatticeRadius() {
         T.near(9.45, Lattice.radiusPx(Lattice.Step.S12, Lattice.Weight.REGULAR, 2.625f), 1e-4, "S12 regular");
         T.near(4 * 0.3f / 2, Lattice.radiusPx(Lattice.Step.S4, Lattice.Weight.LIGHT, 1f), 1e-5, "S4 light");
