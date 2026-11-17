@@ -13,6 +13,7 @@ import dev.gawel.dothome.core.GameWorld;
 import dev.gawel.dothome.core.IntroGate;
 import dev.gawel.dothome.core.Rng;
 import dev.gawel.dothome.core.Weather;
+import dev.gawel.dothome.core.WeatherFx;
 import dev.gawel.dothome.core.TiltInput;
 import dev.gawel.dothome.core.ScoreBook;
 
@@ -39,6 +40,8 @@ final class GameHub {
     /** True while the intro waits on its first dot for the unlock; the frame loop then polls the keyguard. */
     private boolean holdingIntro;
     private long lastKeyguardPollNanos;
+    private static final long WEATHER_REFRESH_MS = 10L * 60 * 1000;
+    private long weatherFxAtMs;
 
     static synchronized GameHub get(Context context) {
         if (instance == null) instance = new GameHub(context.getApplicationContext());
@@ -115,8 +118,21 @@ final class GameHub {
         if (wx == null || System.currentTimeMillis() - wx.fetchedAtMs > 30L * 60 * 1000) {
             WeatherJob.refreshSoon(appContext);
         }
+        refreshWeatherFx(System.currentTimeMillis());
         WidgetUpdater.updateAll(appContext);
         tilt.start(e.displayRotation()); // restart = recalibrate on the first sample
+    }
+
+    /** Once a second from the active engine's frame loop; later tasks add their own periodic work here. */
+    void tick1s(long nowMs) {
+        scoreBook.refresh(); // rolls the day over at midnight while visible
+        if (nowMs - weatherFxAtMs >= WEATHER_REFRESH_MS) refreshWeatherFx(nowMs);
+    }
+
+    /** Recomputes the game's weather from the cache (it allocates, so only on a refresh, never per frame). */
+    private void refreshWeatherFx(long nowMs) {
+        weatherFxAtMs = nowMs;
+        world.setWeather(WeatherFx.from(WeatherRepo.cached(appContext), nowMs));
     }
 
     /** Restarts (recalibrates) tilt with the active engine's current rotation. */

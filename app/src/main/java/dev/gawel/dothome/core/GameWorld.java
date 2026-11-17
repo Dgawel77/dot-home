@@ -122,6 +122,10 @@ public final class GameWorld {
     private final List<Star> stars = new ArrayList<Star>();
     /** Star periods, glints and shooting stars draw from their own seeded stream, so the game's sequence is kept. */
     private final Rng fx;
+    /** Weather (snow, rain, wind lean) has its own stream too: it never draws from the game's Rng. */
+    private final Rng precipRng;
+    private final Precip precip = new Precip();
+    private WeatherFx weather = WeatherFx.NONE;
     public static final float GLINT_SECONDS = 0.3f, METEOR_SECONDS = 0.7f;
     public static final float METEOR_MIN_GAP = 20f, METEOR_MAX_GAP = 60f;
     private final Meteor meteor = new Meteor();
@@ -165,12 +169,18 @@ public final class GameWorld {
 
     public GameWorld(Rng rng) {
         this.rng = rng;
-        this.fx = new Rng(Double.doubleToLongBits(rng.next()));
+        long seed = Double.doubleToLongBits(rng.next());
+        this.fx = new Rng(seed);
+        this.precipRng = new Rng(seed ^ 0x5DEECE66DL);
         for (int i = 0; i < MAX_SHOTS; i++) shotPool.add(new Shot());
         java.util.Arrays.fill(gunAge, GUN_IDLE);
     }
 
     public void setListener(Listener l) { listener = l; }
+    /** What the sky does now (from the cached weather); null clears it. */
+    public void setWeather(WeatherFx f) { weather = f == null ? WeatherFx.NONE : f; }
+    public WeatherFx weather() { return weather; }
+    public Precip precip() { return precip; }
     public void setTilt(float tx, float ty) { tiltX = clamp(tx, -1f, 1f); tiltY = clamp(ty, -1f, 1f); }
     /** Off, nothing flies the ship: the engines and RCS stay idle and it coasts (tests). */
     public void setAutopilot(boolean on) { autopilot = on; }
@@ -344,6 +354,7 @@ public final class GameWorld {
             for (int i = 0; i < r.outline.length; i++) r.outline[i] *= kr;
         }
         for (Shot s : shots) { s.x *= sx; s.y *= sy; s.px *= sx; s.py *= sy; }
+        precip.scale(sx, sy);
         tapX *= sx;
         tapY *= sy;
         float band = EDGE_BAND * cfg.k;
@@ -756,10 +767,12 @@ public final class GameWorld {
             aimAndFire(dt);
         }
 
+        float windX = weather.windX, windY = weather.windY;
+        precip.step(dt, weather, tiltX, tiltY, w, h, cfg, precipRng);
         for (int i = 0; i < rocks.size(); i++) {
             Rock r = rocks.get(i);
-            r.x += r.vx * dt;
-            r.y += r.vy * dt;
+            r.x += (r.vx + windX * cfg.windRockBias) * dt;
+            r.y += (r.vy + windY * cfg.windRockBias) * dt;
             r.rot += r.vr * dt;
             float e = r.r * 1.3f;
             if (r.x < -e) r.x = w + e; else if (r.x > w + e) r.x = -e;

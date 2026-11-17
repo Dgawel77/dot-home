@@ -13,6 +13,7 @@ import dev.gawel.dothome.core.GameConfig;
 import dev.gawel.dothome.core.GameWorld;
 import dev.gawel.dothome.core.Lattice;
 import dev.gawel.dothome.core.LatticeRaster;
+import dev.gawel.dothome.core.Precip;
 import dev.gawel.dothome.core.Rng;
 import dev.gawel.dothome.core.ScoreBook;
 import dev.gawel.dothome.core.ShipShape;
@@ -85,6 +86,8 @@ final class DotRenderer {
     }
 
     private final SoftDot dot100 = new SoftDot(DotStyle.L100);
+    /** Precipitation's alpha: it reads as weather, not as stars. */
+    private static final float PRECIP_ALPHA = 0.9f;
     private final SoftDot dot65 = new SoftDot(DotStyle.L65);
     private final SoftDot dot46 = new SoftDot(DotStyle.L46);
     private final Paint lattice = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -411,6 +414,27 @@ final class DotRenderer {
         return bmp;
     }
 
+    /** Snow as soft dots (L65 or L46), rain as a three-dot streak of L46 trailing the drop; never above L65. */
+    private void drawPrecip(Canvas c, GameWorld w, float fade) {
+        Precip p = w.precip();
+        for (int i = 0; i < p.n; i++) {
+            float qx = sx(p.x[i]), qy = sy(p.y[i]);
+            if (p.snow) {
+                if (qy < clearTopY) continue;
+                (p.light[i] ? dot65 : dot46).draw(c, qx, qy, rLight * p.size[i], PRECIP_ALPHA * fade);
+            } else {
+                float len = (float) Math.sqrt(p.vx[i] * p.vx[i] + p.vy[i] * p.vy[i]);
+                if (len < 1e-3f) continue;
+                float ux = -p.vx[i] / len * step * vs, uy = -p.vy[i] / len * step * vs;
+                for (int q = 0; q < 3; q++) {
+                    float dx = qx + ux * q, dy = qy + uy * q;
+                    if (dy < clearTopY) continue;
+                    dot46.draw(c, dx, dy, rLight, PRECIP_ALPHA * fade);
+                }
+            }
+        }
+    }
+
     private void drawScene(Canvas c, GameWorld w) {
         GameConfig cfg = w.config();
         if (cfg == null) return;
@@ -423,6 +447,7 @@ final class DotRenderer {
         float hand = clamp((it - HANDOFF_FROM * intro) / ((1f - HANDOFF_FROM) * intro), 0, 1);
         SoftDot user = still ? dot65 : dot100; // the user's own dots; lock stills cap at L65
 
+        float fog = w.weather().fog ? cfg.fogStarDim : 1f;
         List<GameWorld.Star> stars = w.stars();
         for (int i = 0; i < stars.size(); i++) {
             GameWorld.Star st = stars.get(i);
@@ -446,8 +471,9 @@ final class DotRenderer {
                 float[] cx = {cs, -cs, 0, 0}, cy = {0, 0, cs, -cs};
                 for (int q = 0; q < 4; q++) dot65.draw(c, qx + cx[q], qy + cy[q], cr, e * g * fade);
             }
-            sd.draw(c, qx, qy, r, a * fade);
+            sd.draw(c, qx, qy, r, a * fog * fade);
         }
+        drawPrecip(c, w, fade);
 
         GameWorld.Meteor m = still ? null : w.meteor();
         if (m != null) {

@@ -325,7 +325,7 @@ public class DotWallpaperService extends WallpaperService {
                     hub.pollKeyguard(frameTimeNanos);
                     if (frameTimeNanos - lastRefreshNanos >= 1_000_000_000L) {
                         lastRefreshNanos = frameTimeNanos;
-                        hub.scoreBook().refresh(); // rolls the day over at midnight while visible
+                        hub.tick1s(System.currentTimeMillis());
                     }
                     world.step(dt);
                     renderer.advance(world, dt);

@@ -71,6 +71,11 @@ public final class GameConfig {
     public final float barrageFireEvery = 0.045f, barrageDrag = 2f;
     public final float gravityAccel;
 
+    /** Weather: the most drops alive, snow's fall and sideways drift, rain's fall and slant, a rock's lean (all at wind 1), and how much fog dims the stars. */
+    public final int precipMax;
+    public final float snowFall, snowDrift, rainFall, rainSlant, windRockBias;
+    public final float fogStarDim = 0.5f;
+
     /**
      * Device pixels per "mockup unit". The mockup surfaces (620x722 main, 330x810 cover) map to the
      * Fold6's 1856x2160 / 968x2376 at about 2.95 px per unit, so counts defined per mockup area stay at
@@ -93,6 +98,12 @@ public final class GameConfig {
         rockRadius = 33.5f * k;
         rocksTarget = Math.max(4, Math.min(8, Math.round(mockupArea(w, h) / 64000f)));
         gravityAccel = 160f * k;
+        precipMax = Math.min(Precip.CAP, starCount(w, h));
+        snowFall = 40f * k;
+        snowDrift = 30f * k;
+        rainFall = 520f * k;
+        rainSlant = 160f * k;
+        windRockBias = 6f * k;
         thrust = 160f * k;
         maxSpeed = 140f * k;
         shipRadius = ShipShape.RADIUS * k;
