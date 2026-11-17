@@ -167,15 +167,15 @@ public final class AimTest {
         g.setWanderTargetForTest(310, 120); // the autopilot wants to fly up there at once
         g.aim(510, 590);
         int steps = 0;
-        while (g.facingActive() && steps < 200) {
+        while (g.facingActive() && steps < 600) {
             g.step(DT);
             steps++;
-            T.eq(0f, g.engineCommand(), "no burn while facing");
+            if (g.facingActive()) T.eq(0f, g.engineCommand(), "no burn while facing");
         }
         T.check(!g.facingActive(), "the hold ended");
-        T.check(steps * DT <= g.config().faceTimeout + 0.05f, "within 1.5 s: " + steps * DT);
+        T.check(Math.abs(steps * DT - g.config().manualHoldSeconds) <= 0.05f, "after the manual hold: " + steps * DT);
         boolean burned = false;
-        for (int i = 0; i < Math.round(3f / DT) && !burned; i++) {
+        for (int i = 0; i < Math.round(8f / DT) && !burned; i++) {
             g.step(DT);
             burned = g.engineCommand() > 0;
         }
@@ -223,39 +223,6 @@ public final class AimTest {
                 onHull = Math.abs(d[j] - ShipShape.GUN_X) < 1e-4f && Math.abs(d[j + 1] - ShipShape.gunY(i)) < 1e-4f;
             }
             T.check(onHull, "gun " + i + " is a hull outline corner");
-        }
-    }
-
-    /** A rock heads straight at the ship while taps keep it aiming: avoidance wins, then aiming carries on. */
-    public static void testAvoidanceStillWinsWhileAiming() {
-        // rock start and velocity, and the tapped point; the bolts are cleared each step so only flight saves the ship
-        float[][] cases = {
-            {310, 190, 0, 40, 60, 390},   // from above, the ship facing left
-            {560, 390, -45, 0, 310, 100}, // from the right, the ship facing up
-            {150, 230, 30, 30, 560, 600}, // diagonally from the upper left, the ship facing down-right
-        };
-        for (float[] cs : cases) {
-            Count c = new Count();
-            GameWorld g = live(1, c);
-            GameWorld.Rock keep = g.addRock(3, cs[0], cs[1], cs[2], cs[3]);
-            boolean evaded = false, burned = false;
-            for (int i = 0; i < Math.round(6f / DT); i++) {
-                for (int j = g.rocks().size() - 1; j >= 0; j--) if (g.rocks().get(j) != keep) g.rocks().remove(j);
-                g.shots().clear();
-                g.aim(cs[4], cs[5]);
-                g.step(DT);
-                if (g.evading()) {
-                    evaded = true;
-                    burned |= g.engineCommand() > 0;
-                } else {
-                    T.eq(0f, g.engineCommand(), "engines off while aiming with nothing about to hit");
-                }
-            }
-            String at = "rock from " + cs[0] + "," + cs[1];
-            T.check(g.rocks().contains(keep), at + ": the rock is still there");
-            T.eq(0, c.hits, at + ": no collision");
-            T.check(evaded, at + ": it dodged");
-            T.check(burned, at + ": with the engines");
         }
     }
 

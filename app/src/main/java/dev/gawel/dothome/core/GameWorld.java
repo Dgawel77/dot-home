@@ -13,9 +13,9 @@ import java.util.List;
  *
  * <p>Tap-to-fire: a tap fires one bolt at once from the next twin gun (they alternate) along the current heading,
  * toed in toward the tap only when the tap lies within 3 degrees of it (the fire cooldown still applies). The tap
- * point also becomes the facing target: the RCS turns the ship to it, engines off unless a rock is about to hit
- * (avoidance wins), and holds the facing until within 3 degrees for 0.4 s or 1.5 s at most; a newer tap replaces it.
- * Auto-fire keeps shooting along the heading on its own cadence while the ship turns toward the nearest rock.
+ * point also becomes the facing target and starts manual mode: until 4 s after the last tap the autopilot is off (no
+ * wander, burns or avoidance), the RCS turns the ship to the tap and holds that facing, and it coasts under a gentle
+ * manual drag. Then the autopilot resumes from the current state with a fresh wander target.
  *
  * <p>Thrusters are reported as per-step events the renderer reads (nozzle thrust levels, RCS firings), kept in
  * fixed arrays so a step allocates nothing for them. Angles are screen angles (y down): a growing angle turns
@@ -82,6 +82,8 @@ public final class GameWorld {
     private float faceClock, faceSettled;
     /** A tap's bolt waiting for the next step (fired along the heading as it is then), and the tap point. */
     private boolean tapFire;
+    /** Seconds of manual mode left (a tap sets it to cfg.manualHoldSeconds); the autopilot stays off while > 0. */
+    private float manualT;
     /** The gun that fires next (ShipShape: 0 port, 1 starboard). */
     private int gun;
     // laser hits of the last step, for the renderer's sparks
@@ -335,6 +337,9 @@ public final class GameWorld {
     /** True while a rock about to hit has the autopilot dodging instead of aiming (tests). */
     boolean evading() { return evading; }
 
+    /** True while a recent tap has the autopilot off: the ship only holds its facing and coasts. */
+    public boolean isManual() { return manualT > 0f; }
+
     /** True while the ship is turning to, or holding, a facing target (tests). */
     boolean facingActive() { return facing; }
 
@@ -374,6 +379,7 @@ public final class GameWorld {
         faceX = x;
         faceY = y;
         setFacing(null);
+        manualT = cfg.manualHoldSeconds;
         tapFire = fireT <= 0;
         return true;
     }
@@ -401,6 +407,18 @@ public final class GameWorld {
                 }
             }
         }
+        if (manualT > 0f) {
+            manualT -= dt;
+            if (manualT <= 0f) { // the autopilot resumes from the current state, with a fresh wander target
+                manualT = 0f;
+                endFacing();
+                wanderT = 0f;
+                return;
+            }
+            if (faceRock != null) faceRock = null;
+            facing = true;
+            return; // holds the tap's facing for the whole of manual mode
+        }
         if (!facing) return;
         if (faceRock != null && !rocks.contains(faceRock)) {
             endFacing();
@@ -423,6 +441,7 @@ public final class GameWorld {
     }
 
     private void clearAim() {
+        manualT = 0f;
         facing = false;
         faceRock = null;
         tapFire = false;
@@ -546,8 +565,9 @@ public final class GameWorld {
         float spinCap = GameConfig.SPIN_CAP * cfg.maxSpin;
         s.spin = clamp(s.spin + angAccel * dt, -spinCap, spinCap);
         float dr = (float) Math.exp(-cfg.drag * dt);
-        s.vx *= dr;
-        s.vy *= dr;
+        float dv = manualT > 0f ? (float) Math.exp(-cfg.manualDrag * dt) : dr;
+        s.vx *= dv;
+        s.vy *= dv;
         s.spin *= dr;
         float sp = hypot(s.vx, s.vy), cap = GameConfig.SPEED_CAP * cfg.maxSpeed;
         if (sp > cap) {
@@ -704,6 +724,21 @@ public final class GameWorld {
     private void pilot(float dt) {
         float k = cfg.k, vmax = cfg.maxSpeed;
         Ship s = ship;
+        if (manualT > 0f) { // manual: RCS only, holding the tap bearing; no wander, burns or avoidance
+            float ae = wrapAngle((float) Math.atan2(faceY - s.y, faceX - s.x) - s.angle);
+            float lim = Math.min(cfg.maxSpin, (float) Math.sqrt(2f * 0.8f * cfg.rcsAccel * Math.abs(ae)));
+            float wd = clamp(4f * ae, -lim, lim);
+            float al = clamp(8f * (wd - s.spin), -cfg.rcsAccel, cfg.rcsAccel);
+            if (Math.abs(ae) < 0.01f && Math.abs(s.spin) < 0.02f) al = 0f;
+            angAccel = al;
+            headingErr = ae;
+            thrustCmd = 0f;
+            burning = pointing = evading = false;
+            holdAngle = s.angle;
+            desVx = s.vx; // so the autopilot takes over without a jerk
+            desVy = s.vy;
+            return;
+        }
         wanderT -= dt;
         if (wanderT <= 0) {
             wanderX = w * (float) rng.range(0.18, 0.82);

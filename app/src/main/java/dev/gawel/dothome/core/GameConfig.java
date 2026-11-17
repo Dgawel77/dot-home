@@ -34,6 +34,10 @@ public final class GameConfig {
     public final float faceCone = (float) Math.toRadians(3), faceHold = 0.4f;
     /** A facing target is dropped after this many seconds at most. */
     public final float faceTimeout = 1.5f;
+    /** Manual mode (after a tap) lasts this long after the last tap, s; the ship only turns to the tap and coasts. */
+    public final float manualHoldSeconds = 4f;
+    /** Linear drag while manual, per second: the ship drifts to a near stop. */
+    public final float manualDrag = 0.6f;
     /**
      * A bolt flies along the heading, toed in toward the tap only when the tap is within this of it, radians
      * (3 degrees): the twin streams then converge on it.
