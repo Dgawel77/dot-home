@@ -571,3 +571,37 @@ return max(min(up, down), next);
   - **Setup switch** "Stars pulse to music (uses the microphone permission)": turning it on requests `RECORD_AUDIO`. A denial turns the switch back off.
 - [ ] **Step 5: Run** `./test.sh` and `./build.sh`. Expected: pass and a clean build.
 - [ ] **Step 6: Commit** with the message `feat(game): stars pulse to the beat (Visualizer bass onsets, opt-in)`.
+
+### Task 13: Nose retro thrusters (user request, 2026-11-16; runs right after Task 1)
+
+Source: `docs/request-retro-thrusters.md` (David's request, relayed by the laptop session). It is binding, and it wins over this summary if they differ.
+
+**Files:**
+- Modify: `core/GameConfig.java` (`retroThrust`, about 0.45 × `thrust`; `RETRO_CONE` 30°), `core/GameWorld.java` (the pilot and the Newtonian step), `core/ShipShape.java` (the two nose retro nozzle positions, if the renderer needs them), `DotRenderer.java` (the retro plumes)
+- Test: `tests/dev/gawel/dothome/core/ShipFlightTest.java`, `tests/dev/gawel/dothome/core/ManualModeTest.java`
+
+**Interfaces:**
+- Produces:
+  - `GameWorld.retroThrust()` → 0..1, the retro level this step (an event the renderer reads, like `nozzleThrust`).
+  - `GameConfig.retroThrust` (px/s²).
+
+**Behaviour:**
+- Two nose retros push the ship opposite its heading at `retroThrust × level`.
+- They fire when the needed acceleration (the velocity error) points within 30° of straight behind the ship, with level = `cos(error)` scaled by the command. They can combine with RCS turning.
+- The main engine still accelerates only forward, inside its 20° window.
+- **Braking never flips,** on the autopilot or in manual mode. The wanted heading while braking stays toward the goal or the direction of travel, and it slows on the retros.
+- Re-size the braking lead (the `flipTime`-based planner) and the arrival slowdown for the retro deceleration, so the ship stops on the point without overshooting. It starts slowing a little earlier.
+- **Unchanged:** RCS turn rates, the drag and zero-g feel, emergency-only avoidance, instant retarget, guns, barrage and waypoints. Large direction changes still turn the ship with RCS.
+- **Visuals:** two small forward plumes from the nose while the retros fire. They are the same dot-plume style as the main and RCS plumes but smaller, L65 fading to L46. They come from the renderer's existing fixed FX pool, never red, and nothing is allocated.
+
+- [ ] **Step 1: Write failing tests.**
+  - `testRetroBrakingNoFlip` (ShipFlightTest): on a clean 300k px trip with no rocks, in manual mode, the heading never strays more than 60° from the bearing to the goal. The final heading at rest is within 30° of the travel direction.
+  - `testArrivesWithRetros` (ManualModeTest): it settles at the waypoint. Measure the time, then pin it with +20% slack.
+  - `testOppositeTapStillReverses` (ManualModeTest): an opposite-direction tap mid-flight still reverses (a turn is expected). Measure the bound, then pin it with slack.
+  - `testAutopilotWanderBrakesWithoutFlip` (ShipFlightTest): a wander leg also brakes without a flip, under the same 60° bound.
+  - `testRetrosDeterministic`: the same seed gives the same trajectory.
+  - Replace `ShipFlightTest.testFlipAndBurnToBrake` and `ManualModeTest.testTapAheadDropsABrakingFlip` with retro equivalents. Each keeps the property it guarded: braking happens, and a newer tap drops the old braking.
+- [ ] **Step 2: Run** `./test.sh`. Expected: the new tests FAIL.
+- [ ] **Step 3: Implement** in the pilot and step, then add the renderer plumes.
+- [ ] **Step 4: Run** `./test.sh` and `./build.sh`. Expected: all pass, and the build is clean.
+- [ ] **Step 5: Commit** with the message `feat(ship): nose retro thrusters, braking without the flip`.
