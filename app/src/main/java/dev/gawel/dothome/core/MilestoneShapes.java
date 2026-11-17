@@ -5,6 +5,8 @@ public final class MilestoneShapes {
     private MilestoneShapes() {}
 
     private static final int STAR_ROWS = 9, STAR_GAP = 3, STARS = 4;
+    /** The lit width of a star: the grid's two outer columns are never lit (the points fall short of +-4.5). */
+    private static final int STAR_LIT_COLS = STAR_ROWS - 2;
 
     /** The shape for a milestone: four six-pointed stars at 500 (the Chicago flag), else the count's digits. */
     public static float[] points(int milestone) {
@@ -29,12 +31,12 @@ public final class MilestoneShapes {
         float c30 = (float) Math.cos(Math.PI / 6), s30 = 0.5f;
         // up triangle: tip (0,-R), base corners (+-R cos30, R/2); down triangle: the mirror in y
         for (int s = 0; s < STARS; s++) {
-            int col0 = s * (STAR_ROWS + STAR_GAP);
+            int col0 = s * (STAR_LIT_COLS + STAR_GAP);
             for (int r = 0; r < STAR_ROWS; r++) {
                 for (int c = 0; c < STAR_ROWS; c++) {
                     float x = c - (STAR_ROWS - 1) / 2f, y = r - (STAR_ROWS - 1) / 2f;
                     if (inTriangle(x, y, half, c30, s30) || inTriangle(x, -y, half, c30, s30)) {
-                        cx[n] = col0 + c;
+                        cx[n] = col0 + c - 1; // column 0 is never lit: lit columns are 1..7
                         cy[n++] = r;
                     }
                 }

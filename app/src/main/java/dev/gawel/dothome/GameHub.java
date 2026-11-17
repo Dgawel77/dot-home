@@ -41,6 +41,9 @@ final class GameHub {
     private Milestones milestones;
     /** The four milestone shapes, built once so a kill allocates nothing. */
     private static final float[][] SHAPES = new float[Milestones.COUNTS.length][];
+    static {
+        for (int i = 0; i < SHAPES.length; i++) SHAPES[i] = MilestoneShapes.points(Milestones.COUNTS[i]);
+    }
     private final SensorTilt tilt;
     private final List<DotWallpaperService.DotEngine> visible = new ArrayList<>();
     private FireMode fireMode;
@@ -146,10 +149,9 @@ final class GameHub {
     private static float[] shape(int milestone) {
         for (int i = 0; i < Milestones.COUNTS.length; i++) {
             if (Milestones.COUNTS[i] != milestone) continue;
-            if (SHAPES[i] == null) SHAPES[i] = MilestoneShapes.points(milestone);
             return SHAPES[i];
         }
-        return MilestoneShapes.points(milestone);
+        return SHAPES[0];
     }
 
     ScoreBook scoreBook() { return scoreBook; }

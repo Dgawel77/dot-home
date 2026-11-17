@@ -32,6 +32,10 @@ public final class MilestonesTest {
         int gaps = 0;
         for (int i = 1; i < n; i++) if (xs[i] - xs[i - 1] > 2 * spacing + 1e-4f) gaps++;
         T.eq(3, gaps, "gaps");
+        for (int i = 1; i < n; i++) {
+            float d = xs[i] - xs[i - 1];
+            if (d > 2 * spacing + 1e-4f) T.near(4 * spacing, d, 1e-4, "3 empty cells between stars");
+        }
         for (int i = 0; i < n; i++) {
             boolean found = false;
             for (int j = 0; j < n && !found; j++) {
@@ -80,6 +84,9 @@ public final class MilestonesTest {
             T.check(Math.abs(p.x - p.tx) <= 1f && Math.abs(p.y - p.ty) <= 1f, "at target");
         }
         run(g, 2.2f); // 2.9 s
+        int held = 0;
+        for (GameWorld.Particle p : ps) if (p.formT >= 0) held++;
+        T.eq(pts.length / 2, held, "held at 2.9 s");
         for (GameWorld.Particle p : ps) {
             if (p.formT < 0) continue;
             T.check(Math.abs(p.x - p.tx) <= 1f && Math.abs(p.y - p.ty) <= 1f, "still held");

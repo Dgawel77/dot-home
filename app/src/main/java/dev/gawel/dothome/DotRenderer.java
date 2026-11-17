@@ -547,7 +547,7 @@ final class DotRenderer {
             float qx = sx(p.x), qy = sy(p.y);
             if (qy < clearTopY) continue;
             float lk = p.life / p.life0;
-            if (p.lit) user.draw(c, qx, qy, rReg, p.alpha);
+            if (p.lit) user.draw(c, qx, qy, rReg, p.formT >= 0f ? p.alpha : p.alpha * lk); // released: fades like debris
             else dot65.draw(c, qx, qy, rReg * (0.45f + 0.55f * lk), p.alpha * lk);
         }
 
