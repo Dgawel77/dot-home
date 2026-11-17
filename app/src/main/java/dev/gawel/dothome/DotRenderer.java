@@ -12,7 +12,10 @@ import dev.gawel.dothome.core.DotStyle;
 import dev.gawel.dothome.core.GameConfig;
 import dev.gawel.dothome.core.GameWorld;
 import dev.gawel.dothome.core.Lattice;
+import dev.gawel.dothome.core.MoonFace;
 import dev.gawel.dothome.core.MoonPhase;
+import dev.gawel.dothome.core.MoonSky;
+import dev.gawel.dothome.core.MoonTrack;
 import dev.gawel.dothome.core.LatticeRaster;
 import dev.gawel.dothome.core.ChargeStream;
 import dev.gawel.dothome.core.Precip;
@@ -32,8 +35,8 @@ import dev.gawel.dothome.core.Zones;
  * little (drawing only: the simulation never moves).
  * Laser bolts, the muzzle flash and hit sparks are the one colour, DotStyle.LASER.
  * Dots draw across the whole screen.
- * Only the ship, its opening dot and the plumes reach L100; on a lock still every grey stays at L65 or below and
- * the red is dimmed to 65%. Nothing is allocated per frame: plume, puff and spark dots live in fixed pools.
+ * Only the ship, its opening dot, the plumes and the moon's craters reach L100; on a lock still every grey stays at
+ * L65 or below and the red is dimmed to 65%. Nothing is allocated per frame: plume, puff and spark dots live in fixed pools.
  *
  * <p>Sizes: positions and lengths are world px (mockup px x k); dot diameters and stroke widths are mockup px on
  * the lattice (4 mockup px = one 4 dp step, so 3.4 is heavy weight).
@@ -94,6 +97,7 @@ final class DotRenderer {
     private static final float PRECIP_ALPHA = 0.9f;
     private final SoftDot dot65 = new SoftDot(DotStyle.L65);
     private final SoftDot dot46 = new SoftDot(DotStyle.L46);
+    private final SoftDot dot30 = new SoftDot(DotStyle.L30);
     private final SoftDot dot10 = new SoftDot(DotStyle.L10);
     private final Paint lattice = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -157,6 +161,8 @@ final class DotRenderer {
     /** Screen y above which (stills only) rock, particle, shot, ship and ring dots are skipped; negative draws everything. */
     private float clearTopY = -1;
     private float clearBottomY = Float.MAX_VALUE;
+    /** This frame's moon (set by placeMoon): centre in world px, alpha, phase and limb angle. */
+    private float moonCx, moonCy, moonA, moonPhase, moonLimb;
 
     DotRenderer(Context context) {
         res = context.getResources();
@@ -171,6 +177,7 @@ final class DotRenderer {
         metrics();
         dot65.prewarm(rReg);
         dot10.prewarm(rLight);
+        dot30.prewarm(rLight);
         dot100.prewarm(rHeavy);
     }
 
@@ -473,25 +480,78 @@ final class DotRenderer {
     }
 
     /**
-     * The night moon: light dots on the 4 dp lattice within the moon's radius, lit cells L65 and unlit L10 (both
-     * within the still cap). It fades out as the day comes and is not drawn when the sun times are unknown.
+     * Places this frame's moon: where it really stands in the sky when the track is known (fading in over its first
+     * 2 degrees and halving by day), else in the fixed corner by night, lit on the right waxing and the left waning.
+     */
+    private void placeMoon(GameWorld w, float fog, float fade) {
+        long now = System.currentTimeMillis();
+        moonPhase = MoonPhase.phase(now);
+        MoonTrack tr = w.moonTrack();
+        if (tr.valid()) {
+            float alt = tr.alt(now);
+            moonCx = MoonSky.screenX(tr.az(now), w.width());
+            moonCy = MoonSky.screenY(alt, w.width(), w.height());
+            moonA = MoonSky.alpha(alt, MoonSky.dayFactor(w.dayness(), w.sunAltitude())) * fog * fade;
+            moonLimb = tr.limb(now);
+        } else {
+            moonCx = GameConfig.moonCentreX(w.width(), w.height());
+            moonCy = GameConfig.moonCentreY(w.height());
+            moonA = moonAlpha(w, fog, fade);
+            moonLimb = moonPhase < 0.5f ? 0f : (float) Math.PI;
+        }
+    }
+
+    /**
+     * The moon (placed by placeMoon): dots on the 4 dp lattice, shadow L10, lit L65, seas L30, craters L100
+     * (L65 on stills), and a sparse L10 halo ring that shimmers (held at a constant on stills). The glinting crater
+     * flares like a star's glint.
      */
     private void drawMoon(Canvas c, GameWorld w, GameConfig cfg, float alpha) {
         if (alpha <= 0f) return;
         float rad = cfg.moonRadiusDp * density;
-        float cx = GameConfig.moonCentreX(w.width(), w.height()), cy = GameConfig.moonCentreY(w.height());
-        float phase = MoonPhase.phase(System.currentTimeMillis());
-        int n = (int) Math.ceil(rad / step) + 1;
+        float cx = moonCx, cy = moonCy, t = w.time();
+        int n = (int) Math.ceil(GameConfig.MOON_STAR_CLEAR * rad / step) + 1;
         float ox = Lattice.snap(cx, density), oy = Lattice.snap(cy, density);
+        // the glint sits on the lattice dot nearest the glinting crater's centre (none on stills)
+        int gc = still ? -1 : w.moonGlintCrater(), gi = Integer.MIN_VALUE, gj = Integer.MIN_VALUE;
+        if (gc >= 0) {
+            gi = Math.round((cx + MoonFace.craterX(gc) * rad - ox) / step);
+            gj = Math.round((cy + MoonFace.craterY(gc) * rad - oy) / step);
+        }
+        SoftDot rim = still ? dot65 : dot100;
         for (int j = -n; j <= n; j++) {
             for (int i = -n; i <= n; i++) {
                 float px = ox + i * step, py = oy + j * step;
-                float ux = (px - cx) / rad, uy = (py - cy) / rad;
-                int cell = MoonPhase.cell(ux, uy, phase);
-                if (cell == 0) continue;
+                float ux = (px - cx) / rad, uy = (py - cy) / rad, r2 = ux * ux + uy * uy;
+                int cell = r2 <= 1f ? MoonFace.cell(ux, uy, moonPhase, moonLimb)
+                        : MoonFace.haloCell(i, j, (float) Math.sqrt(r2));
+                if (cell == MoonFace.OUTSIDE) continue;
                 float qx = sx(px), qy = sy(py);
                 if (qy < clearTopY || qy > clearBottomY) continue;
-                (cell == 2 ? dot65 : dot10).draw(c, qx, qy, rLight, alpha);
+                switch (cell) {
+                    case MoonFace.LIT: dot65.draw(c, qx, qy, rLight, alpha); break;
+                    case MoonFace.SEA: dot30.draw(c, qx, qy, rLight, alpha); break;
+                    case MoonFace.CRATER:
+                        if (i == gi && j == gj) {
+                            // as a star's glint: a flare to full alpha with four small dots a step out
+                            float g = w.moonGlint() / GameWorld.GLINT_SECONDS, e = (float) Math.sin(Math.PI * (1f - g));
+                            for (int q = 0; q < 4; q++) {
+                                float dx = GLINT_DX[q] * step * vsx, dy = GLINT_DY[q] * step * vsy;
+                                dot65.draw(c, qx + dx, qy + dy, rLight * 0.7f, e * g * alpha);
+                            }
+                            rim.draw(c, qx, qy, rLight, alpha + (1f - alpha) * e);
+                        } else {
+                            rim.draw(c, qx, qy, rLight, alpha);
+                        }
+                        break;
+                    case MoonFace.HALO:
+                        float shimmer = still ? GameConfig.MOON_HALO_STILL : GameConfig.MOON_HALO_BASE
+                                + (1f - GameConfig.MOON_HALO_BASE) * (0.5f + 0.5f
+                                * (float) Math.sin(TAU * t / MoonFace.haloPeriod(i, j) + MoonFace.haloPhase(i, j)));
+                        dot10.draw(c, qx, qy, rLight, alpha * shimmer);
+                        break;
+                    default: dot10.draw(c, qx, qy, rLight, alpha); break; // SHADOW
+                }
             }
         }
     }
@@ -513,9 +573,8 @@ final class DotRenderer {
         // by day fewer, dimmer stars (the sun's real times); unknown counts as night
         float day = w.dayness();
         if (day != day) day = 0f;
-        float moonA = moonAlpha(w, fog, fade);
-        float moonCx = GameConfig.moonCentreX(w.width(), w.height()), moonCy = GameConfig.moonCentreY(w.height());
-        float moonR = cfg.moonRadiusDp * density + step, moonR2 = moonR * moonR;
+        placeMoon(w, fog, fade);
+        float moonR = GameConfig.MOON_STAR_CLEAR * cfg.moonRadiusDp * density + step, moonR2 = moonR * moonR;
         int starsShown = Math.round(stars.size() * (1f + (cfg.dayStarCount - 1f) * day));
         float dayDim = 1f + (cfg.dayStarBright - 1f) * day;
         for (int i = 0; i < starsShown && i < stars.size(); i++) {

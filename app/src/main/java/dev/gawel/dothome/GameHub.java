@@ -20,7 +20,9 @@ import dev.gawel.dothome.core.GameWorld;
 import dev.gawel.dothome.core.IntroGate;
 import dev.gawel.dothome.core.MilestoneShapes;
 import dev.gawel.dothome.core.Milestones;
+import dev.gawel.dothome.core.MoonSky;
 import dev.gawel.dothome.core.NowPlaying;
+import dev.gawel.dothome.core.Place;
 import dev.gawel.dothome.core.Rng;
 import dev.gawel.dothome.core.Sky;
 import dev.gawel.dothome.core.Weather;
@@ -64,6 +66,12 @@ final class GameHub {
     private long sunriseMs, sunsetMs;
     /** The fetchedAtMs of the weather the game currently shows (0 = none); a newer fetch is re-applied at once. */
     private long appliedFetchedAtMs;
+    /** The moon's track is re-sampled this often, from the place cached with the weather (null: no place yet). */
+    private static final long MOON_REFRESH_MS = 60L * 1000;
+    private Place place;
+    private long moonAtMs;
+    private final double[] moonNow = new double[2], moonNext = new double[2];
+    private final double[] sunNow = new double[2], sunNext = new double[2];
 
     private static final String TAG = "GameHub";
     private boolean batteryOn;
@@ -207,7 +215,29 @@ final class GameHub {
             refreshWeatherFx(nowMs);
         }
         world.setDayness(Sky.dayness(nowMs, sunriseMs, sunsetMs));
+        if (nowMs - moonAtMs >= MOON_REFRESH_MS) updateMoon(nowMs);
         updateBeat();
+    }
+
+    /** Samples the moon and sun now and a minute on for the renderer's track; clears it without a place. */
+    private void updateMoon(long nowMs) {
+        moonAtMs = nowMs;
+        Place p = place;
+        if (p == null) {
+            world.moonTrack().clear();
+            world.setSunAltitude(Double.NaN);
+            return;
+        }
+        long next = nowMs + MOON_REFRESH_MS;
+        MoonSky.moon(nowMs, p.lat, p.lon, moonNow);
+        MoonSky.sun(nowMs, p.lat, p.lon, sunNow);
+        MoonSky.moon(next, p.lat, p.lon, moonNext);
+        MoonSky.sun(next, p.lat, p.lon, sunNext);
+        world.moonTrack().set(nowMs, (float) moonNow[1], (float) moonNow[0],
+                MoonSky.limbAngle(moonNow[1], moonNow[0], sunNow[1], sunNow[0]),
+                next, (float) moonNext[1], (float) moonNext[0],
+                MoonSky.limbAngle(moonNext[1], moonNext[0], sunNext[1], sunNext[0]));
+        world.setSunAltitude(sunNow[0]);
     }
 
     /** Capture runs only while the pref is on, the permission is granted, something shows and music plays. */
@@ -223,7 +253,7 @@ final class GameHub {
     /** The current beat pulse, 0..1 (0 when not capturing). */
     float beatLevel(long nowMs) { return beat.level(nowMs); }
 
-    /** Recomputes the game's weather from the cache (it allocates, so only on a refresh, never per frame). */
+    /** Recomputes the game's weather and re-reads the place from the cache (it allocates, so only on a refresh, never per frame). */
     private void refreshWeatherFx(long nowMs) {
         weatherFxAtMs = nowMs;
         Weather wx = WeatherRepo.cached(appContext);
@@ -232,6 +262,8 @@ final class GameHub {
         sunriseMs = wx == null ? 0 : wx.sunriseMs;
         sunsetMs = wx == null ? 0 : wx.sunsetMs;
         world.setDayness(Sky.dayness(nowMs, sunriseMs, sunsetMs));
+        place = LocationSource.cached(appContext);
+        updateMoon(nowMs);
     }
 
     /** Restarts (recalibrates) tilt with the active engine's current rotation. */

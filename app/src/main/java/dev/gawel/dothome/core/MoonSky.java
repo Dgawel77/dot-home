@@ -171,4 +171,19 @@ public final class MoonSky {
         double k = Math.max(0, Math.min(1, altDeg / 75));
         return (float) (bottom + (top - bottom) * k);
     }
+
+    /**
+     * How much day it is for the moon, 0 night .. 1 day: the sun-times dayness when known, else the sun's altitude
+     * ramped over -6..+6 degrees; 0 when neither is known.
+     */
+    public static float dayFactor(float dayness, double sunAltDeg) {
+        if (dayness == dayness) return dayness;
+        if (sunAltDeg != sunAltDeg) return 0f; // nothing known: night, like the stars
+        return (float) Math.max(0, Math.min(1, (sunAltDeg + 6) / 12));
+    }
+
+    /** The moon's alpha: it fades in over its first 2 degrees above the horizon and halves by full day. */
+    public static float alpha(double moonAltDeg, float day) {
+        return (float) Math.max(0, Math.min(1, moonAltDeg / 2)) * (1f - 0.5f * day);
+    }
 }

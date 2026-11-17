@@ -92,6 +92,13 @@ public final class GameConfig {
     /** The night moon's radius, dp (a 40 dp disc). */
     public final float moonRadiusDp = 20f;
 
+    /** A crater glint on the moon every this many seconds (fx stream). */
+    public static final float MOON_GLINT_MIN_GAP = 8f, MOON_GLINT_MAX_GAP = 15f;
+    /** Stars are kept out of this many moon radii (plus a lattice step): the halo ring's outer edge. */
+    public static final float MOON_STAR_CLEAR = 1.35f;
+    /** Halo dots shimmer between HALO_BASE and 1 of their alpha; lock stills hold them at HALO_STILL. */
+    public static final float MOON_HALO_BASE = 0.35f, MOON_HALO_STILL = 0.6f;
+
     /** The moon's centre in px: clear of the widget zones, a little further in on the cover screen. */
     public static float[] moonCentre(float w, float h) {
         return new float[] {moonCentreX(w, h), moonCentreY(h)};

@@ -150,6 +150,12 @@ public final class GameWorld {
     private float meteorT = -1f, meteorX0, meteorY0, meteorDist;
     private float glintT = -1f;
     private Star glintStar;
+    /** The moon's sky track (fed by the hub once a minute) and the sun's altitude then, deg (NaN unknown). */
+    private final MoonTrack moonTrack = new MoonTrack();
+    private double sunAltitude = Double.NaN;
+    /** The moon's crater glint: seconds to the next, seconds left of the current one and its crater (-1 none). */
+    private float moonGlintT = -1f, moonGlint;
+    private int moonGlintCrater = -1;
     private int glints, meteors;
     private Listener listener;
     private float tiltX, tiltY, fireT, spawnT = 2f, autoT;
@@ -276,6 +282,16 @@ public final class GameWorld {
     int glintCount() { return glints; }
 
     int meteorCount() { return meteors; }
+
+    /** Where the moon stands in the sky; invalid when there is no place to compute it for. */
+    public MoonTrack moonTrack() { return moonTrack; }
+    /** The sun's altitude, deg, when the moon track was last fed (NaN unknown). */
+    public void setSunAltitude(double deg) { sunAltitude = deg; }
+    public double sunAltitude() { return sunAltitude; }
+    /** The moon crater glinting now (0..MoonFace.CRATERS-1), or -1 when none. */
+    public int moonGlintCrater() { return moonGlintCrater; }
+    /** Seconds left of the crater glint, 0..GLINT_SECONDS (0 when none). */
+    public float moonGlint() { return moonGlint; }
     public GameConfig config() { return cfg; }
     public float time() { return time; }
     /** Seconds since the intro started; at or past GameConfig.INTRO_SECONDS the intro is over. */
@@ -701,7 +717,7 @@ public final class GameWorld {
         return r;
     }
 
-    /** Glints (a star every 3-6 s) and the shooting star (every 20-60 s once live, one at a time). */
+    /** Glints (a star every 3-6 s, a moon crater every 8-15 s) and the shooting star (every 20-60 s once live, one at a time). */
     private void stepStars(float dt, boolean live) {
         if (glintStar != null) {
             glintStar.glint = Math.max(0f, glintStar.glint - dt);
@@ -715,6 +731,17 @@ public final class GameWorld {
             glintStar.glint = GLINT_SECONDS;
             glints++;
             glintT = (float) fx.range(3, 6);
+        }
+        if (moonGlint > 0f) {
+            moonGlint = Math.max(0f, moonGlint - dt);
+            if (moonGlint == 0f) moonGlintCrater = -1;
+        }
+        if (moonGlintT < 0f) moonGlintT = (float) fx.range(GameConfig.MOON_GLINT_MIN_GAP, GameConfig.MOON_GLINT_MAX_GAP);
+        moonGlintT -= dt;
+        if (moonGlintT <= 0f) {
+            moonGlintCrater = fx.nextInt(MoonFace.CRATERS);
+            moonGlint = GLINT_SECONDS;
+            moonGlintT = (float) fx.range(GameConfig.MOON_GLINT_MIN_GAP, GameConfig.MOON_GLINT_MAX_GAP);
         }
         if (meteor.active) {
             meteor.t += dt;
