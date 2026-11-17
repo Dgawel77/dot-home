@@ -5,7 +5,9 @@
     <string name="nws_contact">personal hobby app</string>
     <string name="widget_clock_desc">Dot-matrix clock and weather</string>
     <string name="widget_weather_desc">Weather</string>
-    <string name="widget_music_desc">Now playing</string>
+    <string name="widget_music_desc">Now playing · hidden when nothing is playing</string>
+    <string name="widget_music_label">Dot Music</string>
+    <string name="widget_clock_label">Dot Clock</string>
     <string name="widget_radar_label">Dot Radar</string>
     <string name="widget_radar_desc">Weather radar in dots, centred on you</string>
     <string name="radar_toggle_desc">Switch the radar between local and region</string>

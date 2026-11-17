@@ -6,6 +6,7 @@
     android:targetCellHeight="2"
     android:resizeMode="horizontal|vertical"
     android:updatePeriodMillis="1800000"
+    android:previewImage="@drawable/preview_clock"
     android:widgetCategory="home_screen"
     android:initialLayout="@layout/widget_clock"
     android:description="@string/widget_clock_desc" />
