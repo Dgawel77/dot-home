@@ -36,6 +36,8 @@ public final class GameConfig {
     public final float faceTimeout = 1.5f;
     /** Manual mode (after a tap) lasts this long after the last tap, s; the ship flies to the tap point. */
     public final float manualHoldSeconds = 4f;
+    /** Manual mode also lasts this long after the ship arrives at the waypoint, s, and ends this long after the tap at most. */
+    public final float manualArrivedSeconds = 2f, manualMaxSeconds = 12f;
     /**
      * A bolt flies along the heading, toed in toward the tap only when the tap is within this of it, radians
      * (3 degrees): the streams then converge on it.

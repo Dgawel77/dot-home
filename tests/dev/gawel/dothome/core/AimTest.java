@@ -228,7 +228,8 @@ public final class AimTest {
     public static void testManualEndsAndAutopilotResumes() {
         GameWorld g = live(1, null);
         g.setWanderTargetForTest(310, 120); // the autopilot wants to fly up there at once
-        g.aim(510, 590);
+        g.ship().vx = g.ship().vy = 0f;
+        g.aim(g.ship().x, g.ship().y); // already there: arrives at once, so the 4 s from the tap decide
         T.eq(false, g.facingActive(), "a tap is a waypoint, not a facing hold");
         int steps = 0;
         while (g.isManual() && steps < 600) {

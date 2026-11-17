@@ -209,7 +209,8 @@ public final class BarrageTest {
 
         GameWorld h = live(3, null);
         h.setWanderTargetForTest(100, 300);
-        h.aim(500, 600);
+        h.ship().vx = h.ship().vy = 0f;
+        h.aim(h.ship().x, h.ship().y); // already there: it arrives at once, so the 4 s from the tap decide
         for (int i = 0; i < Math.round(3f / DT); i++) h.step(DT);
         T.eq(true, h.barrage(), "a shake 3 s after the tap");
         while (h.isBarrage()) h.step(DT);

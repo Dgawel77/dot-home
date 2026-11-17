@@ -17,7 +17,7 @@ import java.util.List;
  *
  * <p>Tap-to-fly: a tap fires one bolt at once from the next gun along the current heading, toed in toward the tap
  * only when the tap lies within 3 degrees of it (the fire cooldown still applies). The tap point also becomes the
- * waypoint and starts manual mode, until 4 s after the last tap: the same flight computer flies the ship to the
+ * waypoint and starts manual mode, until the later of 4 s after the last tap and 2 s after arrival (12 s cap): the same flight computer flies the ship to the
  * waypoint instead of a wander target (up to 1.25x the cruise speed, slowing within 120k px of it), still dodging
  * rocks, and once there holds station facing the way it came. A newer tap retargets at once. Then the autopilot
  * resumes from the current state with a fresh wander target.
@@ -97,8 +97,10 @@ public final class GameWorld {
     private float faceClock, faceSettled;
     /** A tap's bolt waiting for the next step (fired along the heading as it is then), and the tap point. */
     private boolean tapFire;
-    /** Seconds of manual mode left (a tap sets it to cfg.manualHoldSeconds); the ship flies to the waypoint while > 0. */
+    /** Manual mode is on while > 0 (a tap sets it); the ship flies to the waypoint. See manualAge and arrivedAge. */
     private float manualT;
+    /** Seconds since the last tap, and since the ship arrived at the waypoint (-1 until it has). */
+    private float manualAge, arrivedAge = -1f;
     /** The gun that fires next: the four take turns in ShipShape's order (nose port, wing starboard, nose starboard, wing port). */
     private int gun;
     /** Seconds since each gun last fired (capped at GUN_IDLE): the renderer's recoil and hull kick phase. */
@@ -438,6 +440,8 @@ public final class GameWorld {
         arrived = false;
         endFacing();
         manualT = cfg.manualHoldSeconds;
+        manualAge = 0f;
+        arrivedAge = -1f;
         tapFire = fireT <= 0;
         return true;
     }
@@ -655,7 +659,11 @@ public final class GameWorld {
         if (spinning) barrageT += dt;
         Ship s = ship;
         if (live && manualT > 0f) { // manual mode's clock runs through a barrage too
-            manualT -= dt;
+            manualAge += dt;
+            if (arrived) arrivedAge = arrivedAge < 0f ? 0f : arrivedAge + dt;
+            else arrivedAge = -1f;
+            boolean held = manualAge < cfg.manualHoldSeconds || (arrivedAge >= 0f && arrivedAge < cfg.manualArrivedSeconds);
+            if (manualAge >= cfg.manualMaxSeconds || !held && arrivedAge >= 0f) manualT = 0f;
             if (manualT <= 0f) { // the autopilot resumes from the current state, with a fresh wander target
                 manualT = 0f;
                 arrived = false;

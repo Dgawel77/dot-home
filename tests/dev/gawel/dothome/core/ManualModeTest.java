@@ -3,7 +3,7 @@ package dev.gawel.dothome.core;
 import dev.gawel.dothome.test.T;
 
 /**
- * A tap is a waypoint: until 4 s after the last tap the flight computer flies the ship there (Newtonian, flip and
+ * A tap is a waypoint: until the later of 4 s after the last tap and 2 s after it arrives (12 s cap) the flight computer flies the ship there (Newtonian, flip and
  * burn, still dodging rocks) and holds station once it arrives; then the autopilot wanders again.
  */
 public final class ManualModeTest {
@@ -51,8 +51,7 @@ public final class ManualModeTest {
             T.near(400, dist(g, tx, ty), 8, "400 px away");
             g.aim(tx, ty);
             float mark = dist(g, tx, ty), reached = -1;
-            for (int i = 1; i <= Math.round(6f / DT); i++) {
-                if (i == Math.round(3f / DT)) g.aim(tx, ty); // the user taps it again on the way: manual for 4 s more
+            for (int i = 1; i <= Math.round(5.5f / DT); i++) {
                 g.step(DT);
                 g.shots().clear();
                 float d = dist(g, tx, ty);
@@ -62,8 +61,8 @@ public final class ManualModeTest {
                 }
                 if (reached < 0 && d < 60 && speed(g.ship()) < slow) reached = i * DT;
             }
-            T.check(reached > 0, f[0] + "," + f[1] + ": within 60 px and slow within 6 s");
-            T.check(dist(g, tx, ty) < 60 && speed(g.ship()) < slow, "holding there at 6 s: " + dist(g, tx, ty) + " px, "
+            T.check(reached > 0, f[0] + "," + f[1] + ": within 60 px and slow within 5.5 s");
+            T.check(dist(g, tx, ty) < 60 && speed(g.ship()) < slow, "holding there at 5.5 s: " + dist(g, tx, ty) + " px, "
                 + speed(g.ship()) + " px/s");
             T.check(g.arrived(), "arrived");
             T.check(g.isManual(), "still manual");
@@ -78,7 +77,6 @@ public final class ManualModeTest {
             g.aim(tx, ty);
             float best = 1e9f, worst = 0;
             for (int i = 1; i <= Math.round(7f / DT); i++) {
-                if (i % Math.round(3f / DT) == 0) g.aim(tx, ty);
                 g.step(DT);
                 g.shots().clear();
                 float d = dist(g, tx, ty);
@@ -118,7 +116,6 @@ public final class ManualModeTest {
             g.aim(tx, ty);
             float reached = -1, clearance = 1e9f;
             for (int i = 1; i <= Math.round(7f / DT); i++) {
-                if (i % Math.round(3f / DT) == 0) g.aim(tx, ty);
                 g.step(DT);
                 g.shots().clear(); // only the dodge is under test, not the guns
                 for (int j = g.rocks().size() - 1; j >= 0; j--) if (g.rocks().get(j) != keep) g.rocks().remove(j);
@@ -171,19 +168,27 @@ public final class ManualModeTest {
         }
     }
 
-    public static void testAutopilotResumesFourSecondsAfterTheLastTap() {
+    public static void testSingleTapSettlesInManualThenAutopilotResumesTwoSecondsAfterArrival() {
         GameWorld g = live(7);
+        place(g, 110, 560);
         g.setWanderTargetForTest(310, 300);
-        g.aim(510, 590);
-        for (int i = 0; i < Math.round(2f / DT); i++) g.step(DT);
-        g.aim(100, 200);
+        g.aim(510, 560);
+        float arrivedAt = -1;
         int steps = 0;
         while (g.isManual() && steps < 1000) {
             T.eq(310f, g.wanderTargetX(), "no wandering in manual mode");
             g.step(DT);
+            g.shots().clear();
             steps++;
+            if (arrivedAt < 0 && g.arrived()) {
+                arrivedAt = steps * DT;
+                T.check(dist(g, 510, 560) < GameWorld.ARRIVE_NEAR, "arrived within the radius: " + dist(g, 510, 560));
+                T.check(g.isManual(), "still manual on arrival");
+            }
         }
-        T.near(4, steps * DT, 0.05, "manual until 4 s after the last tap");
+        T.check(arrivedAt > 3f, "a 400 px trip takes a while: " + arrivedAt);
+        T.near(arrivedAt + 2, steps * DT, 0.05, "manual until 2 s after arrival");
+        T.check(steps * DT > 4f, "later than 4 s");
         g.step(DT);
         T.check(g.wanderTargetX() != 310f || g.wanderTargetY() != 300f, "a fresh wander target");
         float vx = g.ship().vx, vy = g.ship().vy;
@@ -192,17 +197,34 @@ public final class ManualModeTest {
         boolean burned = false;
         for (int i = 0; i < Math.round(10f / DT) && !burned; i++) {
             g.step(DT);
+            g.shots().clear();
             burned = g.engineCommand() > 0;
         }
         T.check(burned, "the autopilot flies on");
     }
 
-    public static void testSecondTapExtendsToSevenSeconds() {
+    public static void testManualModeIsCappedAtTwelveSecondsWhenTheWaypointIsUnreachable() {
+        GameWorld g = live(8);
+        place(g, 110, 560);
+        g.aim(510, 560);
+        int steps = 0;
+        while (g.isManual() && steps < 2000) {
+            place(g, 110, 560); // held back: it can never get there
+            g.step(DT);
+            g.shots().clear();
+            steps++;
+        }
+        T.check(!g.arrived(), "never arrived");
+        T.near(12, steps * DT, 0.05, "released at the 12 s cap");
+    }
+
+    public static void testSecondTapExtendsManualMode() {
         GameWorld g = live(6);
-        g.aim(510, 590);
+        place(g, 310, 600);
+        g.aim(310, 570);
         for (int i = 0; i < Math.round(3f / DT); i++) g.step(DT);
         T.check(g.isManual(), "manual at 3 s");
-        g.aim(100, 200);
+        g.aim(310, 580);
         for (int i = 0; i < Math.round(3.8f / DT); i++) g.step(DT);
         T.check(g.isManual(), "manual at 6.8 s");
         for (int i = 0; i < Math.round(0.4f / DT); i++) g.step(DT);
