@@ -76,6 +76,9 @@ final class GameHub {
     /** The renderer that receives parallax updates. */
     void setRenderer(DotRenderer r) { renderer = r; }
 
+    /** The wallpaper's renderer (it holds the live plumes and sparks), or null before any engine was created. */
+    DotRenderer renderer() { return renderer; }
+
     GameWorld world() { return world; }
 
     ScoreBook scoreBook() { return scoreBook; }

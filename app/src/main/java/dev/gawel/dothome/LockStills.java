@@ -26,8 +26,9 @@ import java.util.List;
 import dev.gawel.dothome.core.GameWorld;
 
 /**
- * Exports black-and-white stills of the current world, one per built-in display, for use as lock wallpapers.
- * The renderer caps every level at L65 for stills (the ship and shots too) and draws the scene with its intro over.
+ * Exports stills of the current world, one per built-in display, for use as lock wallpapers. The renderer caps
+ * every grey at L65 for stills (the ship and its plumes too), dims any laser red on screen to 65%, and draws the
+ * scene with its intro over.
  */
 final class LockStills {
     private static final String TAG = "DotHome";
@@ -47,17 +48,23 @@ final class LockStills {
         try {
             DisplayManager dm = (DisplayManager) app.getSystemService(Context.DISPLAY_SERVICE);
             Display[] displays = dm.getDisplays();
-            GameWorld world = GameHub.get(app).world();
+            GameHub hub = GameHub.get(app);
+            GameWorld world = hub.world();
+            // the wallpaper's own renderer holds the plumes and sparks of the moment; both run on the main thread
+            DotRenderer renderer = hub.renderer();
+            if (renderer == null) renderer = new DotRenderer(app);
+            renderer.setOutlineRocks(new PrefsStore(app).outlineRocks()); // the same rock style as the wallpaper
             if (!(world.width() > 0 && world.height() > 0)) {
                 Display def = dm.getDisplay(Display.DEFAULT_DISPLAY);
                 if (def == null && displays.length > 0) def = displays[0];
                 Point p = realSize(def);
                 world.resize(p.x, p.y);
-                // never ran: play the intro and let rocks exist (simulation only, nothing is drawn here)
-                for (int i = 0; i < 150; i++) world.step(1f / 60f);
+                // never ran: play the intro and let rocks exist and the ship fly (nothing is drawn here)
+                for (int i = 0; i < 150; i++) {
+                    world.step(1f / 60f);
+                    renderer.advance(world, 1f / 60f);
+                }
             }
-            DotRenderer renderer = new DotRenderer(app);
-            renderer.setOutlineRocks(new PrefsStore(app).outlineRocks()); // the same rock style as the wallpaper
             for (Display d : displays) {
                 if ((d.getFlags() & Display.FLAG_PRESENTATION) != 0) continue; // not a built-in screen
                 Point p = realSize(d);
