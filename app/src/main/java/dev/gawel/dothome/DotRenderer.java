@@ -50,8 +50,11 @@ final class DotRenderer {
     private static final float BOLT_LEN = 15f, BOLT_THICK = 3f, SPARK_THICK = 1.6f;
     /** Lock stills dim the laser red to this. */
     private static final float STILL_RED = 0.65f;
-    /** Breath tempo: the star twinkle period in seconds. */
-    private static final float TWINKLE_PERIOD = 4f;
+    /** A bright star is this much bigger; a glint's cross dots sit one lattice step out. */
+    private static final float BRIGHT_SCALE = 1.5f;
+    /** The shooting star: trailing dots and the gap between them in mockup px. */
+    private static final int METEOR_TAIL = 10;
+    private static final float METEOR_GAP = 9f;
     /** Size shows depth: stars at or above NEAR_DEPTH are NEAR_SCALE times bigger. */
     private static final float NEAR_DEPTH = 0.6f, NEAR_SCALE = 1.5f;
     /** Intro timeline as shares of the intro: the scene gathers from SCENE_FROM, the opening dot hands over to the ship from HANDOFF_FROM. */
@@ -393,9 +396,32 @@ final class DotRenderer {
                 y = wrap(y + parY * st.depth * 28f * k, w.height());
             }
             float qx = sx(x), qy = sy(y);
-            float twinkle = 0.65f + 0.35f * (float) Math.sin(TAU * t / TWINKLE_PERIOD + st.phase);
+            float twinkle = 0.35f + 0.65f * (0.5f + 0.5f * (float) Math.sin(TAU * t / st.period + st.phase));
             float r = st.depth >= NEAR_DEPTH ? rLight * NEAR_SCALE : rLight;
-            dot65.draw(c, qx, qy, r, st.alpha * twinkle * fade);
+            if (st.bright) r = rLight * BRIGHT_SCALE;
+            float a = st.alpha * twinkle;
+            SoftDot sd = st.bright ? user : dot65;
+            if (!still && st.glint > 0f) {
+                // a glint flares up to full alpha at L100 and fades, with four small dots a step out
+                float g = st.glint / GameWorld.GLINT_SECONDS, e = (float) Math.sin(Math.PI * (1f - g));
+                a = a + (1f - a) * e;
+                sd = user;
+                float cr = rLight * 0.7f, cs = step;
+                float[] cx = {cs, -cs, 0, 0}, cy = {0, 0, cs, -cs};
+                for (int q = 0; q < 4; q++) dot65.draw(c, qx + cx[q], qy + cy[q], cr, e * g * fade);
+            }
+            sd.draw(c, qx, qy, r, a * fade);
+        }
+
+        GameWorld.Meteor m = still ? null : w.meteor();
+        if (m != null) {
+            // head at L100, regular weight; the tail trails behind and fades in alpha and size to nothing
+            user.draw(c, sx(m.x), sy(m.y), rReg, m.alpha);
+            for (int q = 1; q <= METEOR_TAIL; q++) {
+                float f = 1f - (float) q / (METEOR_TAIL + 1);
+                float d = q * METEOR_GAP * k;
+                user.draw(c, sx(m.x - m.dx * d), sy(m.y - m.dy * d), rReg * f, m.alpha * f);
+            }
         }
 
         List<GameWorld.Rock> rocks = w.rocks();

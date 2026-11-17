@@ -44,7 +44,17 @@ public final class GameWorld {
     public static final class Flash { public float x, y, angle, t; }
     public static final class Particle { public float x, y, vx, vy, life, life0, alpha; }
     public static final class Ring { public float x, y, t; }
-    public static final class Star { public float x, y, alpha, phase, speed, depth; }
+    public static final class Star {
+        public float x, y, alpha, phase, speed, depth;
+        /** Twinkle period in seconds: 2 or 4. */
+        public float period = 4f;
+        /** About one star in ten is bright: drawn up to L100 and 1.5x bigger. */
+        public boolean bright;
+        /** Seconds left of a glint (a brief flare with four cross dots), 0 when none. */
+        public float glint;
+    }
+    /** The shooting star: head position, unit direction, trail length, time and the end-fade envelope. */
+    public static final class Meteor { public float x, y, dx, dy, t, alpha; public boolean active; }
     public static final class Shockwave { public float x, y, radius, maxRadius, t; }
 
     private static final float TAU = (float) (Math.PI * 2);
@@ -81,6 +91,15 @@ public final class GameWorld {
     private final List<Particle> particles = new ArrayList<Particle>();
     private final List<Ring> rings = new ArrayList<Ring>();
     private final List<Star> stars = new ArrayList<Star>();
+    /** Star periods, glints and shooting stars draw from their own seeded stream, so the game's sequence is kept. */
+    private final Rng fx;
+    public static final float GLINT_SECONDS = 0.3f, METEOR_SECONDS = 0.7f;
+    public static final float METEOR_MIN_GAP = 20f, METEOR_MAX_GAP = 60f;
+    private final Meteor meteor = new Meteor();
+    private float meteorT = -1f, meteorX0, meteorY0, meteorDist;
+    private float glintT = -1f;
+    private Star glintStar;
+    private int glints, meteors;
     private Listener listener;
     private float tiltX, tiltY, fireT, spawnT = 2f, autoT;
     private boolean autoFire;
@@ -104,6 +123,7 @@ public final class GameWorld {
 
     public GameWorld(Rng rng) {
         this.rng = rng;
+        this.fx = new Rng(Double.doubleToLongBits(rng.next()));
         for (int i = 0; i < MAX_SHOTS; i++) shotPool.add(new Shot());
     }
 
@@ -140,6 +160,14 @@ public final class GameWorld {
     public List<Particle> particles() { return particles; }
     public List<Ring> rings() { return rings; }
     public List<Star> stars() { return stars; }
+
+    /** The shooting star in flight, or null. */
+    public Meteor meteor() { return meteor.active ? meteor : null; }
+
+    /** Glints started and shooting stars launched so far (tests). */
+    int glintCount() { return glints; }
+
+    int meteorCount() { return meteors; }
     public GameConfig config() { return cfg; }
     public float time() { return time; }
     /** Seconds since the intro started; at or past GameConfig.INTRO_SECONDS the intro is over. */
@@ -208,6 +236,8 @@ public final class GameWorld {
         resetFlight();
         clearShots();
         clearAim();
+        meteor.active = false;
+        meteorT = -1f;
         flash.t = 0f;
         laserHits = 0;
         particles.clear();
@@ -324,7 +354,9 @@ public final class GameWorld {
             Star s = new Star();
             s.x = (float) rng.next() * w;
             s.y = (float) rng.next() * h;
-            s.alpha = (float) rng.range(0.05, 0.35);
+            s.alpha = (float) fx.range(0.12, 0.55);
+            s.period = fx.next() < 0.5 ? 2f : 4f;
+            s.bright = fx.next() < 0.1;
             s.phase = (float) rng.range(0, TAU);
             s.speed = (float) rng.range(0.3, 1.2);
             s.depth = (float) rng.range(0.2, 1.0);
@@ -443,6 +475,53 @@ public final class GameWorld {
         return r;
     }
 
+    /** Glints (a star every 3-6 s) and the shooting star (every 20-60 s once live, one at a time). */
+    private void stepStars(float dt, boolean live) {
+        if (glintStar != null) {
+            glintStar.glint = Math.max(0f, glintStar.glint - dt);
+            if (glintStar.glint == 0f) glintStar = null;
+        }
+        if (glintT < 0f) glintT = (float) fx.range(3, 6);
+        glintT -= dt;
+        if (glintT <= 0f && !stars.isEmpty()) {
+            if (glintStar != null) glintStar.glint = 0f;
+            glintStar = stars.get(fx.nextInt(stars.size()));
+            glintStar.glint = GLINT_SECONDS;
+            glints++;
+            glintT = (float) fx.range(3, 6);
+        }
+        if (meteor.active) {
+            meteor.t += dt;
+            if (meteor.t >= METEOR_SECONDS) meteor.active = false;
+            else {
+                float u = meteor.t / METEOR_SECONDS, p = 1f - (1f - u) * (1f - u) * (1f - u);
+                meteor.x = meteorX0 + meteor.dx * meteorDist * p;
+                meteor.y = meteorY0 + meteor.dy * meteorDist * p;
+                meteor.alpha = Math.min(1f, Math.min(meteor.t / 0.1f, (METEOR_SECONDS - meteor.t) / 0.2f));
+            }
+        }
+        if (!live) return;
+        if (meteorT < 0f) meteorT = (float) fx.range(METEOR_MIN_GAP, METEOR_MAX_GAP);
+        meteorT -= dt;
+        if (meteorT <= 0f) {
+            boolean ltr = fx.next() < 0.5;
+            float ang = (float) Math.toRadians(fx.range(20, 40));
+            float run = (float) fx.range(0.4, 0.6) * w;
+            meteor.dx = (ltr ? 1f : -1f) * (float) Math.cos(ang);
+            meteor.dy = (float) Math.sin(ang);
+            meteorDist = run / (float) Math.cos(ang);
+            meteorX0 = ltr ? -(float) fx.range(0, 0.1) * w : w + (float) fx.range(0, 0.1) * w;
+            meteorY0 = (float) fx.range(0.02, 0.5) * h;
+            meteor.x = meteorX0;
+            meteor.y = meteorY0;
+            meteor.t = 0f;
+            meteor.alpha = 0f;
+            meteor.active = true;
+            meteors++;
+            meteorT = (float) fx.range(METEOR_MIN_GAP, METEOR_MAX_GAP);
+        }
+    }
+
     public void step(float dt) {
         if (cfg == null) return;
         if (dt > 0.05f) dt = 0.05f;
@@ -495,6 +574,7 @@ public final class GameWorld {
             rcsStrength[0] = rcsStrength[1] = st;
             rcsFirings = 2;
         }
+        stepStars(dt, live);
         if (fireT > 0) fireT -= dt;
         if (flash.t > 0) flash.t = Math.max(0f, flash.t - dt);
         if (s.hitCooldown > 0) s.hitCooldown -= dt;
