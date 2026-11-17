@@ -420,10 +420,12 @@ public final class GameWorldTest {
     public static void testSkipIntroLetsTheShipSteerAtOnce() {
         GameWorld g = world(new Count());
         g.skipIntro();
-        float x0 = g.ship().x, y0 = g.ship().y;
+        float x0 = g.ship().x, y0 = g.ship().y, a0 = g.ship().angle;
         stepClear(g, 0.5f);
         float dx = g.ship().x - x0, dy = g.ship().y - y0;
-        T.check(Math.sqrt(dx * dx + dy * dy) > 1, "the autopilot steers during what was the intro");
+        // Newtonian flight: it may first turn toward the heading it needs before the engines fire
+        float turned = Math.abs(GameWorld.wrapAngle(g.ship().angle - a0));
+        T.check(Math.sqrt(dx * dx + dy * dy) > 1 || turned > 0.1f, "the autopilot steers during what was the intro");
     }
 
     public static void testSkipIntroBeforeFirstResize() {

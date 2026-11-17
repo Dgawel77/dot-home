@@ -3,14 +3,26 @@ package dev.gawel.dothome.core;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Pure-Java space-shooter simulation: a self-flying ship, drifting rocks, shots and particles. */
+/**
+ * Pure-Java space-shooter simulation: a self-flying ship, drifting rocks, shots and particles.
+ *
+ * <p>The ship flies Newtonian (Ship v2, design/mockups/ShipV2.dc.html): it has a heading, a spin and a velocity
+ * with near-zero drag, accelerates only along its heading with the main engines and turns only by firing its RCS.
+ * A PD autopilot picks a desired velocity (wander target, rock avoidance, screen edges), turns toward the heading
+ * that velocity error needs, burns only within 20 degrees of it, and so flips and burns to brake.
+ *
+ * <p>Thrusters are reported as per-step events the renderer reads (nozzle thrust levels, RCS firings), kept in
+ * fixed arrays so a step allocates nothing for them. Angles are screen angles (y down): a growing angle turns
+ * clockwise on screen.
+ */
 public final class GameWorld {
     public interface Listener {
         void onRockDestroyed();
         void onShipHit();
     }
 
-    public static final class Ship { public float x, y, vx, vy, angle, hitCooldown; }
+    /** angle is the heading (radians, -PI..PI), spin its rate (rad/s), thrust the main-engine level 0..1. */
+    public static final class Ship { public float x, y, vx, vy, angle, spin, thrust, hitCooldown; }
     public static final class Rock {
         public float x, y, vx, vy, r, rot, vr;
         public int size;
@@ -39,10 +51,21 @@ public final class GameWorld {
     private final List<Ring> rings = new ArrayList<Ring>();
     private final List<Star> stars = new ArrayList<Star>();
     private Listener listener;
-    private float tiltX, tiltY, fireT, aimT, spawnT = 2f, autoT;
+    private float tiltX, tiltY, fireT, spawnT = 2f, autoT;
     private boolean autoFire;
     private boolean autopilot = true;
     private float wanderX, wanderY, wanderT;
+
+    // flight computer: the RCS angular acceleration and engine command it set this step, its low-passed desired
+    // velocity, the heading it holds when there is nothing to correct, and its pointing and burning latches
+    private float angAccel, thrustCmd, desVx, desVy, holdAngle, headingErr;
+    private boolean pointing, burning;
+
+    // thruster events of the last step (fixed arrays: nothing is allocated per step)
+    private final float[] nozzleThrust = new float[ShipShape.NOZZLES];
+    private final int[] rcsPort = new int[2], rcsSide = new int[2];
+    private final float[] rcsStrength = new float[2];
+    private int rcsFirings;
     private Shockwave wave;
     private float shockCool;
     private float bandLo, bandHi;
@@ -53,6 +76,7 @@ public final class GameWorld {
 
     public void setListener(Listener l) { listener = l; }
     public void setTilt(float tx, float ty) { tiltX = clamp(tx, -1f, 1f); tiltY = clamp(ty, -1f, 1f); }
+    /** Off, nothing flies the ship: the engines and RCS stay idle and it coasts (tests). */
     public void setAutopilot(boolean on) { autopilot = on; }
 
     /** Starts a shockwave at the ship; false during the intro or while the cooldown is running. */
@@ -88,6 +112,24 @@ public final class GameWorld {
     /** Seconds since the intro started; at or past GameConfig.INTRO_SECONDS the intro is over. */
     public float introTime() { return introT; }
 
+    /** Main-engine thrust of nozzle i (ShipShape: 0 port, 1 starboard) after the last step, 0..1. */
+    public float nozzleThrust(int i) { return nozzleThrust[i]; }
+
+    /** RCS jets fired in the last step: 0, or 2 (a nose and a tail jet on opposite sides, a couple that only turns). */
+    public int rcsFirings() { return rcsFirings; }
+
+    /** The port of RCS firing i: ShipShape.RCS_NOSE or RCS_TAIL. */
+    public int rcsPort(int i) { return rcsPort[i]; }
+
+    /**
+     * The side RCS firing i blows out of: +1 starboard (+y), -1 port (-y). A clockwise turn fires the nose jet to
+     * port and the tail jet to starboard; counter-clockwise the reverse.
+     */
+    public int rcsSide(int i) { return rcsSide[i]; }
+
+    /** RCS firing i's strength: the angular acceleration over the RCS maximum, 0..1. */
+    public float rcsStrength(int i) { return rcsStrength[i]; }
+
     /** Ends the intro now, releasing any hold (a fold, page swipe or visibility flip must not replay it); world time is untouched. */
     public void skipIntro() {
         introHeld = false;
@@ -114,7 +156,10 @@ public final class GameWorld {
         introT = 0f;
         ship.vx = 0f;
         ship.vy = 0f;
+        ship.spin = 0f;
+        ship.thrust = 0f;
         ship.hitCooldown = 0f;
+        resetFlight();
         shots.clear();
         particles.clear();
         rings.clear();
@@ -137,6 +182,7 @@ public final class GameWorld {
             ship.x = w / 2;
             ship.y = h * 0.54f;
             ship.angle = (float) (-Math.PI / 2);
+            resetFlight();
             retargetStars();
             for (int i = 0; i < cfg.rocksTarget; i++) rocks.add(newRock(i % 3 == 2 ? 2 : 3, null, true));
             return;
@@ -181,10 +227,27 @@ public final class GameWorld {
         if (bandHi - bandLo < 20f * cfg.k) { bandLo = 0.2f * h; bandHi = 0.8f * h; }
     }
 
+    /** The flight computer starts over: nothing to correct, holding the current heading, engines idle. */
+    private void resetFlight() {
+        angAccel = thrustCmd = desVx = desVy = headingErr = 0f;
+        holdAngle = ship.angle;
+        pointing = burning = false;
+        java.util.Arrays.fill(nozzleThrust, 0f);
+        rcsFirings = 0;
+    }
+
     /** {lo, hi} y range of wander targets (tests). */
     float[] wanderBand() { return new float[] {bandLo, bandHi}; }
 
+    float wanderTargetX() { return wanderX; }
+
     float wanderTargetY() { return wanderY; }
+
+    /** The autopilot's last heading error (wanted minus actual, -PI..PI) (tests). */
+    float headingError() { return headingErr; }
+
+    /** The autopilot's last main-engine command, 0..1 (tests). */
+    float engineCommand() { return thrustCmd; }
 
     /** Pins the wander target (tests). */
     void setWanderTargetForTest(float x, float y) { wanderX = x; wanderY = y; wanderT = 1e9f; }
@@ -210,8 +273,6 @@ public final class GameWorld {
         if (!isLive() || fireT > 0) return false;
         fireT = cfg.fireCooldown;
         float a = (float) Math.atan2(y - ship.y, x - ship.x);
-        ship.angle = a;
-        aimT = 0.45f;
         float c = (float) Math.cos(a), s = (float) Math.sin(a);
         Shot sh = new Shot();
         sh.x = ship.x + c * 15f * cfg.k;
@@ -242,17 +303,29 @@ public final class GameWorld {
         if (shockCool > 0) shockCool -= dt;
         boolean live = isLive();
         Ship s = ship;
-        if (live && autopilot) steer(dt);
-        float damp = (float) Math.exp(-cfg.damping * dt);
-        s.vx *= damp;
-        s.vy *= damp;
-        float sp = hypot(s.vx, s.vy);
-        float cap = autopilot ? 0.7f * cfg.maxSpeed : cfg.maxSpeed;
+        if (live && autopilot) pilot(dt);
+        else {
+            angAccel = 0f;
+            thrustCmd = 0f;
+        }
+        // Newtonian step: the engines push along the heading only; the RCS couple only changes the spin
+        s.thrust += (thrustCmd - s.thrust) * (1f - (float) Math.exp(-dt / 0.07f));
+        if (s.thrust < 0.003f) s.thrust = 0f;
+        float acc = s.thrust * cfg.thrust;
+        s.vx += (float) Math.cos(s.angle) * acc * dt;
+        s.vy += (float) Math.sin(s.angle) * acc * dt;
+        float spinCap = GameConfig.SPIN_CAP * cfg.maxSpin;
+        s.spin = clamp(s.spin + angAccel * dt, -spinCap, spinCap);
+        float dr = (float) Math.exp(-cfg.drag * dt);
+        s.vx *= dr;
+        s.vy *= dr;
+        s.spin *= dr;
+        float sp = hypot(s.vx, s.vy), cap = GameConfig.SPEED_CAP * cfg.maxSpeed;
         if (sp > cap) {
             s.vx *= cap / sp;
             s.vy *= cap / sp;
-            sp = cap;
         }
+        s.angle = wrapAngle(s.angle + s.spin * dt);
         s.x += s.vx * dt;
         s.y += s.vy * dt;
         float m = cfg.edgeMargin;
@@ -260,12 +333,17 @@ public final class GameWorld {
         if (s.x > w - m) { s.x = w - m; s.vx = -Math.abs(s.vx) * 0.45f; }
         if (s.y < m) { s.y = m; s.vy = Math.abs(s.vy) * 0.45f; }
         if (s.y > h - m) { s.y = h - m; s.vy = -Math.abs(s.vy) * 0.45f; }
-        if (aimT > 0) aimT -= dt;
-        else if (sp > 14f * cfg.k) {
-            float da = (float) Math.atan2(s.vy, s.vx) - s.angle;
-            while (da > Math.PI) da -= TAU;
-            while (da < -Math.PI) da += TAU;
-            s.angle += da * (1f - (float) Math.exp(-5 * dt));
+        for (int i = 0; i < ShipShape.NOZZLES; i++) nozzleThrust[i] = s.thrust;
+        rcsFirings = 0;
+        if (angAccel != 0f) {
+            int dir = angAccel > 0 ? 1 : -1;
+            float st = Math.min(1f, Math.abs(angAccel) / cfg.rcsAccel);
+            rcsPort[0] = ShipShape.RCS_NOSE;
+            rcsSide[0] = -dir;
+            rcsPort[1] = ShipShape.RCS_TAIL;
+            rcsSide[1] = dir;
+            rcsStrength[0] = rcsStrength[1] = st;
+            rcsFirings = 2;
         }
         if (fireT > 0) fireT -= dt;
         if (s.hitCooldown > 0) s.hitCooldown -= dt;
@@ -311,7 +389,7 @@ public final class GameWorld {
                 float dx = s.x - r.x, dy = s.y - r.y;
                 float d = hypot(dx, dy);
                 if (d == 0) d = 1;
-                float lim = r.r * 0.82f + 10f * cfg.k;
+                float lim = r.r * 0.82f + cfg.shipRadius;
                 if (d < lim) {
                     float nx = dx / d, ny = dy / d;
                     s.x = r.x + nx * (lim + 1);
@@ -321,6 +399,9 @@ public final class GameWorld {
                         s.vy += ny * cfg.hitKnock;
                         r.vx -= nx * 20f * cfg.k;
                         r.vy -= ny * 20f * cfg.k;
+                        // an off-centre knock also spins the ship; the RCS has to counter-fire to stop it
+                        float tq = (float) Math.cos(s.angle) * ny - (float) Math.sin(s.angle) * nx;
+                        s.spin += (tq >= 0 ? 1f : -1f) * (float) rng.range(1.3, 2.3);
                         s.hitCooldown = cfg.hitCooldown;
                         Ring g = new Ring();
                         g.x = s.x - nx * 6f * cfg.k;
@@ -367,55 +448,102 @@ public final class GameWorld {
         }
     }
 
-    /** Autopilot: drift toward a slowly moving wander target while sidestepping rocks. */
-    private void steer(float dt) {
-        float k = cfg.k, ta = cfg.tiltAccel;
+    /**
+     * The autopilot, a PD controller. Sets angAccel (RCS) and thrustCmd (main engines, 0..1).
+     * 1. Desired velocity: toward the wander target no faster than the ship can still flip and brake in time, away
+     * from where nearby rocks will be at closest approach, and in from the screen edges; low-passed over 0.4 s.
+     * 2. The velocity error sets the wanted heading, so slowing down points the ship against its motion.
+     * 3. RCS: PD on the heading error, the turn rate capped at maxSpin and at what it can still stop from.
+     * 4. Main engines only while the nose is within 20 degrees of the wanted heading.
+     */
+    private void pilot(float dt) {
+        float k = cfg.k, vmax = cfg.maxSpeed;
         Ship s = ship;
         wanderT -= dt;
         if (wanderT <= 0) {
-            wanderX = w * (float) rng.range(0.2, 0.8);
+            wanderX = w * (float) rng.range(0.18, 0.82);
             wanderY = bandLo + (bandHi - bandLo) * (float) rng.next();
             wanderT = (float) rng.range(cfg.autopilotWanderMin, cfg.autopilotWanderMax);
         }
-        float dx = wanderX - s.x, dy = wanderY - s.y;
-        float d = hypot(dx, dy);
-        float ax = 0, ay = 0;
+        float dx = wanderX - s.x, dy = wanderY - s.y, d = hypot(dx, dy);
+        float vx = 0f, vy = 0f;
         if (d > 1e-3f) {
-            float f = 0.5f * ta * Math.min(1f, d / (40f * k)) / d;
-            ax = dx * f;
-            ay = dy * f;
+            float ab = 0.8f * cfg.thrust, tf = cfg.flipTime, dd = Math.max(0f, d - 10f * k);
+            float sp = Math.min(vmax, ab * ((float) Math.sqrt(tf * tf + 2f * dd / ab) - tf));
+            vx = dx / d * sp;
+            vy = dy / d * sp;
         }
-        float max = 1.2f * ta;
         for (int i = 0; i < rocks.size(); i++) {
             Rock r = rocks.get(i);
-            float range = r.r + 90f * k;
-            float nowD = hypot(s.x - r.x, s.y - r.y);
-            if (nowD >= range) continue;
-            float fx = r.x + r.vx * 0.6f, fy = r.y + r.vy * 0.6f;
-            float awx = s.x - fx, awy = s.y - fy;
-            float fd = hypot(awx, awy);
-            float prox = 1f - Math.min(nowD, fd) / range;
-            if (prox <= 0) continue;
-            if (fd < 1e-3f) { awx = s.x - r.x; awy = s.y - r.y; fd = hypot(awx, awy); if (fd < 1e-3f) { awx = 1; awy = 0; fd = 1; } }
-            awx /= fd;
-            awy /= fd;
-            // sidestep across the rock's path, toward the side the ship is already on
-            float rv = hypot(r.vx, r.vy);
-            float px = -awy, py = awx;
-            if (rv > 1e-3f) {
-                px = -r.vy / rv;
-                py = r.vx / rv;
+            float rx = r.x - s.x, ry = r.y - s.y, nowD = hypot(rx, ry);
+            if (nowD > r.r + 260f * k) continue;
+            float rvx = r.vx - s.vx, rvy = r.vy - s.vy, rv2 = rvx * rvx + rvy * rvy;
+            float tc = rv2 > 1e-6f ? clamp(-(rx * rvx + ry * rvy) / rv2, 0f, 1.6f) : 0f;
+            float cx = rx + rvx * tc, cy = ry + rvy * tc, cd = hypot(cx, cy);
+            float clear = r.r + 40f * k;
+            float u = cd < clear ? (1f - cd / clear) * (1f - 0.5f * tc / 1.6f) : 0f;
+            float near = 1f - nowD / (r.r + 50f * k);
+            if (near > u) {
+                u = near;
+                cx = rx;
+                cy = ry;
+                cd = nowD;
             }
-            float side = (s.x - r.x) * px + (s.y - r.y) * py >= 0 ? 1f : -1f;
-            float wgt = prox * max;
-            ax += (awx * 0.6f + px * side) * wgt;
-            ay += (awy * 0.6f + py * side) * wgt;
+            if (u <= 0) continue;
+            if (cd < 1e-3f) {
+                float rv = (float) Math.sqrt(rv2);
+                if (rv == 0) rv = 1;
+                cx = -rvy / rv;
+                cy = rvx / rv;
+                cd = 1;
+            }
+            vx -= cx / cd * u * vmax * 1.4f;
+            vy -= cy / cd * u * vmax * 1.4f;
         }
-        float am = hypot(ax, ay);
-        if (am > max) { ax *= max / am; ay *= max / am; }
-        s.vx += ax * dt;
-        s.vy += ay * dt;
+        float m = 60f * k;
+        if (s.x < m) vx += (m - s.x) / m * vmax;
+        if (s.x > w - m) vx -= (s.x - w + m) / m * vmax;
+        if (s.y < m) vy += (m - s.y) / m * vmax;
+        if (s.y > h - m) vy -= (s.y - h + m) / m * vmax;
+        float vm = hypot(vx, vy);
+        if (vm > vmax) {
+            vx *= vmax / vm;
+            vy *= vmax / vm;
+        }
+        float lp = 1f - (float) Math.exp(-dt / 0.4f);
+        desVx += (vx - desVx) * lp;
+        desVy += (vy - desVy) * lp;
+
+        float ex = desVx - s.vx, ey = desVy - s.vy, em = hypot(ex, ey);
+        if (pointing) {
+            if (em < 5f * k) {
+                pointing = false;
+                holdAngle = s.angle;
+            }
+        } else if (em > 20f * k) {
+            pointing = true;
+        }
+        float want = pointing ? (float) Math.atan2(ey, ex) : holdAngle;
+
+        float ae = wrapAngle(want - s.angle);
+        float lim = Math.min(cfg.maxSpin, (float) Math.sqrt(2f * 0.8f * cfg.rcsAccel * Math.abs(ae)));
+        float wd = clamp(4f * ae, -lim, lim);
+        float al = clamp(8f * (wd - s.spin), -cfg.rcsAccel, cfg.rcsAccel);
+        if (Math.abs(ae) < 0.05f && Math.abs(s.spin) < 0.08f) al = 0f;
+        angAccel = al;
+        headingErr = ae;
+
+        boolean aligned = pointing && Math.abs(ae) < MAIN_ENGINE_CONE;
+        if (burning) {
+            if (!aligned || em < 5f * k) burning = false;
+        } else if (aligned && em > 20f * k) {
+            burning = true;
+        }
+        thrustCmd = burning ? clamp(em / (0.25f * cfg.thrust), 0.3f, 1f) * (float) Math.cos(ae) : 0f;
     }
+
+    /** The main engines fire only while the heading is within this of the wanted one (20 degrees). */
+    static final float MAIN_ENGINE_CONE = (float) Math.toRadians(20);
 
     private void autoFireAtNearest() {
         float best = 0.6f * Math.min(w, h);
@@ -516,6 +644,13 @@ public final class GameWorld {
         r.rot = (float) rng.range(0, TAU);
         r.vr = (float) rng.range(-0.25, 0.25);
         return r;
+    }
+
+    /** a wrapped into -PI..PI. */
+    static float wrapAngle(float a) {
+        double t = (a + Math.PI) % (2 * Math.PI);
+        if (t < 0) t += 2 * Math.PI;
+        return (float) (t - Math.PI);
     }
 
     private static float hypot(float a, float b) { return (float) Math.sqrt(a * a + b * b); }

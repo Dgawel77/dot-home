@@ -3,11 +3,27 @@ package dev.gawel.dothome.core;
 /** Tunable constants, scaled by k = sqrt(w*h)/669 so the game feels the same at any size. */
 public final class GameConfig {
     public final float k;
-    /** tiltAccel is the autopilot steering acceleration (name kept from the old tilt steering). */
-    public final float rockRadius, tiltAccel, maxSpeed, shotSpeed, hitKnock, edgeMargin;
+    public final float rockRadius, shotSpeed, hitKnock, edgeMargin;
     public final float rockSpeedMin, rockSpeedMax;
     public final int rocksTarget;
-    public final float damping = 1.5f;
+
+    // Ship v2 flight (design/mockups/ShipV2.dc.html defaults: thrust 160 px/s², rcsTorque 540 °/s², drag 0.02/s)
+    /** Main-engine acceleration along the heading at full thrust, px/s². */
+    public final float thrust;
+    /** RCS angular acceleration, rad/s² (540 °/s²). */
+    public final float rcsAccel = (float) Math.toRadians(540);
+    /** The autopilot's turn-rate cap, rad/s (180 °/s); a rock knock can spin the ship past it, up to SPIN_CAP x. */
+    public final float maxSpin = (float) Math.PI;
+    /** Linear and angular drag, per second: near zero, the ship coasts. */
+    public final float drag = 0.02f;
+    /** The autopilot's top speed, px/s; a rock knock can push the ship past it, up to SPEED_CAP x. */
+    public final float maxSpeed;
+    public static final float SPEED_CAP = 1.6f, SPIN_CAP = 1.6f;
+    /** Seconds for a 180-degree flip from rest to rest under the turn-rate cap, plus 15%: the braking planner's lead. */
+    public final float flipTime;
+    /** Ship hit radius against rocks, px. */
+    public final float shipRadius;
+
     public final float shotLife = 1.3f;
     public final float fireCooldown = 0.1f;
     public final float hitCooldown = 0.4f;
@@ -17,7 +33,8 @@ public final class GameConfig {
     public static final float INTRO_SECONDS = 1.2f;
     public final float introSeconds = INTRO_SECONDS;
     public final float autoFireEvery = 0.45f;
-    public final float autopilotWanderMin = 2f, autopilotWanderMax = 4f;
+    /** A new wander target every 5-8 s: long enough to fly there, flip and brake. */
+    public final float autopilotWanderMin = 5f, autopilotWanderMax = 8f;
     public final float shockCooldown = 60f, shockDuration = 0.8f; // event tempo (0.6-0.8 s)
     public final float gravityAccel;
 
@@ -42,9 +59,14 @@ public final class GameConfig {
         k = (float) Math.sqrt((double) w * h) / 669f;
         rockRadius = 33.5f * k;
         rocksTarget = Math.max(4, Math.min(8, Math.round(mockupArea(w, h) / 64000f)));
-        tiltAccel = 280f * k;
         gravityAccel = 160f * k;
-        maxSpeed = 210f * k;
+        thrust = 160f * k;
+        maxSpeed = 140f * k;
+        shipRadius = ShipShape.RADIUS * k;
+        float flip = rcsAccel * Math.PI >= maxSpin * maxSpin
+            ? (float) Math.PI / maxSpin + maxSpin / rcsAccel
+            : 2f * (float) Math.sqrt(Math.PI / rcsAccel);
+        flipTime = flip * 1.15f;
         shotSpeed = 560f * k;
         hitKnock = 150f * k;
         rockSpeedMin = 10f * k;
