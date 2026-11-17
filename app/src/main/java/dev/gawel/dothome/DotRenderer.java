@@ -410,7 +410,7 @@ final class DotRenderer {
             canvasW = width;
             canvasH = height;
             clearTopY = clearTopFraction * height;
-            clearBottomY = (1f - clearBottomFraction) * height;
+            clearBottomY = clearBottomFraction > 0f ? (1f - clearBottomFraction) * height : Float.MAX_VALUE; // 0 = no bottom band
             try {
                 drawScene(c, w);
             } finally {

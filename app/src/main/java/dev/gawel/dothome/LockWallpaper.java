@@ -49,18 +49,24 @@ final class LockWallpaper {
             DotRenderer renderer = hub.renderer();
             if (renderer == null) renderer = new DotRenderer(app);
             renderer.setOutlineRocks(prefs.outlineRocks());
+            final WallpaperManager wm = WallpaperManager.getInstance(app); // before the render: nothing can fail between it and the hand-off
             final Bitmap bmp = renderer.renderStill(world, size.x, size.y, CLEAR_TOP, CLEAR_BOTTOM);
+            // recorded before setBitmap on purpose: a failing set must not be retried on every screen-off
             GATE.pushed(now, fp);
-            final WallpaperManager wm = WallpaperManager.getInstance(app);
-            WORKER.execute(() -> {
-                try {
-                    wm.setBitmap(bmp, null, true, WallpaperManager.FLAG_LOCK);
-                } catch (IOException | RuntimeException e) {
-                    Log.w(TAG, "lock wallpaper failed: " + e);
-                } finally {
-                    bmp.recycle();
-                }
-            });
+            try {
+                WORKER.execute(() -> {
+                    try {
+                        wm.setBitmap(bmp, null, true, WallpaperManager.FLAG_LOCK);
+                    } catch (IOException | RuntimeException | OutOfMemoryError e) {
+                        Log.w(TAG, "lock wallpaper failed: " + e);
+                    } finally {
+                        bmp.recycle();
+                    }
+                });
+            } catch (RuntimeException e) {
+                bmp.recycle(); // the worker never took it
+                throw e;
+            }
         } catch (RuntimeException | OutOfMemoryError e) {
             if (!logged) {
                 logged = true;
