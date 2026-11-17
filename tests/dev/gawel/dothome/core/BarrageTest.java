@@ -161,15 +161,10 @@ public final class BarrageTest {
         s.vy = -60;
         float v0 = speed(s), x0 = s.x, y0 = s.y;
         g.setWanderTargetForTest(100, 300);
-        g.aim(500, 600);
-        T.check(g.isManual(), "manual before the shake");
         T.eq(true, g.barrage(), "barrage");
-        T.check(!g.isManual(), "a barrage ends manual mode");
         T.eq(false, g.aim(300, 100), "taps wait for the barrage");
-        int steps = 0;
         while (g.isBarrage()) {
             g.step(DT);
-            steps++;
             T.eq(0f, g.engineCommand(), "no main engines");
             T.check(!g.isManual(), "no manual mode");
             T.eq(100f, g.wanderTargetX(), "the autopilot waits (x)");
@@ -191,6 +186,36 @@ public final class BarrageTest {
             g.rocks().clear();
             g.step(DT);
         }
+    }
+
+    public static void testManualModeWaitsOutTheBarrageThenFliesOn() {
+        GameWorld g = live(3, null);
+        g.setWanderTargetForTest(100, 300);
+        g.aim(500, 600);
+        g.step(DT);
+        T.check(g.isManual(), "manual before the shake");
+        T.eq(true, g.barrage(), "barrage");
+        T.check(!g.isManual(), "suspended while it spins");
+        while (g.isBarrage()) g.step(DT);
+        T.check(g.isManual(), "within its 4 s: manual again");
+        T.near(500, g.waypointX(), 1e-6, "the same waypoint");
+        float d0 = (float) Math.hypot(g.ship().x - 500, g.ship().y - 600), best = d0;
+        for (int i = 0; i < Math.round(2.3f / DT) && g.isManual(); i++) {
+            g.step(DT);
+            g.rocks().clear();
+            best = Math.min(best, (float) Math.hypot(g.ship().x - 500, g.ship().y - 600));
+        }
+        T.check(best < d0 - 50, "flying on to it: " + best + " from " + d0);
+
+        GameWorld h = live(3, null);
+        h.setWanderTargetForTest(100, 300);
+        h.aim(500, 600);
+        for (int i = 0; i < Math.round(3f / DT); i++) h.step(DT);
+        T.eq(true, h.barrage(), "a shake 3 s after the tap");
+        while (h.isBarrage()) h.step(DT);
+        T.check(!h.isManual(), "the 4 s ran out during the spin: the autopilot");
+        h.step(DT);
+        T.check(h.wanderTargetX() != 100f || h.wanderTargetY() != 300f, "with a fresh wander target");
     }
 
     public static void testBoltsFireAboveOneRevAlternatingAlongTheHeading() {

@@ -11,17 +11,19 @@ import java.util.List;
  * A PD autopilot picks a desired velocity (wander target, rock avoidance, screen edges), turns toward the heading
  * that velocity error needs, burns only within 20 degrees of it, and so flips and burns to brake.
  *
- * <p>Tap-to-fire: a tap fires one bolt at once from the next twin gun (they alternate) along the current heading,
+ * <p>Tap-to-fly: a tap fires one bolt at once from the next twin gun (they alternate) along the current heading,
  * toed in toward the tap only when the tap lies within 3 degrees of it (the fire cooldown still applies). The tap
- * point also becomes the facing target and starts manual mode: until 4 s after the last tap the autopilot is off (no
- * wander, burns or avoidance), the RCS turns the ship to the tap and holds that facing, and it coasts under a gentle
- * manual drag. Then the autopilot resumes from the current state with a fresh wander target.
+ * point also becomes the waypoint and starts manual mode, until 4 s after the last tap: the same flight computer
+ * flies the ship to the waypoint instead of a wander target (up to 1.25x the cruise speed, slowing within 120k px
+ * of it), still dodging rocks, and once there holds station facing the way it came. A newer tap retargets at once.
+ * Then the autopilot resumes from the current state with a fresh wander target.
  *
  * <p>The spin barrage (a shake, 30 s cooldown): for 1.6 s the ship spins on the spot, a random way, its spin
  * easing in to 3 rev/s over 0.3 s and out to 0 over the last 0.4 s, with the RCS firing hard on both ramps. The
  * autopilot and manual mode are off and the ship's drift dies under a 2/s drag. While it spins faster than 1 rev/s
  * the guns fire alternately every 0.045 s along the heading, so the bolts spray out in a spiral; they hit like any
- * other bolt. Then the autopilot takes over with a fresh wander target, keeping the final heading.
+ * other bolt. Then manual mode flies on if a tap's 4 s are not yet up (its clock keeps running through the spin),
+ * otherwise the autopilot takes over with a fresh wander target, keeping the final heading.
  *
  * <p>Thrusters are reported as per-step events the renderer reads (nozzle thrust levels, RCS firings), kept in
  * fixed arrays so a step allocates nothing for them. Angles are screen angles (y down): a growing angle turns
@@ -79,15 +81,19 @@ public final class GameWorld {
     /** At most this many bolts fly at once (a barrage has about 10 in flight on top of any taps'). */
     public static final int MAX_SHOTS = 48;
     private final Flash flash = new Flash();
-    // the facing target: a tapped screen point, or (auto-fire) a rock the facing follows
+    // auto-fire's facing target: a rock the heading follows
     private boolean facing;
-    private float faceX, faceY;
     private Rock faceRock;
+    /** The last tap (its bolt toes in toward it) and the waypoint: the tap kept out of the 60k px edge band. */
+    private float tapX, tapY, wpX, wpY;
+    /** The bearing from the ship to the waypoint when it was set; once arrived, the ship faces that way. */
+    private float wpBearing;
+    private boolean arrived;
     /** Seconds spent on the facing target, and seconds spent within cfg.faceCone of it. */
     private float faceClock, faceSettled;
     /** A tap's bolt waiting for the next step (fired along the heading as it is then), and the tap point. */
     private boolean tapFire;
-    /** Seconds of manual mode left (a tap sets it to cfg.manualHoldSeconds); the autopilot stays off while > 0. */
+    /** Seconds of manual mode left (a tap sets it to cfg.manualHoldSeconds); the ship flies to the waypoint while > 0. */
     private float manualT;
     /** The gun that fires next (ShipShape: 0 port, 1 starboard). */
     private int gun;
@@ -145,7 +151,7 @@ public final class GameWorld {
 
     /**
      * A shake: starts a spin barrage, its direction picked at random; false during the intro (or its hold) or while
-     * the cooldown is running. Ends manual mode and any facing hold.
+     * the cooldown is running. Drops auto-fire's facing and a pending tap bolt; manual mode waits for it to end.
      */
     public boolean barrage() {
         if (!isLive() || barrageCool > 0 || barrageT >= 0f) return false;
@@ -155,7 +161,8 @@ public final class GameWorld {
         // the first bolt goes when the spin-up passes the firing spin, then one every barrageFireEvery
         barrageBoltT = cfg.barrageSpinUp * (float) Math.cbrt(cfg.barrageFireSpin / cfg.barrageSpin);
         barrageBolts = 0;
-        clearAim();
+        tapFire = false;
+        endFacing();
         return true;
     }
 
@@ -304,8 +311,11 @@ public final class GameWorld {
             for (int i = 0; i < r.outline.length; i++) r.outline[i] *= kr;
         }
         for (Shot s : shots) { s.x *= sx; s.y *= sy; s.px *= sx; s.py *= sy; }
-        faceX *= sx;
-        faceY *= sy;
+        tapX *= sx;
+        tapY *= sy;
+        float band = EDGE_BAND * cfg.k;
+        wpX = clamp(wpX * sx, band, w - band);
+        wpY = clamp(wpY * sy, band, h - band);
         flash.x *= kr;
         flash.y *= kr;
         for (Particle p : particles) { p.x *= sx; p.y *= sy; }
@@ -360,16 +370,24 @@ public final class GameWorld {
     /** True while a rock about to hit has the autopilot dodging instead of aiming (tests). */
     boolean evading() { return evading; }
 
-    /** True while a recent tap has the autopilot off: the ship only holds its facing and coasts. */
-    public boolean isManual() { return manualT > 0f; }
+    /** True while a recent tap has the ship flying to its waypoint (not during a barrage, which suspends it). */
+    public boolean isManual() { return manualT > 0f && barrageT < 0f; }
 
-    /** True while the ship is turning to, or holding, a facing target (tests). */
+    /** The waypoint the last tap set (tests). */
+    float waypointX() { return wpX; }
+
+    float waypointY() { return wpY; }
+
+    /** True once the ship has reached the waypoint and is holding station there (tests). */
+    boolean arrived() { return arrived; }
+
+    /** True while auto-fire has the ship turning to, or holding, a rock (tests). */
     boolean facingActive() { return facing; }
 
-    /** The facing target: where a rock target is now, or the tapped point. */
-    float aimTargetX() { return faceRock != null ? faceRock.x : faceX; }
+    /** Auto-fire's facing target: where the rock is now (the waypoint when there is none). */
+    float aimTargetX() { return faceRock != null ? faceRock.x : wpX; }
 
-    float aimTargetY() { return faceRock != null ? faceRock.y : faceY; }
+    float aimTargetY() { return faceRock != null ? faceRock.y : wpY; }
 
     /** Pins the wander target (tests). */
     void setWanderTargetForTest(float x, float y) { wanderX = x; wanderY = y; wanderT = 1e9f; }
@@ -394,19 +412,26 @@ public final class GameWorld {
 
     /**
      * A tap: fires one bolt at once from the next gun along the heading (unless the fire cooldown is running) and
-     * makes (x, y) the facing target, replacing any earlier one; false during the intro. The ship turns to face it
-     * and holds the facing until within cfg.faceCone for cfg.faceHold seconds, or cfg.faceTimeout at most. Ignored
-     * (false) during a barrage.
+     * makes (x, y), kept out of the edge band, the waypoint, replacing any earlier one; manual mode runs until
+     * cfg.manualHoldSeconds after it. False during the intro or a barrage (ignored).
      */
     public boolean aim(float x, float y) {
         if (!isLive() || barrageT >= 0f) return false;
-        faceX = x;
-        faceY = y;
-        setFacing(null);
+        tapX = x;
+        tapY = y;
+        float band = EDGE_BAND * cfg.k;
+        wpX = clamp(x, band, w - band);
+        wpY = clamp(y, band, h - band);
+        wpBearing = (float) Math.atan2(wpY - ship.y, wpX - ship.x);
+        arrived = false;
+        endFacing();
         manualT = cfg.manualHoldSeconds;
         tapFire = fireT <= 0;
         return true;
     }
+
+    /** The autopilot keeps out of this band along the screen edges, and waypoints sit inside it, mockup px. */
+    private static final float EDGE_BAND = 60f;
 
     private void setFacing(Rock r) {
         facing = true;
@@ -415,33 +440,21 @@ public final class GameWorld {
         faceSettled = 0f;
     }
 
-    /** Fires a pending tap's bolt, runs auto-fire's cadence and ends the facing hold. */
+    /** Fires a pending tap's bolt, runs auto-fire's cadence (it fires but does not steer in manual mode) and ends its facing hold. */
     private void aimAndFire(float dt) {
         Ship s = ship;
-        if (tapFire && fireT <= 0) shoot(faceX, faceY, true);
+        if (tapFire && fireT <= 0) shoot(tapX, tapY, true);
         tapFire = false;
         if (autoFire) {
             autoT -= dt;
             if (autoT <= 0) {
                 Rock r = nearestRock();
                 if (r != null) {
-                    if (!facing) setFacing(r);
+                    if (!facing && manualT <= 0f) setFacing(r);
                     if (fireT <= 0) shoot(r.x, r.y, true);
                     autoT = cfg.autoFireEvery;
                 }
             }
-        }
-        if (manualT > 0f) {
-            manualT -= dt;
-            if (manualT <= 0f) { // the autopilot resumes from the current state, with a fresh wander target
-                manualT = 0f;
-                endFacing();
-                wanderT = 0f;
-                return;
-            }
-            if (faceRock != null) faceRock = null;
-            facing = true;
-            return; // holds the tap's facing for the whole of manual mode
         }
         if (!facing) return;
         if (faceRock != null && !rocks.contains(faceRock)) {
@@ -466,6 +479,7 @@ public final class GameWorld {
 
     private void clearAim() {
         manualT = 0f;
+        arrived = false;
         facing = false;
         faceRock = null;
         tapFire = false;
@@ -532,7 +546,10 @@ public final class GameWorld {
         }
     }
 
-    /** The barrage is over: the autopilot takes over from the current state, holding the heading, with a fresh wander target. */
+    /**
+     * The barrage is over: the flight computer takes over from the current state, holding the heading, flying to
+     * the waypoint again if manual mode's time is not up, otherwise to a fresh wander target.
+     */
     private void endBarrage() {
         barrageT = -1f;
         ship.spin = 0f;
@@ -540,6 +557,7 @@ public final class GameWorld {
         desVx = ship.vx;
         desVy = ship.vy;
         wanderT = 0f;
+        arrived = false;
     }
 
     private void clearShots() {
@@ -615,6 +633,15 @@ public final class GameWorld {
         boolean spinning = barrageT >= 0f; // a barrage: the spin is scripted, the autopilot and manual mode wait
         if (spinning) barrageT += dt;
         Ship s = ship;
+        if (live && manualT > 0f) { // manual mode's clock runs through a barrage too
+            manualT -= dt;
+            if (manualT <= 0f) { // the autopilot resumes from the current state, with a fresh wander target
+                manualT = 0f;
+                arrived = false;
+                wanderT = 0f;
+                holdAngle = s.angle;
+            }
+        }
         if (live && autopilot && !spinning) pilot(dt);
         else {
             angAccel = 0f;
@@ -633,7 +660,6 @@ public final class GameWorld {
         } else {
             float spinCap = GameConfig.SPIN_CAP * cfg.maxSpin;
             s.spin = clamp(s.spin + angAccel * dt, -spinCap, spinCap) * dr;
-            if (manualT > 0f) dv = (float) Math.exp(-cfg.manualDrag * dt);
         }
         s.vx *= dv;
         s.vy *= dv;
@@ -768,48 +794,76 @@ public final class GameWorld {
     }
 
     /**
-     * The autopilot, a PD controller. Sets angAccel (RCS) and thrustCmd (main engines, 0..1).
-     * 1. Desired velocity: toward the wander target no faster than the ship can still flip and brake in time, away
-     * from where nearby rocks will be at closest approach, and in from the screen edges; low-passed over 0.4 s.
+     * The flight computer, a PD controller. Sets angAccel (RCS) and thrustCmd (main engines, 0..1).
+     * 1. Desired velocity: toward the goal (the wander target, or in manual mode the waypoint) no faster than the
+     * ship can still flip and brake in time, away from where nearby rocks will be at closest approach, and in from
+     * the screen edges; low-passed over 0.4 s (MANUAL_FILTER in manual mode).
      * 2. The velocity error sets the wanted heading, so slowing down points the ship against its motion.
      * 3. RCS: PD on the heading error, the turn rate capped at maxSpin and at what it can still stop from.
      * 4. Main engines only while the nose is within 20 degrees of the wanted heading.
      * While facing a target the wanted heading is its bearing and the engines stay off, unless a rock is about to
      * hit (its path comes within the avoidance clearance in the next 1.6 s): then it flies as above until clear.
+     * Manual mode flies up to MANUAL_SPEED x faster with MANUAL_LEAD more braking lead, slows in proportion within
+     * ARRIVE_SLOW of the waypoint, aims along the tangent that clears a rock lying across its straight line, turns a
+     * dodge that would hold it back into a swerve, and once arrived faces the way it came.
      */
     private void pilot(float dt) {
-        float k = cfg.k, vmax = cfg.maxSpeed;
+        float k = cfg.k;
         Ship s = ship;
-        if (manualT > 0f) { // manual: RCS only, holding the tap bearing; no wander, burns or avoidance
-            float ae = wrapAngle((float) Math.atan2(faceY - s.y, faceX - s.x) - s.angle);
-            float lim = Math.min(cfg.maxSpin, (float) Math.sqrt(2f * 0.8f * cfg.rcsAccel * Math.abs(ae)));
-            float wd = clamp(4f * ae, -lim, lim);
-            float al = clamp(8f * (wd - s.spin), -cfg.rcsAccel, cfg.rcsAccel);
-            if (Math.abs(ae) < 0.01f && Math.abs(s.spin) < 0.02f) al = 0f;
-            angAccel = al;
-            headingErr = ae;
-            thrustCmd = 0f;
-            burning = pointing = evading = false;
-            holdAngle = s.angle;
-            desVx = s.vx; // so the autopilot takes over without a jerk
-            desVy = s.vy;
-            return;
+        boolean manual = manualT > 0f;
+        float vmax = manual ? MANUAL_SPEED * cfg.maxSpeed : cfg.maxSpeed;
+        float gx, gy;
+        if (manual) {
+            gx = wpX;
+            gy = wpY;
+        } else {
+            wanderT -= dt;
+            if (wanderT <= 0) {
+                wanderX = w * (float) rng.range(0.18, 0.82);
+                wanderY = bandLo + (bandHi - bandLo) * (float) rng.next();
+                wanderT = (float) rng.range(cfg.autopilotWanderMin, cfg.autopilotWanderMax);
+            }
+            gx = wanderX;
+            gy = wanderY;
         }
-        wanderT -= dt;
-        if (wanderT <= 0) {
-            wanderX = w * (float) rng.range(0.18, 0.82);
-            wanderY = bandLo + (bandHi - bandLo) * (float) rng.next();
-            wanderT = (float) rng.range(cfg.autopilotWanderMin, cfg.autopilotWanderMax);
-        }
-        float dx = wanderX - s.x, dy = wanderY - s.y, d = hypot(dx, dy);
+        float dx = gx - s.x, dy = gy - s.y, d = hypot(dx, dy);
+        if (manual && !arrived && d < ARRIVE_NEAR * k && hypot(s.vx, s.vy) < ARRIVE_SPEED * k) arrived = true;
         float vx = 0f, vy = 0f;
         boolean threat = false;
         if (d > 1e-3f) {
-            float ab = 0.8f * cfg.thrust, tf = cfg.flipTime, dd = Math.max(0f, d - 10f * k);
+            // manual mode allows for the filter's lag on top of the flip, so it brakes in time instead of overshooting
+            float ab = 0.8f * cfg.thrust, tf = cfg.flipTime + (manual ? MANUAL_LEAD : 0f), dd = Math.max(0f, d - 10f * k);
             float sp = Math.min(vmax, ab * ((float) Math.sqrt(tf * tf + 2f * dd / ab) - tf));
-            vx = dx / d * sp;
-            vy = dy / d * sp;
+            float ux = dx / d, uy = dy / d;
+            if (manual) {
+                sp = Math.min(sp, vmax * d / (ARRIVE_SLOW * k)); // arrival: ease in, do not overshoot
+                // a rock across the straight line to the waypoint: aim along the tangent that clears it instead
+                Rock block = null;
+                float bestAlong = d;
+                for (int i = 0; i < rocks.size(); i++) {
+                    Rock r = rocks.get(i);
+                    float rx = r.x - s.x, ry = r.y - s.y, along = rx * ux + ry * uy;
+                    float clear = r.r + 40f * k;
+                    if (along <= 0f || along >= bestAlong || hypot(rx, ry) > r.r + 260f * k) continue;
+                    if (Math.abs(rx * uy - ry * ux) < clear) {
+                        block = r;
+                        bestAlong = along;
+                    }
+                }
+                if (block != null) {
+                    float rx = block.x - s.x, ry = block.y - s.y, rd = hypot(rx, ry), clear = block.r + 40f * k;
+                    // pass on the side the ship already sits off the rock's centre line (to starboard if dead on)
+                    float side = rx * uy - ry * ux >= 0f ? 1f : -1f;
+                    float off = rd > clear ? (float) Math.asin(clear / rd) : (float) (Math.PI / 2);
+                    float ta = (float) Math.atan2(ry, rx) + side * off;
+                    ux = (float) Math.cos(ta);
+                    uy = (float) Math.sin(ta);
+                }
+            }
+            vx = ux * sp;
+            vy = uy * sp;
         }
+        float ax = 0f, ay = 0f, avoid = cfg.maxSpeed * 1.4f;
         for (int i = 0; i < rocks.size(); i++) {
             Rock r = rocks.get(i);
             float rx = r.x - s.x, ry = r.y - s.y, nowD = hypot(rx, ry);
@@ -835,20 +889,36 @@ public final class GameWorld {
                 cy = rvx / rv;
                 cd = 1;
             }
-            vx -= cx / cd * u * vmax * 1.4f;
-            vy -= cy / cd * u * vmax * 1.4f;
+            ax -= cx / cd * u * avoid;
+            ay -= cy / cd * u * avoid;
         }
-        float m = 60f * k;
-        if (s.x < m) vx += (m - s.x) / m * vmax;
-        if (s.x > w - m) vx -= (s.x - w + m) / m * vmax;
-        if (s.y < m) vy += (m - s.y) / m * vmax;
-        if (s.y > h - m) vy -= (s.y - h + m) / m * vmax;
+        if (manual && d > 1e-3f) { // swerve, do not stall: most of a push back against the goal goes sideways
+            float ux = dx / d, uy = dy / d, along = ax * ux + ay * uy;
+            if (along < 0f) {
+                float lx = ax - along * ux, ly = ay - along * uy, lm = hypot(lx, ly);
+                if (lm < 1e-3f) { // head-on: pass on the side the ship already sits off the line to the goal
+                    float side = (-uy) * (s.x - gx) + ux * (s.y - gy) >= 0f ? 1f : -1f;
+                    lx = -uy * side;
+                    ly = ux * side;
+                    lm = 1f;
+                }
+                ax = lx + lx / lm * -along * SWERVE + ux * along * (1f - SWERVE);
+                ay = ly + ly / lm * -along * SWERVE + uy * along * (1f - SWERVE);
+            }
+        }
+        vx += ax;
+        vy += ay;
+        float m = EDGE_BAND * k, ev = cfg.maxSpeed;
+        if (s.x < m) vx += (m - s.x) / m * ev;
+        if (s.x > w - m) vx -= (s.x - w + m) / m * ev;
+        if (s.y < m) vy += (m - s.y) / m * ev;
+        if (s.y > h - m) vy -= (s.y - h + m) / m * ev;
         float vm = hypot(vx, vy);
         if (vm > vmax) {
             vx *= vmax / vm;
             vy *= vmax / vm;
         }
-        float lp = 1f - (float) Math.exp(-dt / 0.4f);
+        float lp = 1f - (float) Math.exp(-dt / (manual ? MANUAL_FILTER : 0.4f));
         desVx += (vx - desVx) * lp;
         desVy += (vy - desVy) * lp;
 
@@ -861,7 +931,7 @@ public final class GameWorld {
         } else if (em > 20f * k) {
             pointing = true;
         }
-        float want = pointing ? (float) Math.atan2(ey, ex) : holdAngle;
+        float want = pointing ? (float) Math.atan2(ey, ex) : manual && arrived ? wpBearing : holdAngle;
         evading = facing && threat;
         boolean aiming = facing && !threat;
         if (aiming) {
@@ -898,6 +968,17 @@ public final class GameWorld {
 
     /** The main engines fire only while the heading is within this of the wanted one (20 degrees). */
     static final float MAIN_ENGINE_CONE = (float) Math.toRadians(20);
+    /** Manual mode's top speed over the autopilot's (calm, but a tap gets a response). */
+    static final float MANUAL_SPEED = 1.25f;
+    /**
+     * Arrival, mockup px: manual mode's desired speed falls in proportion within ARRIVE_SLOW of the waypoint; within
+     * ARRIVE_NEAR of it and slower than ARRIVE_SPEED px/s the ship has arrived and holds station.
+     */
+    static final float ARRIVE_SLOW = 120f, ARRIVE_NEAR = 40f, ARRIVE_SPEED = 20f;
+    /** Manual mode's desired-velocity filter, s (the autopilot's is 0.4), and the extra braking lead it allows for, s. */
+    static final float MANUAL_FILTER = 0.25f, MANUAL_LEAD = 0.3f;
+    /** The share of a manual-mode dodge that would push back against the goal turned into a sideways swerve. */
+    private static final float SWERVE = 0.7f;
 
     /** Auto-fire: the nearest rock within 0.6 of the short side, or null. */
     private Rock nearestRock() {

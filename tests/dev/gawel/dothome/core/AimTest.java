@@ -4,7 +4,7 @@ import dev.gawel.dothome.test.T;
 
 /**
  * Tap-to-fire: a tap fires one bolt at once from the next twin gun along the heading (within 3 degrees of it), and
- * the RCS then turns the ship to face the tap point and holds the facing until it settles (or 1.5 s).
+ * the tap point becomes the waypoint the ship then turns and flies to (ManualModeTest covers the flight).
  */
 public final class AimTest {
     private AimTest() {}
@@ -77,7 +77,7 @@ public final class AimTest {
         return (float) Math.abs(Math.cos(a) * (py - y) - Math.sin(a) * (px - x));
     }
 
-    public static void testTapBehindFiresAtOnceAlongTheHeadingThenTurnsWithRcs() {
+    public static void testTapBehindFiresAtOnceAlongTheHeadingThenTurnsToFly() {
         GameWorld g = live(1, null);
         GameWorld.Ship s = g.ship();
         float a0 = s.angle, tx = 510, ty = 590; // 135 degrees clockwise of the nose
@@ -90,15 +90,15 @@ public final class AimTest {
         fromAGun(g, b);
         T.check(Math.abs(GameWorld.wrapAngle(b.angle - a0)) <= GUN_CONE + 1e-3f, "along the heading it had");
         boolean rcs = false, ok = false;
-        for (int i = 0; i < Math.round(g.config().faceTimeout / DT); i++) {
+        for (int i = 0; i < Math.round(1.5f / DT); i++) {
             g.step(DT);
             rcs |= g.rcsFirings() > 0;
             T.check(newBolt(g) == null, "no further bolt");
-            if (g.facingActive()) T.eq(0f, s.thrust, "the engines stay off while turning");
-            ok |= err(s, tx, ty) < 10 * DEG || !g.facingActive();
+            if (g.engineCommand() > 0) T.check(Math.abs(g.headingError()) < 25 * DEG, "the engines wait for the turn");
+            ok |= err(s, tx, ty) < 10 * DEG;
         }
         T.check(rcs, "the RCS turned it");
-        T.check(ok, "within 1.5 s it faces the tap (or the hold ended)");
+        T.check(ok, "within 1.5 s it faces the tap to fly there");
         T.check(g.shots().size() <= 1, "no delayed shot");
     }
 
@@ -129,7 +129,7 @@ public final class AimTest {
         }
     }
 
-    public static void testTapDuringCooldownSetsTheFacingWithoutFiring() {
+    public static void testTapDuringCooldownSetsTheWaypointWithoutFiring() {
         GameWorld g = live(1, null);
         g.aim(310, 100);
         g.step(DT);
@@ -137,9 +137,8 @@ public final class AimTest {
         g.aim(510, 590);
         g.step(DT);
         T.eq(null, newBolt(g), "no bolt during the cooldown");
-        T.eq(true, g.facingActive(), "but it is the facing target now");
-        T.near(510, g.aimTargetX(), 1e-6, "x");
-        T.near(590, g.aimTargetY(), 1e-6, "y");
+        T.near(510, g.waypointX(), 1e-6, "but it is the waypoint now (x)");
+        T.near(590, g.waypointY(), 1e-6, "y");
         for (int i = 0; i < 40; i++) {
             g.step(DT);
             T.eq(null, newBolt(g), "never a delayed shot");
@@ -151,8 +150,8 @@ public final class AimTest {
         g.aim(110, 250);
         g.step(DT);
         g.aim(510, 590);
-        T.near(510, g.aimTargetX(), 1e-6, "x replaced");
-        T.near(590, g.aimTargetY(), 1e-6, "y replaced");
+        T.near(510, g.waypointX(), 1e-6, "x replaced");
+        T.near(590, g.waypointY(), 1e-6, "y replaced");
         GameWorld.Ship s = g.ship();
         float best = 99;
         for (int i = 0; i < Math.round(1.2f / DT); i++) {
@@ -162,17 +161,17 @@ public final class AimTest {
         T.check(best < 10 * DEG, "it turned to the newer tap: " + best / DEG);
     }
 
-    public static void testHoldEndsAndAutopilotResumes() {
+    public static void testManualEndsAndAutopilotResumes() {
         GameWorld g = live(1, null);
         g.setWanderTargetForTest(310, 120); // the autopilot wants to fly up there at once
         g.aim(510, 590);
+        T.eq(false, g.facingActive(), "a tap is a waypoint, not a facing hold");
         int steps = 0;
-        while (g.facingActive() && steps < 600) {
+        while (g.isManual() && steps < 600) {
             g.step(DT);
             steps++;
-            if (g.facingActive()) T.eq(0f, g.engineCommand(), "no burn while facing");
         }
-        T.check(!g.facingActive(), "the hold ended");
+        T.check(!g.isManual(), "manual ended");
         T.check(Math.abs(steps * DT - g.config().manualHoldSeconds) <= 0.05f, "after the manual hold: " + steps * DT);
         boolean burned = false;
         for (int i = 0; i < Math.round(8f / DT) && !burned; i++) {
@@ -258,14 +257,15 @@ public final class AimTest {
         g.aim(100, 100);
         g.restartIntro();
         T.eq(false, g.facingActive(), "a replay clears the facing");
+        T.eq(false, g.isManual(), "and manual mode");
     }
 
-    public static void testFacingPointFollowsAResize() {
+    public static void testWaypointFollowsAResize() {
         GameWorld g = live(1, null);
         g.aim(310, 100);
         g.resize(330, 810);
-        T.near(310 * 330f / 620f, g.aimTargetX(), 1e-3, "x scaled");
-        T.near(100 * 810f / 722f, g.aimTargetY(), 1e-3, "y scaled");
+        T.near(310 * 330f / 620f, g.waypointX(), 1e-3, "x scaled");
+        T.near(100 * 810f / 722f, g.waypointY(), 1e-3, "y scaled");
     }
 
     public static void testBoltsArePooledAndOffScreenOnesDropped() {
