@@ -54,7 +54,14 @@ public final class GameConfig {
     public final float autoFireEvery = 0.45f;
     /** A new wander target every 5-8 s: long enough to fly there, flip and brake. */
     public final float autopilotWanderMin = 5f, autopilotWanderMax = 8f;
-    public final float shockCooldown = 60f, shockDuration = 0.8f; // event tempo (0.6-0.8 s)
+    /**
+     * The spin barrage (a shake): its cooldown and length, s; the spin-up (cubic ease-in) and spin-down (cubic
+     * ease-out) at its ends, s; the top spin (3 rev/s) and the spin above which the guns fire (1 rev/s), rad/s; the
+     * seconds between bolts (the guns alternate); and the linear drag while it spins, per second.
+     */
+    public final float barrageCooldown = 30f, barrageSeconds = 1.6f, barrageSpinUp = 0.3f, barrageSpinDown = 0.4f;
+    public final float barrageSpin = (float) (6 * Math.PI), barrageFireSpin = (float) (2 * Math.PI);
+    public final float barrageFireEvery = 0.045f, barrageDrag = 2f;
     public final float gravityAccel;
 
     /**

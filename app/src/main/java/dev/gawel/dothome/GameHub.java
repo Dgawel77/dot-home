@@ -59,7 +59,7 @@ final class GameHub {
             }
 
             @Override
-            public void onShake() { world.shockwave(); }
+            public void onShake() { world.barrage(); }
         });
         world.setListener(new GameWorld.Listener() {
             @Override
@@ -94,7 +94,7 @@ final class GameHub {
     }
 
     void onVisible(DotWallpaperService.DotEngine e) {
-        if (hiddenAtMs >= 0) { // the shockwave cooldown runs in real time, including while hidden
+        if (hiddenAtMs >= 0) { // the barrage cooldown runs in real time, including while hidden
             world.elapseHidden((SystemClock.elapsedRealtime() - hiddenAtMs) / 1000f);
             hiddenAtMs = -1;
         }

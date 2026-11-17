@@ -297,60 +297,6 @@ public final class GameWorldTest {
         return g;
     }
 
-    public static void testShockwaveClearsRocksAndCools() {
-        Count c = new Count();
-        GameWorld g = pastIntro(c);
-        for (int i = 0; i < 5; i++) g.addRock(3, 100 + i * 100, 150 + i * 90, 0, 0);
-        T.eq(true, g.shockwave(), "first shockwave");
-        T.check(g.wave() != null, "wave active");
-        for (int i = 0; i < 75; i++) g.step(0.016f);
-        for (GameWorld.Rock r : g.rocks()) {
-            boolean onScreen = r.x >= 0 && r.x <= 620 && r.y >= 0 && r.y <= 722;
-            T.check(!(r.size == 3 && onScreen), "size-3 rock left at " + r.x + "," + r.y);
-        }
-        T.check(c.destroyed >= 35, "destroyed " + c.destroyed); // 5 big lineages x (1 + 2 + 4)
-        T.check(g.wave() == null, "wave finished");
-        T.eq(false, g.shockwave(), "cooldown");
-        float t0 = g.time() - 1.2f; // the wave started about 1.2 s ago
-        while (g.time() < t0 + 59.5f) g.step(0.05f);
-        T.eq(false, g.shockwave(), "still cooling");
-        while (g.time() < t0 + 62f) g.step(0.05f);
-        T.eq(true, g.shockwave(), "ready again");
-    }
-
-    public static void testShockCooldownCountsHiddenTime() {
-        GameWorld g = pastIntro(new Count());
-        T.eq(true, g.shockwave(), "first");
-        g.step(0.016f);
-        g.elapseHidden(30f);
-        T.eq(false, g.shockwave(), "30 s hidden is not enough");
-        g.elapseHidden(31f);
-        T.eq(true, g.shockwave(), "ready after 61 s hidden");
-    }
-
-    public static void testNoShockwaveDuringIntro() {
-        GameWorld g = world(new Count());
-        g.setAutopilot(false);
-        T.eq(false, g.shockwave(), "t=0");
-        for (int i = 0; i < 40; i++) g.step(0.016f);
-        T.eq(false, g.shockwave(), "still intro");
-        T.check(g.wave() == null, "no wave");
-        for (int i = 0; i < 40; i++) g.step(0.016f);
-        T.eq(true, g.shockwave(), "after intro");
-    }
-
-    public static void testShockwaveKillsRockWhenRingTouchesItsEdge() {
-        Count c = new Count();
-        GameWorld g = pastIntro(c);
-        float d = g.ship().y - 90;
-        g.addRock(3, g.ship().x, 90, 0, 0);
-        T.eq(true, g.shockwave(), "shockwave");
-        // radius = 1190 * t (0.8 s to the far corner): the edge (d - 33.5) is reached at about 0.224 s, the centre (d) at about 0.252 s
-        for (int i = 0; i < 15; i++) g.step(0.016f);
-        T.check(g.wave().radius < d, "ring has not reached the centre " + g.wave().radius + " < " + d);
-        T.check(c.destroyed >= 1, "burst when the ring touches the edge, destroyed " + c.destroyed);
-    }
-
     public static void testWanderTargetsStayInFreeBand() {
         float[][] cases = {{620, 722, 0.266f, 0.693f}, {330, 810, 0.267f, 0.716f}};
         for (float[] cs : cases) {
@@ -379,34 +325,15 @@ public final class GameWorldTest {
         T.check(b[0] >= 0.267f * 810 && b[1] <= 0.716f * 810 && b[0] < b[1], "cover band " + b[0] + ".." + b[1]);
     }
 
-    public static void testShockwaveReachesCornersAfterResize() {
-        Count c = new Count();
-        GameWorld g = pastIntro(c);
-        for (int i = 0; i < 5; i++) g.addRock(3, 100 + i * 100, 150 + i * 90, 0, 0);
-        T.eq(true, g.shockwave(), "shockwave");
-        g.resize(330, 810);
-        for (int i = 0; i < 75; i++) g.step(0.016f);
-        for (GameWorld.Rock r : g.rocks()) {
-            boolean onScreen = r.x >= 0 && r.x <= 330 && r.y >= 0 && r.y <= 810;
-            T.check(!(r.size == 3 && onScreen), "size-3 rock left at " + r.x + "," + r.y);
-        }
-    }
-
     public static void testStarDepthRange() {
         GameWorld g = sized(1856, 2160);
         T.check(g.stars().size() > 0, "stars");
         for (GameWorld.Star s : g.stars()) T.check(s.depth >= 0.2f && s.depth <= 1.0f, "depth " + s.depth);
     }
 
-    public static void testShockwaveIsEventTempo() {
+    public static void testHitRingIsEventTempo() {
         GameConfig cfg = GameConfig.forSize(620, 722);
-        T.near(0.8, cfg.shockDuration, 1e-6, "shockwave duration");
         T.check(cfg.ringLife >= 0.6f && cfg.ringLife <= 0.8f, "hit ring at event tempo " + cfg.ringLife);
-        GameWorld g = pastIntro(new Count());
-        T.eq(true, g.shockwave(), "shockwave");
-        int n = 0;
-        while (g.wave() != null && n < 200) { g.step(0.016f); n++; }
-        T.near(0.8, n * 0.016, 0.02, "the wave lasts 0.8 s");
     }
 
     public static void testIntroIsAtMostOnePointTwoSeconds() {
@@ -418,7 +345,7 @@ public final class GameWorldTest {
         GameWorld g = world(new Count());
         g.skipIntro();
         T.check(g.introTime() >= g.config().introSeconds, "intro over " + g.introTime());
-        T.eq(true, g.shockwave(), "shockwave allowed at once");
+        T.eq(true, g.barrage(), "barrage allowed at once");
     }
 
     public static void testSkipIntroLetsTheShipSteerAtOnce() {
@@ -436,7 +363,7 @@ public final class GameWorldTest {
         GameWorld g = new GameWorld(new Rng(1));
         g.skipIntro();
         g.resize(620, 722);
-        T.eq(true, g.shockwave(), "no intro after the first resize");
+        T.eq(true, g.barrage(), "no intro after the first resize");
     }
 
     public static void testSkipIntroKeepsTimeAndIsIdempotent() {
@@ -466,8 +393,8 @@ public final class GameWorldTest {
         T.eq(0, g.shots().size(), "shots cleared");
         T.eq(0, g.particles().size(), "debris cleared");
         T.eq(0, g.rings().size(), "hit rings cleared");
-        T.check(g.wave() == null, "no shockwave");
-        T.eq(false, g.shockwave(), "no shockwave during the replayed intro");
+        T.check(!g.isBarrage(), "no barrage");
+        T.eq(false, g.barrage(), "no barrage during the replayed intro");
         T.eq(false, g.aim(s.x, s.y - 100), "no tap fire during the intro");
         float x0 = s.x, y0 = s.y;
         for (int i = 0; i < 62; i++) { // 0.99 s, autopilot and auto-fire on
@@ -480,7 +407,7 @@ public final class GameWorldTest {
         T.check(g.time() > t + 0.9f, "world time keeps running");
         for (int i = 0; i < 19; i++) g.step(0.016f);
         T.check(g.introTime() >= g.config().introSeconds, "intro over");
-        T.eq(true, g.shockwave(), "live again after 1.2 s");
+        T.eq(true, g.barrage(), "live again after 1.2 s");
     }
 
     public static void testNoFireDuringFirstIntro() {
@@ -506,7 +433,7 @@ public final class GameWorldTest {
         stepClear(g, 3f);
         T.near(0, g.introTime(), 1e-6, "the intro stays at its first frame");
         T.near(x0, g.ship().x, 0.01, "ship still while held");
-        T.eq(false, g.shockwave(), "no shockwave while held");
+        T.eq(false, g.barrage(), "no barrage while held");
         g.restartIntro();
         stepClear(g, 0.5f);
         T.near(0.5, g.introTime(), 0.02, "playing after the unlock");

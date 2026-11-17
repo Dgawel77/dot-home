@@ -197,8 +197,7 @@ public final class ShipFlightTest {
                 float x = 40 + (i * 37) % 540, y = 60 + (i * 53) % 600;
                 T.eq(a.aim(x, y), b.aim(x, y), "tap " + i);
             }
-            if (i == 900) a.shockwave();
-            if (i == 900) b.shockwave();
+            if (i == 900) T.eq(a.barrage(), b.barrage(), "barrage");
             a.step(DT);
             b.step(DT);
             GameWorld.Ship p = a.ship(), q = b.ship();

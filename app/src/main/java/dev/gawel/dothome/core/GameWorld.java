@@ -17,6 +17,12 @@ import java.util.List;
  * wander, burns or avoidance), the RCS turns the ship to the tap and holds that facing, and it coasts under a gentle
  * manual drag. Then the autopilot resumes from the current state with a fresh wander target.
  *
+ * <p>The spin barrage (a shake, 30 s cooldown): for 1.6 s the ship spins on the spot, a random way, its spin
+ * easing in to 3 rev/s over 0.3 s and out to 0 over the last 0.4 s, with the RCS firing hard on both ramps. The
+ * autopilot and manual mode are off and the ship's drift dies under a 2/s drag. While it spins faster than 1 rev/s
+ * the guns fire alternately every 0.045 s along the heading, so the bolts spray out in a spiral; they hit like any
+ * other bolt. Then the autopilot takes over with a fresh wander target, keeping the final heading.
+ *
  * <p>Thrusters are reported as per-step events the renderer reads (nozzle thrust levels, RCS firings), kept in
  * fixed arrays so a step allocates nothing for them. Angles are screen angles (y down): a growing angle turns
  * clockwise on screen.
@@ -55,7 +61,6 @@ public final class GameWorld {
     }
     /** The shooting star: head position, unit direction, trail length, time and the end-fade envelope. */
     public static final class Meteor { public float x, y, dx, dy, t, alpha; public boolean active; }
-    public static final class Shockwave { public float x, y, radius, maxRadius, t; }
 
     private static final float TAU = (float) (Math.PI * 2);
 
@@ -71,8 +76,8 @@ public final class GameWorld {
     private final List<Shot> shots = new ArrayList<Shot>();
     /** Spent bolts for reuse: firing allocates nothing. */
     private final List<Shot> shotPool = new ArrayList<Shot>();
-    /** At most this many bolts fly at once. */
-    public static final int MAX_SHOTS = 40;
+    /** At most this many bolts fly at once (a barrage has about 10 in flight on top of any taps'). */
+    public static final int MAX_SHOTS = 48;
     private final Flash flash = new Flash();
     // the facing target: a tapped screen point, or (auto-fire) a rock the facing follows
     private boolean facing;
@@ -119,8 +124,12 @@ public final class GameWorld {
     private final int[] rcsPort = new int[2], rcsSide = new int[2];
     private final float[] rcsStrength = new float[2];
     private int rcsFirings;
-    private Shockwave wave;
-    private float shockCool;
+    /** Seconds into the spin barrage, or -1 when there is none; its spin direction (+1 clockwise) and cooldown. */
+    private float barrageT = -1f, barrageCool;
+    private int barrageDir;
+    /** Barrage time of its next bolt, and the bolts it has fired. */
+    private float barrageBoltT;
+    private int barrageBolts;
     private float bandLo, bandHi;
 
     public GameWorld(Rng rng) {
@@ -134,25 +143,40 @@ public final class GameWorld {
     /** Off, nothing flies the ship: the engines and RCS stay idle and it coasts (tests). */
     public void setAutopilot(boolean on) { autopilot = on; }
 
-    /** Starts a shockwave at the ship; false during the intro or while the cooldown is running. */
-    public boolean shockwave() {
-        if (!isLive() || shockCool > 0) return false;
-        shockCool = cfg.shockCooldown;
-        Shockwave sw = new Shockwave();
-        sw.x = ship.x;
-        sw.y = ship.y;
-        sw.maxRadius = hypot(w, h);
-        wave = sw;
+    /**
+     * A shake: starts a spin barrage, its direction picked at random; false during the intro (or its hold) or while
+     * the cooldown is running. Ends manual mode and any facing hold.
+     */
+    public boolean barrage() {
+        if (!isLive() || barrageCool > 0 || barrageT >= 0f) return false;
+        barrageCool = cfg.barrageCooldown;
+        barrageT = 0f;
+        barrageDir = rng.next() < 0.5 ? 1 : -1;
+        // the first bolt goes when the spin-up passes the firing spin, then one every barrageFireEvery
+        barrageBoltT = cfg.barrageSpinUp * (float) Math.cbrt(cfg.barrageFireSpin / cfg.barrageSpin);
+        barrageBolts = 0;
+        clearAim();
         return true;
     }
 
-    /** Counts real time spent while the wallpaper was hidden toward the shockwave cooldown. */
+    /**
+     * Counts real time spent while the wallpaper was hidden toward the barrage cooldown; a barrage that would have
+     * finished meanwhile is over.
+     */
     public void elapseHidden(float secs) {
-        if (secs > 0 && shockCool > 0) shockCool = Math.max(0f, shockCool - secs);
+        if (!(secs > 0)) return;
+        if (barrageCool > 0) barrageCool = Math.max(0f, barrageCool - secs);
+        if (barrageT >= 0f && barrageT + secs >= cfg.barrageSeconds) endBarrage();
     }
 
-    /** The active shockwave, or null. */
-    public Shockwave wave() { return wave; }
+    /** True while a spin barrage runs. */
+    public boolean isBarrage() { return barrageT >= 0f; }
+
+    /** The current or last barrage's spin direction: +1 clockwise on screen, -1 counter-clockwise (tests). */
+    int barrageDirection() { return barrageDir; }
+
+    /** Bolts the current or last barrage fired (tests). */
+    int barrageBolts() { return barrageBolts; }
 
     public void setAutoFire(boolean on) { autoFire = on; }
 
@@ -214,8 +238,8 @@ public final class GameWorld {
 
     /**
      * Plays the intro from its first frame (the first show after unlock) so the scene starts from one dot: the ship
-     * stops where it is and shots, debris, the shockwave and hit rings are cleared. Until the intro ends the ship
-     * holds still (no autopilot, no collisions) and nothing fires: no taps, no auto-fire, no shockwave. Releases a hold.
+     * stops where it is and shots, debris, a barrage and hit rings are cleared. Until the intro ends the ship
+     * holds still (no autopilot, no collisions) and nothing fires: no taps, no auto-fire, no barrage. Releases a hold.
      */
     public void restartIntro() {
         resetIntro();
@@ -244,10 +268,10 @@ public final class GameWorld {
         laserHits = 0;
         particles.clear();
         rings.clear();
-        wave = null;
+        barrageT = -1f;
     }
 
-    /** Past the intro: the autopilot steers, the ship collides, and taps, auto-fire and the shockwave work. */
+    /** Past the intro: the autopilot steers, the ship collides, and taps, auto-fire and the barrage work. */
     private boolean isLive() { return cfg != null && introT >= cfg.introSeconds; }
     public float width() { return w; }
     public float height() { return h; }
@@ -290,7 +314,6 @@ public final class GameWorld {
         computeWanderBand();
         wanderX *= sx;
         wanderY = clamp(wanderY * sy, bandLo, bandHi);
-        if (wave != null) { wave.x *= sx; wave.y *= sy; wave.radius *= kr; wave.maxRadius = hypot(w, h); }
         retargetStars();
     }
 
@@ -372,10 +395,11 @@ public final class GameWorld {
     /**
      * A tap: fires one bolt at once from the next gun along the heading (unless the fire cooldown is running) and
      * makes (x, y) the facing target, replacing any earlier one; false during the intro. The ship turns to face it
-     * and holds the facing until within cfg.faceCone for cfg.faceHold seconds, or cfg.faceTimeout at most.
+     * and holds the facing until within cfg.faceCone for cfg.faceHold seconds, or cfg.faceTimeout at most. Ignored
+     * (false) during a barrage.
      */
     public boolean aim(float x, float y) {
-        if (!isLive()) return false;
+        if (!isLive() || barrageT >= 0f) return false;
         faceX = x;
         faceY = y;
         setFacing(null);
@@ -394,7 +418,7 @@ public final class GameWorld {
     /** Fires a pending tap's bolt, runs auto-fire's cadence and ends the facing hold. */
     private void aimAndFire(float dt) {
         Ship s = ship;
-        if (tapFire && fireT <= 0) shoot(faceX, faceY);
+        if (tapFire && fireT <= 0) shoot(faceX, faceY, true);
         tapFire = false;
         if (autoFire) {
             autoT -= dt;
@@ -402,7 +426,7 @@ public final class GameWorld {
                 Rock r = nearestRock();
                 if (r != null) {
                     if (!facing) setFacing(r);
-                    if (fireT <= 0) shoot(r.x, r.y);
+                    if (fireT <= 0) shoot(r.x, r.y, true);
                     autoT = cfg.autoFireEvery;
                 }
             }
@@ -450,19 +474,23 @@ public final class GameWorld {
     }
 
     /**
-     * One bolt from the next gun (they alternate) along the heading, toed in toward (tx, ty) from its muzzle only
-     * when that bearing is within cfg.gunCone of the heading. The muzzle flash shows at that gun.
+     * One bolt from the next gun (they alternate) along the heading. With toeIn it is toed in toward (tx, ty) from
+     * its muzzle when that bearing is within cfg.gunCone of the heading. The muzzle flash shows at that gun. False
+     * when MAX_SHOTS are already flying (the flash still shows).
      */
-    private void shoot(float tx, float ty) {
+    private boolean shoot(float tx, float ty, boolean toeIn) {
         fireT = cfg.fireCooldown;
         Ship s = ship;
         float k = cfg.k, c = (float) Math.cos(s.angle), sn = (float) Math.sin(s.angle);
         float lx = ShipShape.GUN_X * k, ly = ShipShape.gunY(gun) * k;
         gun = (gun + 1) % ShipShape.GUNS;
         float mx = s.x + lx * c - ly * sn, my = s.y + lx * sn + ly * c;
-        float off = wrapAngle((float) Math.atan2(ty - my, tx - mx) - s.angle);
-        if (Math.abs(off) > cfg.gunCone) off = 0f;
-        float a = wrapAngle(s.angle + off);
+        float off = 0f, a = s.angle;
+        if (toeIn) {
+            off = wrapAngle((float) Math.atan2(ty - my, tx - mx) - s.angle);
+            if (Math.abs(off) > cfg.gunCone) off = 0f;
+            a = wrapAngle(s.angle + off);
+        }
         flash.x = lx;
         flash.y = ly;
         flash.angle = off;
@@ -477,7 +505,41 @@ public final class GameWorld {
             b.t = b.trav = b.hit = 0f;
             b.life = cfg.shotLife;
             shots.add(b);
+            return true;
         }
+        return false;
+    }
+
+    /** The barrage's spin rate t seconds in, rad/s: a cubic ease-in to cfg.barrageSpin, held, a cubic ease-out to 0. */
+    private float barrageSpinAt(float t) {
+        GameConfig c = cfg;
+        if (t <= 0f || t >= c.barrageSeconds) return 0f;
+        if (t < c.barrageSpinUp) {
+            float u = t / c.barrageSpinUp;
+            return c.barrageSpin * u * u * u;
+        }
+        float down = c.barrageSeconds - c.barrageSpinDown;
+        if (t <= down) return c.barrageSpin;
+        float v = 1f - (t - down) / c.barrageSpinDown;
+        return c.barrageSpin * v * v * v;
+    }
+
+    /** Fires the barrage's bolts that are due, while the ship spins faster than cfg.barrageFireSpin. */
+    private void barrageFire() {
+        while (barrageT >= barrageBoltT && Math.abs(ship.spin) > cfg.barrageFireSpin) {
+            if (shoot(0f, 0f, false)) barrageBolts++;
+            barrageBoltT += cfg.barrageFireEvery;
+        }
+    }
+
+    /** The barrage is over: the autopilot takes over from the current state, holding the heading, with a fresh wander target. */
+    private void endBarrage() {
+        barrageT = -1f;
+        ship.spin = 0f;
+        resetFlight();
+        desVx = ship.vx;
+        desVy = ship.vy;
+        wanderT = 0f;
     }
 
     private void clearShots() {
@@ -547,11 +609,13 @@ public final class GameWorld {
         if (dt < 0) dt = 0;
         time += dt;
         if (!introHeld) introT += dt;
-        if (shockCool > 0) shockCool -= dt;
+        if (barrageCool > 0) barrageCool -= dt;
         laserHits = 0;
         boolean live = isLive();
+        boolean spinning = barrageT >= 0f; // a barrage: the spin is scripted, the autopilot and manual mode wait
+        if (spinning) barrageT += dt;
         Ship s = ship;
-        if (live && autopilot) pilot(dt);
+        if (live && autopilot && !spinning) pilot(dt);
         else {
             angAccel = 0f;
             thrustCmd = 0f;
@@ -562,13 +626,17 @@ public final class GameWorld {
         float acc = s.thrust * cfg.thrust;
         s.vx += (float) Math.cos(s.angle) * acc * dt;
         s.vy += (float) Math.sin(s.angle) * acc * dt;
-        float spinCap = GameConfig.SPIN_CAP * cfg.maxSpin;
-        s.spin = clamp(s.spin + angAccel * dt, -spinCap, spinCap);
-        float dr = (float) Math.exp(-cfg.drag * dt);
-        float dv = manualT > 0f ? (float) Math.exp(-cfg.manualDrag * dt) : dr;
+        float dr = (float) Math.exp(-cfg.drag * dt), dv = dr;
+        if (spinning) {
+            s.spin = barrageDir * barrageSpinAt(barrageT);
+            dv = (float) Math.exp(-cfg.barrageDrag * dt);
+        } else {
+            float spinCap = GameConfig.SPIN_CAP * cfg.maxSpin;
+            s.spin = clamp(s.spin + angAccel * dt, -spinCap, spinCap) * dr;
+            if (manualT > 0f) dv = (float) Math.exp(-cfg.manualDrag * dt);
+        }
         s.vx *= dv;
         s.vy *= dv;
-        s.spin *= dr;
         float sp = hypot(s.vx, s.vy), cap = GameConfig.SPEED_CAP * cfg.maxSpeed;
         if (sp > cap) {
             s.vx *= cap / sp;
@@ -584,22 +652,23 @@ public final class GameWorld {
         if (s.y > h - m) { s.y = h - m; s.vy = -Math.abs(s.vy) * 0.45f; }
         for (int i = 0; i < ShipShape.NOZZLES; i++) nozzleThrust[i] = s.thrust;
         rcsFirings = 0;
-        if (angAccel != 0f) {
-            int dir = angAccel > 0 ? 1 : -1;
-            float st = Math.min(1f, Math.abs(angAccel) / cfg.rcsAccel);
-            rcsPort[0] = ShipShape.RCS_NOSE;
-            rcsSide[0] = -dir;
-            rcsPort[1] = ShipShape.RCS_TAIL;
-            rcsSide[1] = dir;
-            rcsStrength[0] = rcsStrength[1] = st;
-            rcsFirings = 2;
+        if (spinning) { // full RCS on both ramps: with the spin while it spins up, against it while it spins down
+            if (barrageT < cfg.barrageSpinUp) fireRcs(barrageDir, 1f);
+            else if (barrageT > cfg.barrageSeconds - cfg.barrageSpinDown && barrageT < cfg.barrageSeconds) fireRcs(-barrageDir, 1f);
+        } else if (angAccel != 0f) {
+            fireRcs(angAccel > 0 ? 1 : -1, Math.min(1f, Math.abs(angAccel) / cfg.rcsAccel));
         }
         stepStars(dt, live);
         if (fireT > 0) fireT -= dt;
         if (flash.t > 0) flash.t = Math.max(0f, flash.t - dt);
         if (s.hitCooldown > 0) s.hitCooldown -= dt;
 
-        if (live) aimAndFire(dt);
+        if (spinning) {
+            if (live) barrageFire();
+            if (barrageT >= cfg.barrageSeconds) endBarrage();
+        } else if (live) {
+            aimAndFire(dt);
+        }
 
         for (int i = 0; i < rocks.size(); i++) {
             Rock r = rocks.get(i);
@@ -674,19 +743,6 @@ public final class GameWorld {
                     }
                 }
             }
-        }
-        if (wave != null) {
-            wave.t += dt;
-            wave.radius = wave.maxRadius * Math.min(1f, wave.t / cfg.shockDuration);
-            boolean again = true;
-            while (again) {
-                again = false;
-                for (int i = 0; i < rocks.size(); i++) {
-                    Rock r = rocks.get(i);
-                    if (hypot(r.x - wave.x, r.y - wave.y) - r.r < wave.radius) { kill(i); again = true; break; }
-                }
-            }
-            if (wave.t >= cfg.shockDuration) wave = null;
         }
         for (int i = 0; i < rings.size(); i++) rings.get(i).t += dt;
         for (int i = rings.size() - 1; i >= 0; i--) if (rings.get(i).t >= cfg.ringLife) rings.remove(i);
@@ -828,6 +884,16 @@ public final class GameWorld {
             burning = true;
         }
         thrustCmd = burning ? clamp(em / (0.25f * cfg.thrust), 0.3f, 1f) * (float) Math.cos(ae) : 0f;
+    }
+
+    /** RCS event: a nose and a tail jet on opposite sides, turning the ship dir (+1 clockwise) at strength 0..1. */
+    private void fireRcs(int dir, float strength) {
+        rcsPort[0] = ShipShape.RCS_NOSE;
+        rcsSide[0] = -dir;
+        rcsPort[1] = ShipShape.RCS_TAIL;
+        rcsSide[1] = dir;
+        rcsStrength[0] = rcsStrength[1] = strength;
+        rcsFirings = 2;
     }
 
     /** The main engines fire only while the heading is within this of the wanted one (20 degrees). */

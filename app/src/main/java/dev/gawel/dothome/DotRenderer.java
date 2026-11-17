@@ -21,9 +21,10 @@ import dev.gawel.dothome.core.Zones;
 /**
  * Draws the game on the 4 dp lattice anchored at the surface origin. Rocks are rasterised every frame into filled
  * lattice silhouettes (regular weight on the edge blending to light in the body, ink by sqrt(coverage)), or, with
- * the outline style, drawn as free outline dots with a body stipple. The shockwave and hit rings are lattice dot
- * rows. The ship (Ship v2 "forked-5", heavy weight), its two main-engine plumes, its RCS puffs, debris and stars
- * are free soft dots in the greys. Laser bolts, the muzzle flash and hit sparks are the one colour, DotStyle.LASER.
+ * the outline style, drawn as free outline dots with a body stipple. Hit rings are lattice dot rows. The ship
+ * (Ship v2 "forked-5", heavy weight), its two main-engine plumes, its RCS puffs (heavier through a barrage's spin-up
+ * and spin-down), debris and stars are free soft dots in the greys. Laser bolts, the muzzle flash and hit sparks are
+ * the one colour, DotStyle.LASER.
  * Dots draw across the whole screen.
  * Only the ship, its opening dot and the plumes reach L100; on a lock still every grey stays at L65 or below and
  * the red is dimmed to 65%. Nothing is allocated per frame: plume, puff and spark dots live in fixed pools.
@@ -42,6 +43,8 @@ final class DotRenderer {
     private static final float PLUME_RATE = 65f;
     /** RCS firings weaker than this (fine trim) show no puff. */
     private static final float PUFF_MIN = 0.12f;
+    /** A barrage's spin-up and spin-down puff this many times as often, a little longer, with two more dots each. */
+    private static final float BARRAGE_PUFFS = 2f, BARRAGE_PUFF_LIFE = 1.3f;
     /** Thruster dots (plumes and puffs) and red sparks alive at once, at most. */
     private static final int FX_MAX = 384, SPARK_MAX = 64;
     /** LASER_GLOW's alpha, stacked from a 3x pass and a 2x pass so the glow reads about 35% beside the core. */
@@ -225,15 +228,17 @@ final class DotRenderer {
             puffAcc = 0.9f; // the next firing puffs at once
             return;
         }
-        puffAcc = Math.min(3f, puffAcc + (2f + ra * 24f) * dt);
+        boolean heavy = w.isBarrage();
+        float rate = (2f + ra * 24f) * (heavy ? BARRAGE_PUFFS : 1f), life = heavy ? BARRAGE_PUFF_LIFE : 1f;
+        puffAcc = Math.min(3f, puffAcc + rate * dt);
         while (puffAcc >= 1f) {
             puffAcc -= 1f;
             for (int j = 0; j < n; j++) {
                 int port = w.rcsPort(j), side = w.rcsSide(j);
                 float px = ShipShape.rcsX(port), py = ShipShape.rcsY(port, side);
-                for (int m = 2 + fxRng.nextInt(3); m > 0; m--) {
+                for (int m = 2 + fxRng.nextInt(3) + (heavy ? 2 : 0); m > 0; m--) {
                     addFx(px + rnd(-1f, 1f), py + side * 1.5f, rnd(-13f, 13f) * k, side * rnd(60f, 120f) * k,
-                        rnd(0.15f, 0.23f), 2.2f, 0.9f, true);
+                        rnd(0.15f, 0.23f) * life, 2.2f, 0.9f, true);
                 }
             }
         }
@@ -344,7 +349,7 @@ final class DotRenderer {
     }
 
     /**
-     * Renders the current world into a new bitmap of the given size. rock, particle, shot, ship and ring dots (and the shockwave) above clearTopFraction of the height are skipped
+     * Renders the current world into a new bitmap of the given size. rock, particle, shot, ship and ring dots above clearTopFraction of the height are skipped
      * so that band stays clear. The world is scaled uniformly to cover the target and centred (excess is cropped);
      * the lattice and dot sizes are the target screen's, every grey is capped at L65 (the ship and its plumes too)
      * and the laser red is dimmed to 65%. Plumes and sparks come from this renderer's pools.
@@ -470,12 +475,6 @@ final class DotRenderer {
                 user.draw(c, sx(s.x + px * cs - py * sn), sy(s.y + px * sn + py * cs),
                     (MARKS[j + 2] + 1.4f * thr) * MARKS[j + 3] * mock / 2f, (NOZZLE_IDLE + (1f - NOZZLE_IDLE) * thr) * sa);
             }
-        }
-
-        GameWorld.Shockwave sw = w.wave();
-        if (sw != null && !still) {
-            float al = 1f - sw.t / cfg.shockDuration;
-            if (al > 0 && sw.radius > 1f) latticeRing(c, sw.x, sw.y, sw.radius, al);
         }
 
         List<GameWorld.Ring> rings = w.rings();
