@@ -3,7 +3,6 @@ package dev.gawel.dothome;
 import android.content.Context;
 import android.util.Log;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -13,6 +12,7 @@ import dev.gawel.dothome.core.CtaBoard;
 import dev.gawel.dothome.core.CtaParser;
 import dev.gawel.dothome.core.CtaUrls;
 import dev.gawel.dothome.core.Place;
+import dev.gawel.dothome.core.PlatformBoard;
 
 /**
  * CTA Train Tracker arrivals for the Dot Blue Line widget. Prefs: "cta.key" (the user's key, a secret: never logged,
@@ -125,20 +125,8 @@ final class CtaRepo {
         CtaBoard b = CtaParser.parse(cached.substring(nl + 1));
         if (b.errCd != 0) return BLANK;
         int ageMin = (int) (age / 60_000);
-        return new Shown(Mode.BOARD, mapid, BlueLineStations.label(mapid), aged(b.ohare, ageMin),
-            aged(b.forestPark, ageMin));
-    }
-
-    /** The arrivals ageMin minutes on: trains already gone are dropped; one minute or less is due. */
-    private static List<Arrival> aged(List<Arrival> in, int ageMin) {
-        if (ageMin == 0) return in;
-        List<Arrival> out = new ArrayList<>();
-        for (Arrival a : in) {
-            int m = a.minutes - ageMin;
-            if (m < 0) continue;
-            out.add(new Arrival(a.dest, m, a.due || m <= 1));
-        }
-        return out;
+        return new Shown(Mode.BOARD, mapid, BlueLineStations.label(mapid), PlatformBoard.aged(b.ohare, ageMin),
+            PlatformBoard.aged(b.forestPark, ageMin));
     }
 
     /** Blocking (network), on LiveFeeds' executor only: fetches the arrivals when a key is set and 55 s have passed. */
@@ -159,6 +147,8 @@ final class CtaRepo {
             return;
         }
         loggedErr = 0;
+        // the key changed during the fetch: Setup's reset wins and the next tick fetches with the new key
+        if (!key.equals(key(prefs))) return;
         prefs.put(K_BOARD, mapid + "\n" + json);
         prefs.put(K_AT, String.valueOf(nowMs));
     }

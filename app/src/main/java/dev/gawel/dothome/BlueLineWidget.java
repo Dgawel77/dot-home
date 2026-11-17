@@ -23,6 +23,7 @@ import dev.gawel.dothome.core.PlatformBoard;
  */
 public class BlueLineWidget extends AppWidgetProvider {
     private static final String TAG = "DotHome";
+    /** The 4 x 3 cell default placement (widget_blueline_info's target), used when the launcher reports no size. */
     private static final int DEFAULT_W_DP = 300, DEFAULT_H_DP = 180;
 
     /** What the widgets last showed; a minute with the same content pushes nothing. */
@@ -124,7 +125,7 @@ public class BlueLineWidget extends AppWidgetProvider {
         }
         Bitmap art = BoardArt.render(ctx, w, h, eff, s);
         rv.setImageViewBitmap(R.id.blueline_img, art);
-        rv.setContentDescription(R.id.blueline_img, description(s, BoardArt.rowsFit(hDp)));
+        rv.setContentDescription(R.id.blueline_img, description(s, PlatformBoard.rowsFit(hDp)));
         return rv;
     }
 

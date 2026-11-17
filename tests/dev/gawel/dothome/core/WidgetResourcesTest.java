@@ -112,8 +112,12 @@ public final class WidgetResourcesTest {
         T.check(info.contains("android:previewImage=\"@drawable/preview_blueline\""), "picker preview");
         T.check(info.contains("android:initialLayout=\"@layout/widget_blueline_empty\""),
             "a new Blue Line widget starts blank");
-        T.check(info.contains("android:minWidth=\"250dp\"") && info.contains("android:minHeight=\"110dp\""),
-            "min 250 x 110 dp");
+        T.check(info.contains("android:minWidth=\"250dp\""), "min width 250 dp");
+        T.check(info.contains("android:minResizeHeight=\"110dp\""), "shrinks to 110 dp");
+        Matcher mh = Pattern.compile("android:minHeight=\"(\\d+)dp\"").matcher(info);
+        T.check(mh.find() && Integer.parseInt(mh.group(1)) >= 136, "placed tall enough for 2+ arrivals");
+        T.check(PlatformBoard.rowsFit(Integer.parseInt(mh.group(1))) >= 2, "minHeight fits 2+ rows");
+        T.check(info.contains("android:targetCellHeight=\"3\""), "3 cells tall by default");
         String empty = read("layout/widget_blueline_empty.xml");
         T.eq(1, elements(empty, "FrameLayout").size(), "one view");
         T.check(!empty.contains("ImageView"), "no card, no image");

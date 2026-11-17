@@ -101,6 +101,30 @@ public final class BlueLineTest {
         T.check(!b.forestPark.get(0).due, "not due");
     }
 
+    public static void testRowsFit() {
+        T.eq(0, PlatformBoard.rowsFit(80), "headers only");
+        T.eq(1, PlatformBoard.rowsFit(110), "min resize height");
+        T.eq(1, PlatformBoard.rowsFit(135), "just short of two");
+        T.eq(2, PlatformBoard.rowsFit(136), "two rows");
+        T.eq(3, PlatformBoard.rowsFit(168), "three rows");
+        T.eq(3, PlatformBoard.rowsFit(400), "never more than ROWS");
+    }
+
+    public static void testAgedMinutes() {
+        List<Arrival> in = java.util.Arrays.asList(new Arrival("O'HARE", 0, true), new Arrival("O'HARE", 3, false),
+            new Arrival("JEFFERSON PARK", 7, false));
+        T.check(PlatformBoard.aged(in, 0) == in, "fresh board unchanged");
+        List<Arrival> two = PlatformBoard.aged(in, 2);
+        T.eq(2, two.size(), "the train already gone is dropped");
+        T.eq(1, two.get(0).minutes, "3 - 2");
+        T.check(two.get(0).due, "1 min is due");
+        T.eq("DUE", PlatformBoard.text(two.get(0)), "due text");
+        T.eq(5, two.get(1).minutes, "7 - 2");
+        T.check(!two.get(1).due, "5 min not due");
+        T.eq("JEFFERSON PARK", two.get(1).dest, "dest kept");
+        T.check(PlatformBoard.aged(in, 8).isEmpty(), "all gone");
+    }
+
     public static void testUrlEncodesKey() {
         String u = CtaUrls.arrivals("a b&c", 40380);
         T.check(u.startsWith("https://lapi.transitchicago.com/api/1.0/ttarrivals.aspx?key=a+b%26c&"), "key " + u);

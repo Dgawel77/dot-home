@@ -50,9 +50,10 @@ public final class WidgetPreview {
     static final int BEARS_W_DP = 300, BEARS_H_DP = 120;
 
     // BoardArt's layout (dp)
-    static final float SMALL_DP = 11f, LABEL_LINE_DP = 20f, HEAD_LINE_DP = 16f, GAP_DP = 4f;
+    static final float SMALL_DP = 11f, LABEL_LINE_DP = PlatformBoard.LABEL_LINE_DP;
+    static final float HEAD_LINE_DP = PlatformBoard.HEAD_LINE_DP, GAP_DP = PlatformBoard.GAP_DP;
     static final float COL_GAP_DP = 16f, DEST_GAP_DP = 8f;
-    static final int BOARD_STEP_DP = 4;
+    static final int BOARD_STEP_DP = PlatformBoard.STEP_DP;
     static final int BLUELINE_W_DP = 300, BLUELINE_H_DP = 180;
     static final String CTA_FIXTURE = "tests/fixtures/cta-arrivals.json";
     static final int CTA_FIXTURE_MAPID = 40380;
@@ -132,9 +133,7 @@ public final class WidgetPreview {
         float rowsTop = headTop + (HEAD_LINE_DP + GAP_DP) * DENS;
         float colW = Lattice.snap((innerW - COL_GAP_DP * DENS) / 2f, DENS);
         float x0 = pad, x1 = pad + colW + COL_GAP_DP * DENS;
-        float rowsTopDp = PAD_DP + LABEL_LINE_DP + GAP_DP + HEAD_LINE_DP + GAP_DP;
-        int rows = Math.max(0, Math.min(PlatformBoard.ROWS, (int) Math.floor(
-            (BLUELINE_H_DP - PAD_DP - rowsTopDp + GAP_DP) / (DotMatrixFont.ROWS * BOARD_STEP_DP + GAP_DP))));
+        int rows = PlatformBoard.rowsFit(BLUELINE_H_DP);
         float step = BOARD_STEP_DP * DENS, rowH = DotMatrixFont.ROWS * step;
 
         text(c, small, "O'HARE", x0, headTop, HEAD_LINE_DP * DENS, DotStyle.L46);

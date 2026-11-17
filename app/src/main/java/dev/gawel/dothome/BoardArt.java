@@ -24,27 +24,17 @@ import dev.gawel.dothome.core.TextFit;
  * Greyscale only. tools/WidgetPreview.java mirrors this layout for the picker preview.
  */
 final class BoardArt {
-    static final float PAD_DP = 16f, LABEL_DP = 13f, SMALL_DP = 11f;
-    /** Line boxes: the station label and the column headers. */
-    static final float LABEL_LINE_DP = 20f, HEAD_LINE_DP = 16f;
-    /** Label to headers, headers to the first row, and between rows. */
-    static final float GAP_DP = 4f;
-    /** Matrix digit step; a row is DotMatrixFont.ROWS steps tall. */
-    static final int STEP_DP = 4;
+    /** The vertical layout (pad, line boxes, gaps, digit step, rows per height) is PlatformBoard's. */
+    static final float PAD_DP = PlatformBoard.PAD_DP, LABEL_DP = 13f, SMALL_DP = 11f;
+    static final float LABEL_LINE_DP = PlatformBoard.LABEL_LINE_DP, HEAD_LINE_DP = PlatformBoard.HEAD_LINE_DP;
+    static final float GAP_DP = PlatformBoard.GAP_DP;
+    static final int STEP_DP = PlatformBoard.STEP_DP;
     /** Between the columns (the divider sits in its middle), and the least gap from a destination to its minutes. */
     static final float COL_GAP_DP = 16f, DEST_GAP_DP = 8f;
     static final String NO_KEY_TEXT = "ADD CTA KEY IN DOT HOME";
     static final String OHARE = "O'HARE", FOREST_PK = "FOREST PK";
 
     private BoardArt() {}
-
-    /** How many rows fit under the headers in a widget hDp tall, 0 to PlatformBoard.ROWS. */
-    static int rowsFit(float hDp) {
-        float rowsTop = PAD_DP + LABEL_LINE_DP + GAP_DP + HEAD_LINE_DP + GAP_DP;
-        float rowH = DotMatrixFont.ROWS * STEP_DP;
-        int n = (int) Math.floor((hDp - PAD_DP - rowsTop + GAP_DP) / (rowH + GAP_DP));
-        return Math.max(0, Math.min(PlatformBoard.ROWS, n));
-    }
 
     /** The content bitmap, wPx x hPx, transparent around the text and dots. s.mode is NO_KEY or BOARD. */
     static Bitmap render(Context ctx, int wPx, int hPx, float dens, CtaRepo.Shown s) {
@@ -73,7 +63,7 @@ final class BoardArt {
         float rowsTop = headTop + (HEAD_LINE_DP + GAP_DP) * dens;
         float colW = Math.max(1f, Lattice.snap((innerW - COL_GAP_DP * dens) / 2f, dens));
         float x0 = pad, x1 = pad + colW + COL_GAP_DP * dens;
-        int rows = rowsFit(hPx / dens);
+        int rows = PlatformBoard.rowsFit(hPx / dens);
         float step = STEP_DP * dens, rowH = DotMatrixFont.ROWS * step;
 
         c.drawText(TextFit.fit(OHARE, colW, head::measureText), x0, baseline(head, headTop, HEAD_LINE_DP * dens), head);
