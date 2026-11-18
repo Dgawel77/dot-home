@@ -16,3 +16,6 @@ tools/cache/
 iconpack/res/
 tools/.venv/
 __pycache__/
+
+# Internal notes (network, device and NAS details): never published
+docs/private/
