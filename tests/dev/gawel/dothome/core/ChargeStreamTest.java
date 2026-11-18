@@ -2,7 +2,7 @@ package dev.gawel.dothome.core;
 
 import dev.gawel.dothome.test.T;
 
-/** The charging stream: dots from the screen edges homing into the ship, and the low-battery dim. */
+/** The charging stream: a few dim dots spawned near the ship homing into it, and the low-battery dim. */
 public final class ChargeStreamTest {
     private ChargeStreamTest() {}
 
@@ -12,11 +12,11 @@ public final class ChargeStreamTest {
         for (int i = 0, n = Math.round(secs / DT); i < n; i++) s.step(DT, on, W / 2, H / 2, W, H, cfg, rng);
     }
 
-    public static void testRateAbout15PerSecond() {
+    public static void testRateAbout4PerSecond() {
         GameConfig cfg = GameConfig.forSize(W, H);
         ChargeStream s = new ChargeStream();
         run(s, true, 10f, cfg, new Rng(3));
-        T.check(s.spawned >= 140 && s.spawned <= 160, "spawned " + s.spawned);
+        T.check(s.spawned >= 36 && s.spawned <= 44, "spawned " + s.spawned);
     }
 
     public static void testAllAbsorbedAfterOff() {
@@ -49,22 +49,46 @@ public final class ChargeStreamTest {
         }
     }
 
-    public static void testDotsSpawnAtEdges() {
+    /** Dots spawn 15-30% of the short side from the ship, all round it. */
+    public static void testDotsSpawnNearTheShip() {
         GameConfig cfg = GameConfig.forSize(W, H);
         ChargeStream s = new ChargeStream();
         Rng rng = new Rng(7);
-        int seen = 0;
-        for (int i = 0, n = Math.round(10f / DT); i < n; i++) {
+        float lo = ChargeStream.SPAWN_NEAR * Math.min(W, H), hi = ChargeStream.SPAWN_FAR * Math.min(W, H);
+        T.near(0.15, ChargeStream.SPAWN_NEAR, 1e-6, "near");
+        T.near(0.30, ChargeStream.SPAWN_FAR, 1e-6, "far");
+        int seen = 0, left = 0, right = 0, above = 0, below = 0;
+        for (int i = 0, n = Math.round(60f / DT); i < n; i++) {
             long sp = s.spawned, ab = s.absorbed;
             s.step(DT, true, W / 2, H / 2, W, H, cfg, rng);
             if (s.spawned > sp && s.absorbed == ab) {
-                float x = s.x[s.n - 1], y = s.y[s.n - 1];
-                boolean edge = x <= 1f || x >= W - 1f || y <= 1f || y >= H - 1f;
-                T.check(edge, "dot at " + x + "," + y);
+                float dx = s.x[s.n - 1] - W / 2, dy = s.y[s.n - 1] - H / 2, d = (float) Math.hypot(dx, dy);
+                // it has already flown one step in, at a quarter of the stream speed
+                float slack = cfg.chargeSpeed * 0.25f * DT + 0.5f;
+                T.check(d >= lo - slack && d <= hi + 0.5f, "dot " + d + " from the ship, want " + lo + ".." + hi);
+                if (dx < 0) left++; else right++;
+                if (dy < 0) above++; else below++;
                 seen++;
             }
         }
-        T.check(seen > 100, "checked " + seen);
+        T.check(seen > 150, "checked " + seen);
+        T.check(left > seen / 4 && right > seen / 4 && above > seen / 4 && below > seen / 4, "all round");
+    }
+
+    /** A ship in a corner: the dots still spawn on the screen. */
+    public static void testSpawnStaysOnScreen() {
+        GameConfig cfg = GameConfig.forSize(W, H);
+        ChargeStream s = new ChargeStream();
+        Rng rng = new Rng(11);
+        for (int i = 0, n = Math.round(30f / DT); i < n; i++) {
+            long sp = s.spawned, ab = s.absorbed;
+            s.step(DT, true, 40f, 40f, W, H, cfg, rng);
+            if (s.spawned > sp && s.absorbed == ab) {
+                float x = s.x[s.n - 1], y = s.y[s.n - 1];
+                T.check(x >= -1f && x <= W + 1f && y >= -1f && y <= H + 1f, "dot at " + x + "," + y);
+            }
+        }
+        T.check(s.spawned > 50, "spawned " + s.spawned);
     }
 
     public static void testGlowRises() {

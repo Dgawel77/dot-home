@@ -1,7 +1,8 @@
 package dev.gawel.dothome.core;
 
 /**
- * A fixed pool of dots that stream from the screen edges into the ship while the phone charges. Each dot homes on
+ * A fixed pool of dots that spawn a short way from the ship (SPAWN_NEAR..SPAWN_FAR of the short side, all round it,
+ * kept on the screen) and stream into it while the phone charges. Each dot homes on
  * the ship and is absorbed on arrival; its glow rises from 0 to 1 as it closes. Allocation-free.
  */
 public final class ChargeStream {
@@ -10,9 +11,11 @@ public final class ChargeStream {
     private static final float TAU = 0.25f;
     /** A dot is absorbed within this multiple of the ship's radius. */
     private static final float ABSORB = 0.6f;
+    /** Dots spawn this far from the ship, as fractions of the screen's short side. */
+    public static final float SPAWN_NEAR = 0.15f, SPAWN_FAR = 0.30f;
 
     public final float[] x = new float[CAP], y = new float[CAP], vx = new float[CAP], vy = new float[CAP];
-    /** 0..1: the dot's level, L46 (0) to L65 (1). */
+    /** 0..1: the dot's level, L30 (0) to L46 (1). */
     public final float[] glow = new float[CAP];
     public int n;
     public long spawned, absorbed;
@@ -39,13 +42,12 @@ public final class ChargeStream {
         budget += cfg.chargeRate * dt;
         while (budget >= 1f && n < CAP) {
             budget -= 1f;
-            // a point on the perimeter, chosen uniformly by length
-            float t = (float) rng.next() * 2f * (w + h);
-            float px, py;
-            if (t < w) { px = t; py = 0f; }
-            else if (t < w + h) { px = w; py = t - w; }
-            else if (t < 2f * w + h) { px = t - w - h; py = h; }
-            else { px = 0f; py = t - 2f * w - h; }
+            // a point a short way from the ship, all round it, kept on the screen
+            float a = (float) (rng.next() * 2 * Math.PI);
+            float r = (SPAWN_NEAR + (SPAWN_FAR - SPAWN_NEAR) * (float) rng.next()) * Math.min(w, h);
+            float px = shipX + (float) Math.cos(a) * r, py = shipY + (float) Math.sin(a) * r;
+            px = px < 0f ? 0f : px > w ? w : px;
+            py = py < 0f ? 0f : py > h ? h : py;
             float dx = shipX - px, dy = shipY - py;
             float d = (float) Math.sqrt(dx * dx + dy * dy);
             if (d <= absorbR) continue; // already on the ship

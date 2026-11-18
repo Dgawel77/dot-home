@@ -77,7 +77,7 @@ public final class GameConfig {
     public final float fogStarDim = 0.5f;
 
     /** Charging: dots spawned per second, their cruise speed toward the ship (px/s), and the battery percent below which the ship dims. */
-    public final float chargeRate = 15f;
+    public final float chargeRate = 4f;
     public final float chargeSpeed;
     public final int lowBattery = 15;
 
