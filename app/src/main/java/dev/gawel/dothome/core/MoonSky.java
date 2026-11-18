@@ -161,13 +161,23 @@ public final class MoonSky {
         return (float) (w * (0.08 + 0.84 * (az - 60) / 240));
     }
 
-    public static float bandTop(float w, float h) { return 0.30f * h; }
+    /** Moonrise and moonset height, as a fraction of the screen height (main and cover). */
+    public static final float HORIZON_Y = 0.43f;
 
-    public static float bandBottom(float w, float h) { return (Zones.isCover(w, h) ? 0.67f : 0.64f) * h; }
+    /**
+     * The arc's top, px: just under the top widget zone, with clearPx (the moon's halo extent) between the zone and
+     * the moon's centre so the moon never overlaps it; never below the band's bottom.
+     */
+    public static float bandTop(float w, float h, float clearPx) {
+        return Math.min(Zones.topZoneBottom(w, h) + clearPx, bandBottom(w, h));
+    }
+
+    /** The arc's bottom (moonrise and moonset), px: high on the screen, never in its middle. */
+    public static float bandBottom(float w, float h) { return HORIZON_Y * h; }
 
     /** Altitude 0..75 deg from the band's bottom to its top; clamped outside. */
-    public static float screenY(double altDeg, float w, float h) {
-        float top = bandTop(w, h), bottom = bandBottom(w, h);
+    public static float screenY(double altDeg, float w, float h, float clearPx) {
+        float top = bandTop(w, h, clearPx), bottom = bandBottom(w, h);
         double k = Math.max(0, Math.min(1, altDeg / 75));
         return (float) (bottom + (top - bottom) * k);
     }

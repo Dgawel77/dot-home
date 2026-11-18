@@ -439,15 +439,15 @@ final class DotRenderer {
         return bmp;
     }
 
-    /** The charging stream: light dots, L46 blending to L65 as they close on the ship. */
+    /** The charging stream: a few dim dots, L30 blending to L46 as they close on the ship. */
     private void drawCharge(Canvas c, GameWorld w, float fade) {
         ChargeStream cs = w.chargeStream();
         for (int i = 0; i < cs.n; i++) {
             float qx = sx(cs.x[i]), qy = sy(cs.y[i]);
             if (qy < clearTopY || qy > clearBottomY) continue;
             float g = cs.glow[i];
-            dot46.draw(c, qx, qy, rLight, (1f - g) * fade);
-            dot65.draw(c, qx, qy, rLight, g * fade);
+            dot30.draw(c, qx, qy, rLight, (1f - g) * fade);
+            dot46.draw(c, qx, qy, rLight, g * fade);
         }
     }
 
@@ -492,7 +492,9 @@ final class DotRenderer {
         if (tr.valid()) {
             float alt = tr.alt(now);
             moonCx = MoonSky.screenX(tr.az(now), w.width());
-            moonCy = MoonSky.screenY(alt, w.width(), w.height());
+            // the arc's top keeps the halo (and one lattice step) clear of the top widget zone
+            float clear = GameConfig.MOON_STAR_CLEAR * w.config().moonRadiusDp * density + step;
+            moonCy = MoonSky.screenY(alt, w.width(), w.height(), clear);
             moonA = MoonSky.alpha(alt, MoonSky.dayFactor(w.dayness(), w.sunAltitude())) * fog * fade;
             moonLimb = tr.limb(now);
         } else {

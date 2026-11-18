@@ -20,6 +20,12 @@ public final class Zones {
         return Math.min(w, h) / Math.max(w, h) < 0.6f;
     }
 
+    /** The bottom edge of the default top widget zone, px. */
+    public static float topZoneBottom(float w, float h) {
+        float[] z = (isCover(w, h) ? COVER : MAIN)[0];
+        return (z[1] + z[3]) * h;
+    }
+
     public static List<float[]> defaults(float w, float h) {
         return scale(isCover(w, h) ? COVER : MAIN, w, h);
     }

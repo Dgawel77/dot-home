@@ -107,19 +107,25 @@ public final class MoonSkyTest {
         T.near(920, MoonSky.screenX(350, 1000), 1e-3, "az 350 clamps");
         T.near(500, MoonSky.screenX(180, 1000), 1e-3, "south centred");
 
-        float w = 1000, h = 1000;
-        T.near(300, MoonSky.bandTop(w, h), 1e-3, "main top");
-        T.near(640, MoonSky.bandBottom(w, h), 1e-3, "main bottom");
-        T.near(MoonSky.bandBottom(w, h), MoonSky.screenY(0, w, h), 1e-3, "alt 0");
-        T.near(MoonSky.bandTop(w, h), MoonSky.screenY(75, w, h), 1e-3, "alt 75");
-        T.near(MoonSky.bandTop(w, h), MoonSky.screenY(89, w, h), 1e-3, "alt 89 clamps");
-        T.near(MoonSky.bandBottom(w, h), MoonSky.screenY(-5, w, h), 1e-3, "alt -5 clamps");
+        float w = 1000, h = 1000, clear = 40;
+        // the arc sits high: its top just under the top widget zone (bottom 0.266 h) plus the halo's extent
+        T.near(266 + 40, MoonSky.bandTop(w, h, clear), 0.5, "main top: under the top zone");
+        T.near(430, MoonSky.bandBottom(w, h), 1e-3, "main bottom: rise/set at 43%");
+        T.near(MoonSky.bandBottom(w, h), MoonSky.screenY(0, w, h, clear), 1e-3, "alt 0");
+        T.near(MoonSky.bandTop(w, h, clear), MoonSky.screenY(75, w, h, clear), 1e-3, "alt 75");
+        T.near(MoonSky.bandTop(w, h, clear), MoonSky.screenY(89, w, h, clear), 1e-3, "alt 89 clamps");
+        T.near(MoonSky.bandBottom(w, h), MoonSky.screenY(-5, w, h, clear), 1e-3, "alt -5 clamps");
+        T.check(MoonSky.bandBottom(w, h) <= 0.45f * h, "never in the middle of the screen");
+        T.check(MoonSky.bandBottom(w, h) + clear < 0.693f * h, "clear of the lower widget zone");
 
-        float cw = 450, ch = 1000; // w/h = 0.45, cover
-        T.near(300, MoonSky.bandTop(cw, ch), 1e-3, "cover top");
-        T.near(670, MoonSky.bandBottom(cw, ch), 1e-3, "cover bottom");
-        T.near(670, MoonSky.screenY(0, cw, ch), 1e-3, "cover alt 0");
-        T.near(300, MoonSky.screenY(75, cw, ch), 1e-3, "cover alt 75");
+        float cw = 450, ch = 1000; // w/h = 0.45, cover: top zone bottom 0.267 h
+        T.near(267 + 40, MoonSky.bandTop(cw, ch, clear), 0.5, "cover top");
+        T.near(430, MoonSky.bandBottom(cw, ch), 1e-3, "cover bottom");
+        T.near(430, MoonSky.screenY(0, cw, ch, clear), 1e-3, "cover alt 0");
+        T.near(MoonSky.bandTop(cw, ch, clear), MoonSky.screenY(75, cw, ch, clear), 1e-3, "cover alt 75");
+
+        // a huge moon on a short screen: the band collapses to its bottom, never inverts
+        T.near(430, MoonSky.bandTop(w, h, 400), 1e-3, "top never below bottom");
     }
 
     /** On a lock still the moon is pushed whole below the clear top band, or not drawn when it no longer fits. */
