@@ -19,7 +19,7 @@ public final class HueRows {
     /** Brightness steps (dots): 5% each. */
     public static final int STEPS = 20;
     private static final int STEP_PCT = 100 / STEPS;
-    /** The PUT body for ALL OFF (sent to the bridge_home grouped_light). */
+    /** The PUT body for off: ALL OFF (sent to the bridge_home grouped_light) and the red off dot. */
     public static final String ALL_OFF_BODY = "{\"on\":{\"on\":false}}";
     public static final String UNPAIRED = "PAIR HUE IN DOT HOME";
     public static final String NO_ROOMS = "PICK ROOMS IN DOT HOME";
@@ -123,8 +123,12 @@ public final class HueRows {
         return "{\"on\":{\"on\":" + !(current != null && current.on) + "}}";
     }
 
-    /** The PUT body for step 1..STEPS: on at step x 5%, or only on when the room has no dimmable lights. */
+    /**
+     * The PUT body for step 1..STEPS: on at step x 5%, or only on when the room has no dimmable lights. Step 0 is
+     * the red off dot: off.
+     */
     public static String dimBody(HueState current, int dot) {
+        if (dot == 0) return ALL_OFF_BODY;
         if (current != null && !current.dimmable) return "{\"on\":{\"on\":true}}";
         return "{\"on\":{\"on\":true},\"dimming\":{\"brightness\":" + level(dot) + "}}";
     }
@@ -134,7 +138,9 @@ public final class HueRows {
         return new HueState(!s.on, s.dimmable, s.brightness);
     }
 
+    /** The state after step dot (0 = off, keeping the brightness for the next on). */
     public static HueState afterDim(HueState s, int dot) {
+        if (dot == 0) return s == null ? HueState.OFF : new HueState(false, s.dimmable, s.brightness);
         if (s != null && !s.dimmable) return new HueState(true, false, 100);
         return new HueState(true, true, level(dot));
     }

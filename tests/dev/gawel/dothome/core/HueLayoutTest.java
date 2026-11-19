@@ -43,7 +43,11 @@ public final class HueLayoutTest {
         T.near(HueLayout.PAD_DP, row[0], 1e-4, "row starts at the pad");
         T.near(W - 2 * HueLayout.PAD_DP, row[2], 1e-4, "full padded width");
         T.near(HueLayout.top(H) + HueLayout.LINE_DP + HueLayout.GAP_DP, row[1], 1e-4, "below the top line");
-        float x = row[0];
+        float[] off = HueLayout.offDotCell(W, H), offP = HueLayout.offDotCentre(W, H);
+        T.near(row[0], off[0], 1e-4, "the red off dot starts the row");
+        T.near(row[2] / (HueRows.STEPS + 1), off[2], 1e-4, "one cell of 21");
+        T.near(off[0] + off[2] / 2, offP[0], 1e-4, "off dot centred");
+        float x = off[0] + off[2];
         for (int i = 0; i < HueRows.STEPS; i++) {
             float[] c = HueLayout.dotCell(W, H, i), p = HueLayout.dotCentre(W, H, i);
             T.near(x, c[0], 1e-4, "cell " + i + " follows the last");

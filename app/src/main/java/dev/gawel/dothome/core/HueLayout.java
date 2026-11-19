@@ -3,8 +3,9 @@ package dev.gawel.dothome.core;
 /**
  * Dot Hue's 1 x 4 strip in dp, shared by the bitmap (HueArt) and the transparent tap cells over it (HueWidget).
  * Inside a PAD_DP pad, a block of two lines centred vertically: the top line is ‹ (prev), the room name (as wide as
- * its text, capped), › (next) and, at the right, ALL OFF; under it a full-width row of HueRows.STEPS dot cells, one
- * per 5% of brightness, like the music widget's seek zones. Rects are {x, y, w, h}.
+ * its text, capped), › (next) and, at the right, ALL OFF; under it a full-width row of STEPS + 1 equal cells: the
+ * red off dot, then HueRows.STEPS dots, one per 5% of brightness, like the music widget's seek zones. Rects are
+ * {x, y, w, h}.
  */
 public final class HueLayout {
     private HueLayout() {}
@@ -44,11 +45,26 @@ public final class HueLayout {
         return new float[] {PAD_DP, top(hDp) + LINE_DP + GAP_DP, wDp - 2 * PAD_DP, DOTS_H_DP};
     }
 
-    /** Dot cell i (0..STEPS-1, left to right): brightness (i + 1) x 5%. */
-    public static float[] dotCell(float wDp, float hDp, int i) {
+    /** Cell k of the dot row's STEPS + 1 equal cells (0 is the off dot). */
+    private static float[] cell(float wDp, float hDp, int k) {
         float[] r = dotsRow(wDp, hDp);
-        float cw = r[2] / HueRows.STEPS;
-        return new float[] {r[0] + i * cw, r[1], cw, r[3]};
+        float cw = r[2] / (HueRows.STEPS + 1);
+        return new float[] {r[0] + k * cw, r[1], cw, r[3]};
+    }
+
+    /** The red off dot's cell, first in the row. */
+    public static float[] offDotCell(float wDp, float hDp) {
+        return cell(wDp, hDp, 0);
+    }
+
+    public static float[] offDotCentre(float wDp, float hDp) {
+        float[] c = offDotCell(wDp, hDp);
+        return new float[] {c[0] + c[2] / 2f, c[1] + c[3] / 2f};
+    }
+
+    /** Dot cell i (0..STEPS-1, left to right, after the off dot): brightness (i + 1) x 5%. */
+    public static float[] dotCell(float wDp, float hDp, int i) {
+        return cell(wDp, hDp, i + 1);
     }
 
     public static float[] dotCentre(float wDp, float hDp, int i) {

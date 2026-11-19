@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Dot Hue, a 1 x 4 strip (widget_hue_empty before the first draw): the card, the art bitmap from HueArt (One UI
      ignores widget fonts, so all text is drawn into it) and, over it, transparent tap cells that HueWidget sizes and
-     places at runtime from HueLayout: ‹ / › (flip rooms), the name (on/off), ALL OFF, and 20 equal dot zones
-     (brightness 5..100%, like the music seek zones). No plain View: not allowed in RemoteViews. -->
+     places at runtime from HueLayout: ‹ / › (flip rooms), the name (on/off), ALL OFF, and 21 equal zones: the red
+     off dot, then 20 dots (brightness 5..100%, like the music seek zones). No plain View: not allowed in RemoteViews. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/hue_root"
     android:layout_width="match_parent"
@@ -50,6 +50,11 @@
         android:layout_gravity="top|start"
         android:orientation="horizontal"
         android:visibility="gone">
+        <FrameLayout
+            android:id="@+id/hue_doff"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
         <FrameLayout
             android:id="@+id/hue_d0"
             android:layout_width="0dp"

@@ -151,7 +151,7 @@ public final class WidgetResourcesTest {
             throw new AssertionError("cannot list layouts: " + e);
         }
     }
-    /** Dot Hue: ‹, name, ›, ALL OFF and 20 dot zones, all transparent cells placed at runtime over the art. */
+    /** Dot Hue: ‹, name, ›, ALL OFF, the red off zone and 20 dot zones, transparent cells placed over the art. */
     public static void testHueLayoutIds() {
         String xml = read("layout/widget_hue.xml");
         List<String> cells = elements(xml, "FrameLayout");
@@ -159,6 +159,10 @@ public final class WidgetResourcesTest {
             T.check(byId(cells, id) != null, id);
         }
         T.check(byId(elements(xml, "LinearLayout"), "hue_dots") != null, "dot row");
+        String off = byId(cells, "hue_doff");
+        T.check(off != null, "red off dot zone");
+        T.eq("1", attr(off, "layout_weight"), "the off zone as wide as a dot zone");
+        T.check(xml.indexOf("hue_doff") < xml.indexOf("@+id/hue_d0\""), "the off zone comes first");
         for (int i = 0; i < HueRows.STEPS; i++) {
             String c = byId(cells, "hue_d" + i);
             T.check(c != null, "dot zone " + i);

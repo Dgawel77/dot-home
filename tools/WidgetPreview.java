@@ -81,6 +81,9 @@ public final class WidgetPreview {
         text(c, name, "›", (next[0] + next[2] / 2) * DENS - nm.stringWidth("›") / 2f, next[1] * DENS, next[3] * DENS, DotStyle.L46);
         text(c, label, "ALL OFF", (off[0] + off[2]) * DENS - lm.stringWidth("ALL OFF"), off[1] * DENS, off[3] * DENS, DotStyle.L65);
         float r = HueLayout.DOT_R_DP * DENS;
+        float[] o = HueLayout.offDotCentre(HUE_W_DP, HUE_H_DP);
+        c.setColor(new Color(DotStyle.LASER, true));
+        c.fill(new Ellipse2D.Float(o[0] * DENS - r, o[1] * DENS - r, 2 * r, 2 * r));
         for (int i = 0; i < HueRows.STEPS; i++) {
             float[] p = HueLayout.dotCentre(HUE_W_DP, HUE_H_DP, i);
             c.setColor(new Color(i < 12 ? DotStyle.L100 : DotStyle.L30, true));

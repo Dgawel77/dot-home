@@ -152,4 +152,11 @@ public final class HueRowsTest {
         T.eq(HueState.OFF, off.get("g3"), "already off");
         T.eq(on(60), st.get("g1"), "the input is not changed");
     }
+    /** Step 0 is the red off dot: off, brightness kept for the next on. */
+    public static void testOffDot() {
+        T.eq("{\"on\":{\"on\":false}}", HueRows.dimBody(on(60), 0), "off");
+        T.eq("{\"on\":{\"on\":false}}", HueRows.dimBody(new HueState(true, false, 100), 0), "off, not dimmable");
+        T.eq(new HueState(false, true, 60), HueRows.afterDim(on(60), 0), "off keeps 60%");
+        T.eq(HueState.OFF, HueRows.afterDim(null, 0), "unknown goes off");
+    }
 }

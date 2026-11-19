@@ -79,3 +79,5 @@ single strip that flips between rooms, and an ALL OFF that switches off every li
 - **ALL OFF** sends `{"on":{"on":false}}` to the bridge_home grouped_light. It shows at once, the state is read
   back from the bridge afterwards, and a failure reverts it.
 - **Picks:** up to 8 rooms instead of 4.
+- **Off dot (added later):** the dot row starts with a red off dot (LASER). David's pick: red is used as an
+  occasional accent. Tapping it turns the room off and keeps its brightness for the next time it comes on.

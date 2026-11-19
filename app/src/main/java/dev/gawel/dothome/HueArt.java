@@ -16,8 +16,8 @@ import dev.gawel.dothome.core.TextFit;
  * <ul>
  *   <li>Top line: ‹ and › in 13 dp mono (L46, only with two or more rooms) around the room name in 13 dp mono (L65
  *       on, L46 off), and ALL OFF in 11 dp mono (L65) at the right.</li>
- *   <li>Below: 20 dots across the width, one per 5% of brightness: lit L100, unlit L30 (L10 would vanish on the
- *       glass card).</li>
+ *   <li>Below, across the width: the red off dot (LASER, the accent), then 20
+ *       dots, one per 5% of brightness: lit L100, unlit L30 (L10 would vanish on the glass card).</li>
  *   <li>Unreachable: the name L30, every dot L30, and NO BRIDGE (L46) where ALL OFF was.</li>
  *   <li>UNPAIRED and NO_ROOMS: one 11 dp line (L65), centred vertically.</li>
  * </ul>
@@ -80,6 +80,8 @@ final class HueArt {
         int lit = s.reachable ? HueRows.litDots(r.state) : 0;
         Paint litP = dot(DotStyle.L100), unlit = dot(DotStyle.L30);
         float rad = HueLayout.DOT_R_DP * dens;
+        float[] off = HueLayout.offDotCentre(wDp, hDp);
+        c.drawCircle(off[0] * dens, off[1] * dens, rad, dot(s.reachable ? DotStyle.LASER : DotStyle.L30));
         for (int i = 0; i < HueRows.STEPS; i++) {
             float[] p = HueLayout.dotCentre(wDp, hDp, i);
             c.drawCircle(p[0] * dens, p[1] * dens, rad, i < lit ? litP : unlit);

@@ -7,8 +7,9 @@ import android.content.Intent;
 import android.util.Log;
 
 /**
- * Dot Hue's taps: TOGGLE (the name) or DIM (step 1..20) for one grouped_light and ALL_OFF (every light), sent by
- * HueRepo off the main thread; FLIP (‹ ›) only changes which room a widget shows, with no network.
+ * Dot Hue's taps: TOGGLE (the name) or DIM (step 1..20, 0 = the red off dot) for one grouped_light and ALL_OFF
+ * (every light), sent by HueRepo off the main thread; FLIP (‹ ›) only changes which room a widget shows, with no
+ * network.
  */
 public class HueCommandReceiver extends BroadcastReceiver {
     static final String TOGGLE = "dev.gawel.dothome.HUE_TOGGLE";
@@ -36,7 +37,7 @@ public class HueCommandReceiver extends BroadcastReceiver {
             if (ALL_OFF.equals(action)) {
                 HueRepo.allOff(context, redraw, pr);
             } else {
-                int dot = TOGGLE.equals(action) ? -1 : intent.getIntExtra(EXTRA_DOT, 0);
+                int dot = TOGGLE.equals(action) ? -1 : intent.getIntExtra(EXTRA_DOT, -2); // 0 = the red off dot
                 HueRepo.tap(context, intent.getStringExtra(EXTRA_LIGHT), dot, redraw, pr);
             }
         } catch (RuntimeException e) {

@@ -275,13 +275,13 @@ final class HueRepo {
     }
 
     /**
-     * A tap on a row (dot -1 = the name: toggle; 1..STEPS = brightness): shows it at once (redraw runs on the calling
+     * A tap on a row (dot -1 = the name: toggle; 0 = the red off dot; 1..STEPS = brightness): shows it at once (redraw runs on the calling
      * thread), then sends it; a failure reverts the row unless a newer tap came, and redraw runs again. Finishes pr.
      * A grouped_light that is not one of the shown rows is ignored.
      */
     static void tap(Context ctx, String light, int dot, Runnable redraw, BroadcastReceiver.PendingResult pr) {
         final Context app = ctx.getApplicationContext();
-        if (light == null || dot < -1 || dot == 0 || dot > HueRows.STEPS || !shownLight(app, light)) {
+        if (light == null || dot < -1 || dot > HueRows.STEPS || !shownLight(app, light)) {
             if (pr != null) pr.finish();
             return;
         }

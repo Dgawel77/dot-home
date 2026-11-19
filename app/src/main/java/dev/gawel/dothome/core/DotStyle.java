@@ -19,7 +19,10 @@ public final class DotStyle {
     public static final int L30 = 0xFF4D4D4D;
     /** Unlit matrix cells. */
     public static final int L10 = 0xFF1A1A1A;
-    /** The only colour (#FF3B30): laser bolt cores, the muzzle flash and hit sparks. Lock stills dim it to 65%. */
+    /**
+     * The one colour (#FF3B30), an accent used sparingly: laser bolt cores, the muzzle flash and hit sparks; outside
+     * the game, Dot Hue's off dot. Lock stills dim it to 65%.
+     */
     public static final int LASER = 0xFFFF3B30;
     /** LASER at 35% alpha: the soft glow around a bolt (2-3x its thickness) and the muzzle flash. */
     public static final int LASER_GLOW = 0x59FF3B30;

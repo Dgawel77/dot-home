@@ -25,7 +25,8 @@ import dev.gawel.dothome.core.HueRows;
 
 /**
  * Dot Hue, a 1 x 4 strip: one picked room at a time (‹ › flip through them, per widget), its name (tap: on/off),
- * ALL OFF (every light in the home), and 20 dots below (tap dot n: n x 5%), like the music widget's seek zones.
+ * ALL OFF (every light in the home), and below the red off dot then 20 dots (tap dot n: n x 5%), like the music
+ * widget's seek zones.
  * The art is one bitmap (HueArt); transparent tap cells are placed over it at runtime in HueLayout's geometry, one
  * layout per reported widget size (needs API 31; older devices get the art without taps). PAIR HUE IN DOT HOME
  * until paired, PICK ROOMS IN DOT HOME until rooms are picked. State comes from {@link HueRepo}.
@@ -214,6 +215,8 @@ public class HueWidget extends AppWidgetProvider {
         }
 
         place(rv, R.id.hue_dots, HueLayout.dotsRow(wDp, hDp));
+        rv.setOnClickPendingIntent(R.id.hue_doff, command(ctx, HueCommandReceiver.DIM, id, "doff", r.groupedLightId, 0, 0));
+        rv.setContentDescription(R.id.hue_doff, name + " off");
         for (int i = 0; i < HueRows.STEPS; i++) {
             int step = i + 1;
             rv.setOnClickPendingIntent(DOT_IDS[i],
