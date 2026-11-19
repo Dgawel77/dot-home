@@ -13,7 +13,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * The live widget feeds (ESPN for Dot Bears, CTA Train Tracker for Dot Blue Line): one background executor does
+ * The live widget feeds (ESPN for Dot Bears, CTA Train Tracker for Dot Blue Line; Dot Hue's minute refresh is handed
+ * to HueRepo, which has its own executor): one background executor does
  * every fetch and render, never the main thread. {@link #onMinute} runs on each TIME_TICK while the screen is on
  * (and on SCREEN_ON), FeedJob every 6 h. A fetch only happens when it is due (the repo decides), and a failed fetch
  * keeps the cache.
@@ -34,6 +35,7 @@ final class LiveFeeds {
 
     /** Main thread, once a minute while the screen is on. No network unless a feed widget exists. */
     static void onMinute(Context ctx) {
+        if (HueWidget.exists(ctx)) HueRepo.onMinute(ctx, HueWidget.redraw(ctx, false)); // its own executor
         if (!BearsWidget.exists(ctx) && !BlueLineWidget.exists(ctx)) return;
         if (!MINUTE_PENDING.compareAndSet(false, true)) return;
         final Context app = ctx.getApplicationContext();

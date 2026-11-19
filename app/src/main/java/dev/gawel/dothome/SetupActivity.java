@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.app.NotificationManager;
 import android.app.WallpaperManager;
 import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
@@ -15,19 +16,25 @@ import android.util.Log;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
+import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
 
+import java.util.List;
+
 import dev.gawel.dothome.core.BlueLineStations;
 import dev.gawel.dothome.core.FireMode;
+import dev.gawel.dothome.core.HueGroup;
+import dev.gawel.dothome.core.HueRows;
 
 /**
- * Setup checklist: permissions, wallpaper, fire mode, rock style, the Blue Line key and station. Done states refresh
- * in onResume.
+ * Setup checklist: permissions, wallpaper, fire mode, rock style, the Blue Line key and station, and pairing the Hue
+ * bridge with the rooms Dot Hue shows. Done states refresh in onResume.
  */
 public class SetupActivity extends Activity {
     private static final int REQ_LOCATION = 1, REQ_AUDIO = 2;
@@ -145,6 +152,7 @@ public class SetupActivity extends Activity {
         parent.addView(beatSwitch, parent.indexOfChild(lockLive) + 1);
 
         setupBlueLine();
+        setupHue();
 
         WeatherJob.schedule(this);
         WeatherJob.refreshSoon(this);
@@ -192,6 +200,124 @@ public class SetupActivity extends Activity {
             @Override
             public void onNothingSelected(AdapterView<?> parent) {}
         });
+    }
+
+    private TextView hueStatus;
+    private LinearLayout hueRooms;
+    private boolean huePairing;
+
+    /** Hue: pair (find the bridge, then the user presses its button), forget, and pick up to 4 rooms in tap order. */
+    private void setupHue() {
+        hueStatus = findViewById(R.id.hue_status);
+        hueRooms = findViewById(R.id.hue_rooms);
+        findViewById(R.id.btn_hue_pair).setOnClickListener(v -> pairHue());
+        findViewById(R.id.btn_hue_forget).setOnClickListener(v -> {
+            HueRepo.forget(this);
+            HueWidget.redraw(this, true).run();
+            showHue(null);
+        });
+        showHue(null);
+        if (HueRepo.paired(this)) refreshHueRooms();
+    }
+
+    /** Re-reads the bridge's rooms, then redraws the widget and this list. */
+    private void refreshHueRooms() {
+        Runnable widget = HueWidget.redraw(this, true);
+        HueRepo.kick(this, true, () -> {
+            widget.run();
+            runOnUiThread(() -> showHue(null));
+        });
+    }
+
+    /** The Hue section: status (or `message`), Forget when paired, and a checkbox per room and zone. */
+    private void showHue(String message) {
+        if (isFinishing() || isDestroyed()) return;
+        boolean paired = HueRepo.paired(this);
+        String status = paired ? "Paired. Tick up to 4 rooms for the Dot Hue widget, in the order you want them."
+            : "Pair your Hue bridge so the Dot Hue widget can switch and dim your rooms. You'll press the button on top of the bridge.";
+        hueStatus.setText(message != null ? message : status);
+        findViewById(R.id.btn_hue_forget).setVisibility(paired ? View.VISIBLE : View.GONE);
+        hueRooms.removeAllViews();
+        if (!paired) return;
+        List<HueGroup> groups = HueRepo.groups(this);
+        List<String> sel = HueRepo.selection(this);
+        if (groups.isEmpty()) {
+            TextView t = new TextView(this);
+            t.setText("Loading rooms…");
+            t.setTextColor(0xFFAAAAAA);
+            hueRooms.addView(t);
+            return;
+        }
+        for (HueGroup g : groups) {
+            int at = sel.indexOf(g.id);
+            CheckBox cb = new CheckBox(this);
+            cb.setText((at >= 0 ? (at + 1) + ". " : "") + g.name + (g.zone ? " (zone)" : ""));
+            cb.setTextColor(0xFFFFFFFF);
+            cb.setChecked(at >= 0);
+            cb.setOnClickListener(v -> {
+                List<String> now = HueRepo.selection(this), next = HueRows.toggleSelection(now, g.id);
+                if (next.equals(now)) android.widget.Toast.makeText(this, "Up to 4 rooms", android.widget.Toast.LENGTH_SHORT).show();
+                HueRepo.setSelection(this, next);
+                HueWidget.redraw(this, true).run();
+                showHue(null);
+            });
+            hueRooms.addView(cb);
+        }
+    }
+
+    private void pairHue() {
+        if (huePairing) return;
+        huePairing = true;
+        showHue("Looking for your Hue bridge…");
+        HueDiscovery.find(this, null, 8_000, new HueDiscovery.Callback() {
+            @Override
+            public void onFound(String host, String bridgeId) {
+                if (bridgeId == null) {
+                    huePairing = false;
+                    showHue("That bridge didn't identify itself. Try again.");
+                    return;
+                }
+                showHue("Press the round button on top of your Hue bridge now (you have 30 seconds).");
+                pollPair(host, bridgeId, System.currentTimeMillis() + 30_000);
+            }
+
+            @Override
+            public void onNone() {
+                huePairing = false;
+                showHue("No Hue bridge found on this Wi-Fi.");
+            }
+        });
+    }
+
+    /** Asks the bridge for a key once a second until its button is pressed or the time is up (worker thread). */
+    private void pollPair(String host, String bridgeId, long until) {
+        final Context app = getApplicationContext();
+        new Thread(() -> {
+            String[] r = null;
+            while (System.currentTimeMillis() < until) {
+                r = HueBridge.pair(host, bridgeId);
+                if (r != null && r.length == 2) break;
+                try {
+                    Thread.sleep(1_000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            final String[] res = r;
+            boolean ok = res != null && res.length == 2;
+            if (ok) HueRepo.savePairing(app, host, bridgeId, res[0], res[1]);
+            runOnUiThread(() -> {
+                huePairing = false;
+                if (ok) {
+                    showHue("Paired. Loading your rooms…");
+                    refreshHueRooms();
+                } else {
+                    showHue(res == null ? "Couldn't pair with the bridge. Try again."
+                        : "The bridge's button wasn't pressed in time. Try again.");
+                }
+            });
+        }, "dothome-hue-pair").start();
     }
 
     private void keyHint(EditText keyField) {
