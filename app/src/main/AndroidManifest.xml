@@ -114,6 +114,20 @@
                 android:resource="@xml/widget_blueline_info" />
         </receiver>
         <receiver
+            android:name=".HueWidget"
+            android:exported="true"
+            android:label="@string/widget_hue_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_hue_info" />
+        </receiver>
+        <receiver
+            android:name=".HueCommandReceiver"
+            android:exported="false" />
+        <receiver
             android:name=".MediaCommandReceiver"
             android:exported="false" />
         <service

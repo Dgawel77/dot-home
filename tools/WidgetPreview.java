@@ -6,6 +6,8 @@ import dev.gawel.dothome.core.CtaBoard;
 import dev.gawel.dothome.core.CtaParser;
 import dev.gawel.dothome.core.DotMatrixFont;
 import dev.gawel.dothome.core.DotStyle;
+import dev.gawel.dothome.core.HueLayout;
+import dev.gawel.dothome.core.HueRows;
 import dev.gawel.dothome.core.Lattice;
 import dev.gawel.dothome.core.PlatformBoard;
 import dev.gawel.dothome.core.TextFit;
@@ -33,11 +35,12 @@ import javax.imageio.ImageIO;
 
 /**
  * Picker preview images for the feed widgets, drawn on the JVM (no device needed).
- * Usage: java -cp build/test WidgetPreview kind out.png, with kind bears or blueline.
+ * Usage: java -cp build/test WidgetPreview kind out.png, with kind bears, blueline or hue.
  * Build: ./test.sh && javac -cp build/test -d build/test tools/WidgetPreview.java (run from the repo root).
  * Renders at density 2.625 on a 24 dp-corner card (the glass approximated as a flat L10 fill) with JetBrains Mono
  * from the app's assets, mirroring the widget's own art (BearsArt, BoardArt) in a plausible state. The Blue Line
- * preview is the tests/fixtures/cta-arrivals.json board at Clark/Lake.
+ * preview is the tests/fixtures/cta-arrivals.json board at Clark/Lake. The Hue preview is four sample rooms in
+ * HueLayout's geometry, as HueArt draws them.
  */
 public final class WidgetPreview {
     static final float DENS = 2.625f;
@@ -58,11 +61,37 @@ public final class WidgetPreview {
     static final String CTA_FIXTURE = "tests/fixtures/cta-arrivals.json";
     static final int CTA_FIXTURE_MAPID = 40380;
 
+    // HueArt's layout is HueLayout's (dp)
+    static final int HUE_W_DP = 300, HUE_H_DP = 180;
+
     private WidgetPreview() {}
+
+    /** Living room at 60%, bedroom off, kitchen full, office at 20%. */
+    static BufferedImage hue(Font mono) {
+        String[] names = {"LIVING ROOM", "BEDROOM", "KITCHEN", "OFFICE"};
+        int[] lit = {3, 0, 5, 1};
+        int w = Math.round(HUE_W_DP * DENS), h = Math.round(HUE_H_DP * DENS);
+        BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D c = canvas(img);
+        card(c, w, h);
+        Font name = mono(mono, HueLayout.NAME_DP);
+        float r = HueLayout.DOT_R_DP * DENS;
+        int n = HueLayout.rowsFit(HUE_H_DP, names.length);
+        for (int i = 0; i < n; i++) {
+            float[] row = HueLayout.row(HUE_W_DP, HUE_H_DP, n, i), cell = HueLayout.nameCell(row);
+            text(c, name, names[i], cell[0] * DENS, cell[1] * DENS, cell[3] * DENS, lit[i] > 0 ? DotStyle.L65 : DotStyle.L46);
+            for (int d = 0; d < HueRows.DOTS; d++) {
+                float[] p = HueLayout.dotCentre(row, d);
+                c.setColor(new Color(d < lit[i] ? DotStyle.L100 : DotStyle.L30, true));
+                c.fill(new Ellipse2D.Float(p[0] * DENS - r, p[1] * DENS - r, 2 * r, 2 * r));
+            }
+        }
+        return img;
+    }
 
     public static void main(String[] args) throws IOException, FontFormatException {
         if (args.length != 2) {
-            System.err.println("usage: WidgetPreview <bears|blueline> <out.png>");
+            System.err.println("usage: WidgetPreview <bears|blueline|hue> <out.png>");
             System.exit(2);
         }
         Font mono = Font.createFont(Font.TRUETYPE_FONT, new File(MONO));
@@ -73,6 +102,9 @@ public final class WidgetPreview {
                 break;
             case "blueline":
                 img = blueline(mono);
+                break;
+            case "hue":
+                img = hue(mono);
                 break;
             default:
                 System.err.println("unknown kind: " + args[0]);

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dot Hue before its first draw: nothing at all (no card), only the wallpaper shows. As widget_blueline_empty. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/hue_empty"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" />
