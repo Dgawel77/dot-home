@@ -116,6 +116,11 @@ public final class HueRows {
         return Math.max(1, Math.min(DOTS, dot)) * 20;
     }
 
+    /** True for the bridge's rate-limit (429) and busy (503) answers, which are worth one retry a second later. */
+    public static boolean retryable(int httpCode) {
+        return httpCode == 429 || httpCode == 503;
+    }
+
     /** A copy of m with key set to s. */
     public static Map<String, HueState> with(Map<String, HueState> m, String key, HueState s) {
         Map<String, HueState> out = new HashMap<>(m);

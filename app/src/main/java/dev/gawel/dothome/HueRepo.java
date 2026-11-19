@@ -34,7 +34,7 @@ import dev.gawel.dothome.core.HueState;
  *   <li>"hue.states.json": the last grouped_light response.</li>
  * </ul>
  * What the widget shows is an in-memory state map: the cache, then refreshes, with taps applied at once
- * (optimistic) and guarded by {@link HueRows.Seq}. Network work runs on this class's own executor (a tap never
+ * (optimistic), confirmed by a read right after each tap's PUT, and guarded by {@link HueRows.Seq}. Network work runs on this class's own executor (a tap never
  * waits behind a CTA fetch). Refreshes happen at most every 55 s; the group lists are re-read every 6 h. After a
  * connect failure the bridge is re-found by its id over mDNS, at most every 10 min.
  */
@@ -224,12 +224,7 @@ final class HueRepo {
             reachable = false;
             return;
         }
-        reachable = true;
-        Map<String, HueState> fetched = HueParser.states(r.body);
-        synchronized (LOCK) {
-            shown = HueRows.apply(states(ctx), fetched, SEQ, mark);
-        }
-        p.put(K_STATES, r.body);
+        applyStates(p, ctx, r.body, mark);
         if (groupsToo || groups(ctx).isEmpty()) {
             HueBridge.Reply rooms = b.get("/clip/v2/resource/room", key, "rooms");
             HueBridge.Reply zones = rooms.ok() ? b.get("/clip/v2/resource/zone", key, "zones") : rooms;
@@ -241,6 +236,16 @@ final class HueRepo {
                 if (!kept.equals(sel)) setSelection(ctx, kept);
             }
         }
+    }
+
+    /** A good grouped_light response: rows not tapped since mark take it, and it becomes the cache. */
+    private static void applyStates(PrefsStore p, Context ctx, String body, long mark) {
+        reachable = true;
+        Map<String, HueState> fetched = HueParser.states(body);
+        synchronized (LOCK) {
+            shown = HueRows.apply(states(ctx), fetched, SEQ, mark);
+        }
+        p.put(K_STATES, body);
     }
 
     /** Executor only: re-finds the bridge by id over mDNS (waits up to 6 s); its IPv4 host, or null. */
@@ -307,14 +312,29 @@ final class HueRepo {
         return false;
     }
 
-    /** Executor only: the PUT for one tap. */
+    /**
+     * Executor only: the PUT for one tap (retried once a second later when the bridge is rate-limiting or busy),
+     * then, on success, a read of the states so the bridge's answer replaces the optimistic one.
+     */
     private static void send(Context ctx, String light, String body, HueState before, long seq) {
         PrefsStore p = new PrefsStore(ctx);
         if (!paired(ctx)) return;
+        String key = p.get(K_KEY, "");
         HueBridge b = new HueBridge(p.get(K_HOST, ""), p.get(K_PIN, ""));
-        HueBridge.Reply r = b.put(LIGHTS + "/" + light, p.get(K_KEY, ""), body, "set");
+        HueBridge.Reply r = b.put(LIGHTS + "/" + light, key, body, "set");
+        if (!r.ok() && HueRows.retryable(r.code)) {
+            try {
+                Thread.sleep(1_000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            r = b.put(LIGHTS + "/" + light, key, body, "set");
+        }
         if (r.ok()) {
-            reachable = true;
+            long mark = SEQ.mark(); // this tap and older ones take the bridge's answer; newer taps keep theirs
+            HueBridge.Reply st = b.get(LIGHTS, key, "states");
+            if (st.ok()) applyStates(p, ctx, st.body, mark);
+            else reachable = true;
             return;
         }
         synchronized (LOCK) {

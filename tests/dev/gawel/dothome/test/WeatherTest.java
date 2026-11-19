@@ -148,6 +148,7 @@ public final class WeatherTest {
     }
     /** The nearest Blue Line station uses the unrounded precise fix when there is one, else the rounded place. */
     public static void testStationBasisPrefersPrecise() {
+        // a point by Clark/Lake (public station coordinates), not anyone's real fix
         Place cached = new Place(41.89, -87.63, Place.Source.CACHED);
         Place p = LocationChooser.forStation(41.88581, -87.63102, cached);
         T.near(41.88581, p.lat, 0, "precise lat, not rounded");

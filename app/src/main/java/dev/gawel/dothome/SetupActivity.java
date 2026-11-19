@@ -205,7 +205,10 @@ public class SetupActivity extends Activity {
 
     private TextView hueStatus;
     private LinearLayout hueRooms;
-    private boolean huePairing;
+    /** A pairing is running (process-wide: a fold or rotation recreates this activity mid-pairing). */
+    private static volatile boolean huePairing;
+    /** The resumed Setup screen, so a pairing that outlives its activity reports to the one now showing. */
+    private static volatile SetupActivity resumed;
 
     /** Hue: pair (find the bridge, then the user presses its button), forget, and pick up to 4 rooms in tap order. */
     private void setupHue() {
@@ -217,8 +220,16 @@ public class SetupActivity extends Activity {
             HueWidget.redraw(this, true).run();
             showHue(null);
         });
-        showHue(null);
+        showHue(huePairing ? "Pairing: press the round button on top of your Hue bridge." : null);
         if (HueRepo.paired(this)) refreshHueRooms();
+    }
+
+    /** Main thread: shows message on whichever Setup screen is showing (if any). */
+    private static void reportHue(String message, boolean refreshRooms) {
+        SetupActivity a = resumed;
+        if (a == null) return;
+        a.showHue(message);
+        if (refreshRooms) a.refreshHueRooms();
     }
 
     /** Re-reads the bridge's rooms, then redraws the widget and this list. */
@@ -275,17 +286,17 @@ public class SetupActivity extends Activity {
             public void onFound(String host, String bridgeId) {
                 if (bridgeId == null) {
                     huePairing = false;
-                    showHue("That bridge didn't identify itself. Try again.");
+                    reportHue("That bridge didn't identify itself. Try again.", false);
                     return;
                 }
-                showHue("Press the round button on top of your Hue bridge now (you have 30 seconds).");
+                reportHue("Press the round button on top of your Hue bridge now (you have 30 seconds).", false);
                 pollPair(host, bridgeId, System.currentTimeMillis() + 30_000);
             }
 
             @Override
             public void onNone() {
                 huePairing = false;
-                showHue("No Hue bridge found on this Wi-Fi.");
+                reportHue("No Hue bridge found on this Wi-Fi.", false);
             }
         });
     }
@@ -308,14 +319,13 @@ public class SetupActivity extends Activity {
             final String[] res = r;
             boolean ok = res != null && res.length == 2;
             if (ok) HueRepo.savePairing(app, host, bridgeId, res[0], res[1]);
-            runOnUiThread(() -> {
+            new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
                 huePairing = false;
                 if (ok) {
-                    showHue("Paired. Loading your rooms…");
-                    refreshHueRooms();
+                    reportHue("Paired. Loading your rooms…", true);
                 } else {
-                    showHue(res == null ? "Couldn't pair with the bridge. Try again."
-                        : "The bridge's button wasn't pressed in time. Try again.");
+                    reportHue(res == null ? "Couldn't pair with the bridge. Try again."
+                        : "The bridge's button wasn't pressed in time. Try again.", false);
                 }
             });
         }, "dothome-hue-pair").start();
@@ -326,8 +336,16 @@ public class SetupActivity extends Activity {
     }
 
     @Override
+    protected void onPause() {
+        if (resumed == this) resumed = null;
+        super.onPause();
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
+        resumed = this;
+        if (hueStatus != null) showHue(huePairing ? "Pairing: press the round button on top of your Hue bridge." : null);
         stepLocation.setText(mark(hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)) + "1. Location"
             + (hasPermission(Manifest.permission.ACCESS_FINE_LOCATION) ? " (precise)" : " (approximate: tap for precise)"));
         stepBackground.setText(mark(hasPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION))

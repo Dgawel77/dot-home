@@ -18,8 +18,8 @@ import dev.gawel.dothome.core.HueRows;
 
 /**
  * Dot Hue: up to HueRows.MAX Hue rooms or zones, each a name (tap: on/off) and five dots (tap dot n: n x 20%).
- * The art is one bitmap (HueArt); transparent tap cells are laid over it at runtime in HueLayout's geometry (needs
- * API 31 for the layout calls; older devices get the art without taps). PAIR HUE IN DOT HOME until paired, PICK
+ * The art is one bitmap (HueArt); transparent tap cells are laid over it at runtime in HueLayout's geometry, one
+ * layout per reported widget size (needs API 31; older devices get the art without taps). PAIR HUE IN DOT HOME until paired, PICK
  * ROOMS IN DOT HOME until rooms are picked. State comes from {@link HueRepo}.
  */
 public class HueWidget extends AppWidgetProvider {
@@ -70,7 +70,7 @@ public class HueWidget extends AppWidgetProvider {
     }
 
     /** Draws every Dot Hue widget when what it shows changed since the last push, or always when force. */
-    static void push(Context ctx, boolean force) {
+    static synchronized void push(Context ctx, boolean force) { // taps push on the main thread, refreshes on the executor
         try {
             int[] ids = ids(ctx);
             if (ids.length == 0) return;
@@ -101,14 +101,37 @@ public class HueWidget extends AppWidgetProvider {
         return b.append('|').append(backdrop).toString();
     }
 
+    /** At most this many sizes get their own layout (each is a bitmap in the update). */
+    private static final int MAX_SIZES = 4;
+
+    /**
+     * The views: on API 31+ one layout per size the launcher reports (portrait and landscape, cover and main), so
+     * the tap cells always sit over the rows drawn for the size actually shown; else one for MIN_WIDTH x MAX_HEIGHT.
+     */
+    @SuppressWarnings("deprecation") // the untyped getParcelableArrayList: the typed one needs API 33
     private static RemoteViews views(Context ctx, AppWidgetManager mgr, int id, HueRepo.Shown s, boolean backdrop) {
-        RemoteViews rv = new RemoteViews(ctx.getPackageName(), R.layout.widget_hue);
-        float density = ctx.getResources().getDisplayMetrics().density;
         Bundle o = mgr.getAppWidgetOptions(id);
+        if (Build.VERSION.SDK_INT >= 31 && o != null) {
+            java.util.ArrayList<android.util.SizeF> sizes = o.getParcelableArrayList(AppWidgetManager.OPTION_APPWIDGET_SIZES);
+            if (sizes != null && !sizes.isEmpty()) {
+                java.util.Map<android.util.SizeF, RemoteViews> bySize = new java.util.HashMap<>();
+                for (android.util.SizeF sz : sizes) {
+                    if (bySize.size() >= MAX_SIZES || sz == null || bySize.containsKey(sz)) continue;
+                    if (sz.getWidth() <= 0 || sz.getHeight() <= 0) continue;
+                    bySize.put(sz, sized(ctx, o, sz.getWidth(), sz.getHeight(), s, backdrop));
+                }
+                if (!bySize.isEmpty()) return new RemoteViews(bySize);
+            }
+        }
         int wDp = o == null ? 0 : o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0);
         int hDp = o == null ? 0 : o.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0);
-        if (wDp <= 0) wDp = DEFAULT_W_DP;
-        if (hDp <= 0) hDp = DEFAULT_H_DP;
+        return sized(ctx, o, wDp <= 0 ? DEFAULT_W_DP : wDp, hDp <= 0 ? DEFAULT_H_DP : hDp, s, backdrop);
+    }
+
+    /** The layout for a widget shown at wDp x hDp: card, art and tap cells all in that size's geometry. */
+    private static RemoteViews sized(Context ctx, Bundle o, float wDp, float hDp, HueRepo.Shown s, boolean backdrop) {
+        RemoteViews rv = new RemoteViews(ctx.getPackageName(), R.layout.widget_hue);
+        float density = ctx.getResources().getDisplayMetrics().density;
         float wPx = wDp * density, hPx = hDp * density;
         float shrink = Math.min(1f, WidgetUpdater.MAX_SIDE_PX / Math.max(wPx, hPx));
         int w = Math.max(1, Math.round(wPx * shrink)), h = Math.max(1, Math.round(hPx * shrink));

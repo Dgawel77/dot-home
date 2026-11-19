@@ -122,4 +122,12 @@ public final class HueRowsTest {
         T.eq("PICK ROOMS IN DOT HOME", HueRows.NO_ROOMS, "no rooms");
         T.eq("NO BRIDGE", HueRows.NO_BRIDGE, "unreachable");
     }
+    /** The bridge's rate limit (429) and busy (503) answers are worth one retry; anything else is final. */
+    public static void testRetryable() {
+        T.check(HueRows.retryable(429), "too many requests");
+        T.check(HueRows.retryable(503), "busy");
+        T.check(!HueRows.retryable(200), "ok");
+        T.check(!HueRows.retryable(404), "gone");
+        T.check(!HueRows.retryable(-1), "unreachable is not retried");
+    }
 }
