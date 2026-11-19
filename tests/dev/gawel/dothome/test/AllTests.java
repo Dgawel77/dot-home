@@ -58,6 +58,7 @@ public final class AllTests {
         dev.gawel.dothome.core.DefenceTest.class,
         dev.gawel.dothome.core.HueParserTest.class,
         dev.gawel.dothome.core.HueRowsTest.class,
+        dev.gawel.dothome.core.HueLayoutTest.class,
     };
 
     public static void main(String[] args) throws Exception {

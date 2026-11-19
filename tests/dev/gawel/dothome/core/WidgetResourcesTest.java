@@ -151,4 +151,20 @@ public final class WidgetResourcesTest {
             throw new AssertionError("cannot list layouts: " + e);
         }
     }
+    /** Dot Hue: 4 tap rows, each a name cell and 5 dot cells as wide as HueLayout.DOT_CELL_DP (placed at runtime). */
+    public static void testHueLayoutIds() {
+        String xml = read("layout/widget_hue.xml");
+        List<String> cells = elements(xml, "FrameLayout");
+        List<String> rows = elements(xml, "LinearLayout");
+        for (int i = 0; i < HueRows.MAX; i++) {
+            T.check(byId(rows, "hue_row_" + i) != null, "row " + i);
+            T.check(byId(cells, "hue_r" + i + "_name") != null, "name cell " + i);
+            for (int d = 0; d < HueRows.DOTS; d++) {
+                String c = byId(cells, "hue_r" + i + "_d" + d);
+                T.check(c != null, "dot cell " + i + "/" + d);
+                T.eq(Math.round(HueLayout.DOT_CELL_DP) + "dp", attr(c, "layout_width"), "dot cell width " + i + "/" + d);
+            }
+        }
+        T.check(byId(elements(xml, "ImageView"), "hue_img") != null, "art");
+    }
 }
