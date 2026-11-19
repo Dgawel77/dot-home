@@ -56,6 +56,7 @@ public final class AllTests {
         dev.gawel.dothome.core.MoonFaceTest.class,
         dev.gawel.dothome.core.MoonWorldTest.class,
         dev.gawel.dothome.core.DefenceTest.class,
+        dev.gawel.dothome.core.HueParserTest.class,
     };
 
     public static void main(String[] args) throws Exception {

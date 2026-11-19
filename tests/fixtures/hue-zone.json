@@ -1,0 +1,6 @@
+{"errors":[],"data":[
+ {"id":"5b4a3928-0000-4000-8000-00000000c001","id_v1":"/groups/4","type":"zone",
+  "children":[{"rid":"11223344-0000-4000-8000-00000000e001","rtype":"light"}],
+  "services":[{"rid":"7e6d5c4b-0000-4000-8000-00000000a004","rtype":"grouped_light"}],
+  "metadata":{"name":"Upstairs","archetype":"upstairs"}}
+]}

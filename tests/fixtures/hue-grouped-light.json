@@ -1,0 +1,14 @@
+{"errors":[],"data":[
+ {"id":"7e6d5c4b-0000-4000-8000-00000000a001","id_v1":"/groups/1","type":"grouped_light",
+  "owner":{"rid":"3f1a0c52-1b7e-4c3a-9d2e-0a1b2c3d4e01","rtype":"room"},
+  "on":{"on":true},"dimming":{"brightness":56.3},"alert":{"action_values":["breathe"]}},
+ {"id":"7e6d5c4b-0000-4000-8000-00000000a002","id_v1":"/groups/2","type":"grouped_light",
+  "owner":{"rid":"3f1a0c52-1b7e-4c3a-9d2e-0a1b2c3d4e02","rtype":"room"},
+  "on":{"on":false},"dimming":{"brightness":100.0}},
+ {"id":"7e6d5c4b-0000-4000-8000-00000000a004","id_v1":"/groups/4","type":"grouped_light",
+  "owner":{"rid":"5b4a3928-0000-4000-8000-00000000c001","rtype":"zone"},
+  "on":{"on":true}},
+ {"id":"7e6d5c4b-0000-4000-8000-00000000a000","id_v1":"/groups/0","type":"grouped_light",
+  "owner":{"rid":"00000000-0000-4000-8000-0000000000b0","rtype":"bridge_home"},
+  "on":{"on":true},"dimming":{"brightness":80.0}}
+]}
