@@ -97,11 +97,11 @@ final class CtaRepo {
         fetchedMs = 0;
     }
 
-    /** The pinned station, else the nearest within 10 km of the cached place (no location request), else -1. */
+    /** The pinned station, else the nearest within 10 km of the last (precise when granted) place, else -1. */
     static int station(Context ctx) {
         int pin = pinned(ctx);
         if (pin != -1) return pin;
-        Place p = LocationSource.cached(ctx);
+        Place p = LocationSource.cachedPrecise(ctx);
         return p == null ? -1 : BlueLineStations.nearest(p.lat, p.lon, MAX_KM);
     }
 

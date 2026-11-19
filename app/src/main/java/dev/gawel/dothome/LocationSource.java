@@ -20,10 +20,16 @@ import java.util.concurrent.atomic.AtomicReference;
 import dev.gawel.dothome.core.LocationChooser;
 import dev.gawel.dothome.core.Place;
 
-/** Coarse location with cache and Chicago fallback. Blocking; call off the main thread. */
+/**
+ * Location with cache and Chicago fallback. Blocking; call off the main thread. The feeds (weather, radar) get the
+ * place rounded to 0.01 degrees. With precise location granted, the unrounded fix is also kept ("loc.fine.*") for
+ * one on-phone use only, picking the nearest Blue Line station; it is never sent anywhere and is dropped when
+ * precise location is revoked.
+ */
 final class LocationSource {
     private static final String TAG = "DotHome";
     private static final String KEY_LAT = "loc.lat", KEY_LON = "loc.lon";
+    private static final String KEY_FINE_LAT = "loc.fine.lat", KEY_FINE_LON = "loc.fine.lon";
     private static final long FIX_TIMEOUT_MS = 10_000;
 
     private LocationSource() {}
@@ -33,6 +39,24 @@ final class LocationSource {
         PrefsStore prefs = new PrefsStore(ctx);
         Double la = parse(prefs.get(KEY_LAT, null)), lo = parse(prefs.get(KEY_LON, null));
         return la == null || lo == null ? null : new Place(la, lo, Place.Source.CACHED);
+    }
+
+    /** For the nearest station: the last precise fix while precise location is granted, else {@link #cached}. */
+    static Place cachedPrecise(Context ctx) {
+        PrefsStore prefs = new PrefsStore(ctx);
+        Double la = null, lo = null;
+        if (precise(ctx)) {
+            la = parse(prefs.get(KEY_FINE_LAT, null));
+            lo = parse(prefs.get(KEY_FINE_LON, null));
+        } else if (prefs.get(KEY_FINE_LAT, null) != null) {
+            prefs.remove(KEY_FINE_LAT);
+            prefs.remove(KEY_FINE_LON);
+        }
+        return LocationChooser.forStation(la, lo, cached(ctx));
+    }
+
+    static boolean precise(Context ctx) {
+        return ctx.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
     }
 
     static Place current(Context ctx) {
@@ -49,6 +73,10 @@ final class LocationSource {
         if (p.source == Place.Source.FRESH) {
             prefs.put(KEY_LAT, String.valueOf(p.lat));
             prefs.put(KEY_LON, String.valueOf(p.lon));
+            if (precise(ctx)) { // the unrounded fix, for the nearest station only (never logged)
+                prefs.put(KEY_FINE_LAT, String.valueOf(fix.getLatitude()));
+                prefs.put(KEY_FINE_LON, String.valueOf(fix.getLongitude()));
+            }
         }
         Log.i(TAG, "place " + p.source + (p.source == Place.Source.DEFAULT ? " Chicago" : " " + p.lat + "," + p.lon));
         return p;
@@ -78,11 +106,15 @@ final class LocationSource {
         if (lm == null) return null;
         if (Build.VERSION.SDK_INT >= 30) {
             try {
-                if (!lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) return lastKnown(lm);
+                // precise: the fused provider (Wi-Fi, cell and GPS as available); approximate: the network provider
+                String provider = Build.VERSION.SDK_INT >= 31 && precise(ctx)
+                    && lm.hasProvider(LocationManager.FUSED_PROVIDER) ? LocationManager.FUSED_PROVIDER
+                    : LocationManager.NETWORK_PROVIDER;
+                if (!lm.isProviderEnabled(provider)) return lastKnown(lm);
                 AtomicReference<Location> ref = new AtomicReference<>();
                 CountDownLatch latch = new CountDownLatch(1);
                 CancellationSignal cancel = new CancellationSignal();
-                lm.getCurrentLocation(LocationManager.NETWORK_PROVIDER, cancel, Runnable::run, loc -> {
+                lm.getCurrentLocation(provider, cancel, Runnable::run, loc -> {
                     ref.set(loc);
                     latch.countDown();
                 });

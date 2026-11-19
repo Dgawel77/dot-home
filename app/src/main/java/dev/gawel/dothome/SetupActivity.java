@@ -56,7 +56,8 @@ public class SetupActivity extends Activity {
         ((TextView) findViewById(R.id.step_fire)).setText("✓  5. Fire mode");
 
         findViewById(R.id.btn_location).setOnClickListener(v ->
-            requestPermissions(new String[] {Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_LOCATION));
+            requestPermissions(new String[] {Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_LOCATION));
         findViewById(R.id.btn_background).setOnClickListener(v -> safeStart(
             new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName()))));
         findViewById(R.id.btn_notifications).setOnClickListener(v ->
@@ -327,7 +328,8 @@ public class SetupActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        stepLocation.setText(mark(hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)) + "1. Location");
+        stepLocation.setText(mark(hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)) + "1. Location"
+            + (hasPermission(Manifest.permission.ACCESS_FINE_LOCATION) ? " (precise)" : " (approximate: tap for precise)"));
         stepBackground.setText(mark(hasPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION))
             + "2. Background location");
         stepNotifications.setText(mark(notificationAccessEnabled()) + "3. Notification access");

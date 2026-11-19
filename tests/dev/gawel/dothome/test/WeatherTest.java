@@ -146,4 +146,14 @@ public final class WeatherTest {
         T.near(-87.63, f.lon, 0, "fresh rounded lon");
         T.eq(Place.Source.CACHED, LocationChooser.choose(41.8, null, 41.9, -87.7).source, "half fresh ignored");
     }
+    /** The nearest Blue Line station uses the unrounded precise fix when there is one, else the rounded place. */
+    public static void testStationBasisPrefersPrecise() {
+        Place cached = new Place(41.89, -87.63, Place.Source.CACHED);
+        Place p = LocationChooser.forStation(41.88581, -87.63102, cached);
+        T.near(41.88581, p.lat, 0, "precise lat, not rounded");
+        T.near(-87.63102, p.lon, 0, "precise lon, not rounded");
+        T.eq(cached, LocationChooser.forStation(null, null, cached), "no precise fix: the rounded place");
+        T.eq(cached, LocationChooser.forStation(41.9, null, cached), "half a fix is ignored");
+        T.eq(null, LocationChooser.forStation(null, null, null), "nothing yet");
+    }
 }
