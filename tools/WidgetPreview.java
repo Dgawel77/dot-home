@@ -39,8 +39,8 @@ import javax.imageio.ImageIO;
  * Build: ./test.sh && javac -cp build/test -d build/test tools/WidgetPreview.java (run from the repo root).
  * Renders at density 2.625 on a 24 dp-corner card (the glass approximated as a flat L10 fill) with JetBrains Mono
  * from the app's assets, mirroring the widget's own art (BearsArt, BoardArt) in a plausible state. The Blue Line
- * preview is the tests/fixtures/cta-arrivals.json board at Clark/Lake. The Hue preview is four sample rooms in
- * HueLayout's geometry, as HueArt draws them.
+ * preview is the tests/fixtures/cta-arrivals.json board at Clark/Lake. The Hue preview is the 1 x 4 strip in
+ * HueLayout's strip, as HueArt draws it.
  */
 public final class WidgetPreview {
     static final float DENS = 2.625f;
@@ -62,29 +62,29 @@ public final class WidgetPreview {
     static final int CTA_FIXTURE_MAPID = 40380;
 
     // HueArt's layout is HueLayout's (dp)
-    static final int HUE_W_DP = 300, HUE_H_DP = 180;
+    static final int HUE_W_DP = 311, HUE_H_DP = 95;
 
-    private WidgetPreview() {}
-
-    /** Living room at 60%, bedroom off, kitchen full, office at 20%. */
+    /** The strip on the living room at 60%, with ‹ › for more rooms. */
     static BufferedImage hue(Font mono) {
-        String[] names = {"LIVING ROOM", "BEDROOM", "KITCHEN", "OFFICE"};
-        int[] lit = {3, 0, 5, 1};
         int w = Math.round(HUE_W_DP * DENS), h = Math.round(HUE_H_DP * DENS);
         BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
         Graphics2D c = canvas(img);
         card(c, w, h);
-        Font name = mono(mono, HueLayout.NAME_DP);
+        Font name = mono(mono, HueLayout.NAME_DP), label = mono(mono, HueLayout.LABEL_DP);
+        String room = "LIVING ROOM";
+        float nameW = c.getFontMetrics(name).stringWidth(room) / DENS + 6f;
+        float[] prev = HueLayout.prevCell(HUE_W_DP, HUE_H_DP), nc = HueLayout.nameCell(HUE_W_DP, HUE_H_DP, nameW);
+        float[] next = HueLayout.nextCell(HUE_W_DP, HUE_H_DP, nameW), off = HueLayout.offCell(HUE_W_DP, HUE_H_DP);
+        text(c, name, room, nc[0] * DENS, nc[1] * DENS, nc[3] * DENS, DotStyle.L65);
+        FontMetrics nm = c.getFontMetrics(name), lm = c.getFontMetrics(label);
+        text(c, name, "‹", (prev[0] + prev[2] / 2) * DENS - nm.stringWidth("‹") / 2f, prev[1] * DENS, prev[3] * DENS, DotStyle.L46);
+        text(c, name, "›", (next[0] + next[2] / 2) * DENS - nm.stringWidth("›") / 2f, next[1] * DENS, next[3] * DENS, DotStyle.L46);
+        text(c, label, "ALL OFF", (off[0] + off[2]) * DENS - lm.stringWidth("ALL OFF"), off[1] * DENS, off[3] * DENS, DotStyle.L65);
         float r = HueLayout.DOT_R_DP * DENS;
-        int n = HueLayout.rowsFit(HUE_H_DP, names.length);
-        for (int i = 0; i < n; i++) {
-            float[] row = HueLayout.row(HUE_W_DP, HUE_H_DP, n, i), cell = HueLayout.nameCell(row);
-            text(c, name, names[i], cell[0] * DENS, cell[1] * DENS, cell[3] * DENS, lit[i] > 0 ? DotStyle.L65 : DotStyle.L46);
-            for (int d = 0; d < HueRows.DOTS; d++) {
-                float[] p = HueLayout.dotCentre(row, d);
-                c.setColor(new Color(d < lit[i] ? DotStyle.L100 : DotStyle.L30, true));
-                c.fill(new Ellipse2D.Float(p[0] * DENS - r, p[1] * DENS - r, 2 * r, 2 * r));
-            }
+        for (int i = 0; i < HueRows.STEPS; i++) {
+            float[] p = HueLayout.dotCentre(HUE_W_DP, HUE_H_DP, i);
+            c.setColor(new Color(i < 12 ? DotStyle.L100 : DotStyle.L30, true));
+            c.fill(new Ellipse2D.Float(p[0] * DENS - r, p[1] * DENS - r, 2 * r, 2 * r));
         }
         return img;
     }

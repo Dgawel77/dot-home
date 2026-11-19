@@ -7,15 +7,20 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * The Dot Hue widget's model: up to MAX picked rooms/zones as rows, each with five brightness dots. A tap on the
- * name toggles the room; a tap on dot n turns it on at n x 20%. Taps show at once (optimistic) and a refresh that
+ * The Dot Hue widget's model: up to MAX picked rooms/zones, shown one at a time (flip with ‹ ›), each with a row of
+ * STEPS brightness dots. A tap on the name toggles the room; a tap on dot n turns it on at n x 5%; ALL OFF switches
+ * every light in the home off. Taps show at once (optimistic) and a refresh that
  * began before a tap never overwrites it (see {@link Seq}); a failed tap reverts its row unless a newer tap came.
  */
 public final class HueRows {
     private HueRows() {}
 
-    public static final int MAX = 4;
-    public static final int DOTS = 5;
+    public static final int MAX = 8;
+    /** Brightness steps (dots): 5% each. */
+    public static final int STEPS = 20;
+    private static final int STEP_PCT = 100 / STEPS;
+    /** The PUT body for ALL OFF (sent to the bridge_home grouped_light). */
+    public static final String ALL_OFF_BODY = "{\"on\":{\"on\":false}}";
     public static final String UNPAIRED = "PAIR HUE IN DOT HOME";
     public static final String NO_ROOMS = "PICK ROOMS IN DOT HOME";
     public static final String NO_BRIDGE = "NO BRIDGE";
@@ -33,11 +38,33 @@ public final class HueRows {
         }
     }
 
-    /** Lit dots: 0 when off or unknown, 5 when on without dimming, else brightness / 20 rounded, at least 1. */
+    /** Lit dots: 0 when off or unknown, all when on without dimming, else brightness / 5 rounded, at least 1. */
     public static int litDots(HueState s) {
         if (s == null || !s.on) return 0;
-        if (!s.dimmable) return DOTS;
-        return (int) Math.max(1, Math.min(DOTS, Math.round(s.brightness / 20.0)));
+        if (!s.dimmable) return STEPS;
+        return (int) Math.max(1, Math.min(STEPS, Math.round(s.brightness / STEP_PCT)));
+    }
+
+    /** The room index after stepping delta (wrapping) through n rooms; 0 when there are none. */
+    public static int flip(int idx, int delta, int n) {
+        if (n <= 0) return 0;
+        return ((index(idx, n) + delta) % n + n) % n;
+    }
+
+    /** idx brought into 0..n-1 (wrapping; negative is 0); 0 when there are no rooms. */
+    public static int index(int idx, int n) {
+        if (n <= 0 || idx < 0) return 0;
+        return idx % n;
+    }
+
+    /** Every state switched off (brightness kept, so the next on comes back at the same level). A new map. */
+    public static Map<String, HueState> allOff(Map<String, HueState> m) {
+        Map<String, HueState> out = new HashMap<>();
+        for (Map.Entry<String, HueState> e : m.entrySet()) {
+            HueState s = e.getValue();
+            out.put(e.getKey(), s == null ? HueState.OFF : new HueState(false, s.dimmable, s.brightness));
+        }
+        return out;
     }
 
     /** A new selection: groupId removed if picked, else appended while fewer than MAX are picked. */
@@ -96,7 +123,7 @@ public final class HueRows {
         return "{\"on\":{\"on\":" + !(current != null && current.on) + "}}";
     }
 
-    /** The PUT body for dot 1..5: on at dot x 20%, or only on when the room has no dimmable lights. */
+    /** The PUT body for step 1..STEPS: on at step x 5%, or only on when the room has no dimmable lights. */
     public static String dimBody(HueState current, int dot) {
         if (current != null && !current.dimmable) return "{\"on\":{\"on\":true}}";
         return "{\"on\":{\"on\":true},\"dimming\":{\"brightness\":" + level(dot) + "}}";
@@ -112,8 +139,8 @@ public final class HueRows {
         return new HueState(true, true, level(dot));
     }
 
-    private static int level(int dot) {
-        return Math.max(1, Math.min(DOTS, dot)) * 20;
+    private static int level(int step) {
+        return Math.max(1, Math.min(STEPS, step)) * STEP_PCT;
     }
 
     /** True for the bridge's rate-limit (429) and busy (503) answers, which are worth one retry a second later. */

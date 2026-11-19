@@ -65,3 +65,17 @@ Colours, scenes, single bulbs, schedules, and control from away from home.
 - The exact row layout, sized to the widget.
 - How the bridge is rediscovered if its IP changes (re-resolve by bridge id through NsdManager).
 - Timeouts.
+
+## Revision (2026-11-18, after the first install): a 1 x 4 strip
+
+David asked for a 1 x 4 widget, finer dimming "just like the music scroller", and an all-off button. He chose a
+single strip that flips between rooms, and an ALL OFF that switches off every light in the home.
+
+- **Layout:** a top line with ‹ ROOM › on the left and ALL OFF on the right. Under it, 20 dots across the full
+  width, each one 5% of brightness, with tap zones like the music widget's seek zones.
+- **‹ ›** step through the picked rooms. Each widget remembers its own room, and flipping is local with no
+  network call. The arrows show only when two or more rooms are picked.
+- **The name** toggles the room on and off. **A dot** turns the room on at that step × 5%.
+- **ALL OFF** sends `{"on":{"on":false}}` to the bridge_home grouped_light. It shows at once, the state is read
+  back from the bridge afterwards, and a failure reverts it.
+- **Picks:** up to 8 rooms instead of 4.

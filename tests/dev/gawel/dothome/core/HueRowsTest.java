@@ -18,15 +18,15 @@ public final class HueRowsTest {
     }
 
     public static void testLitDots() {
+        T.eq(20, HueRows.STEPS, "20 brightness steps of 5%");
         T.eq(0, HueRows.litDots(null), "unknown");
         T.eq(0, HueRows.litDots(new HueState(false, true, 80)), "off");
         T.eq(1, HueRows.litDots(on(1)), "1% still shows one dot");
-        T.eq(1, HueRows.litDots(on(10)), "10%");
-        T.eq(2, HueRows.litDots(on(30)), "30%");
-        T.eq(3, HueRows.litDots(on(50)), "50%");
-        T.eq(3, HueRows.litDots(on(56.3)), "56%");
-        T.eq(5, HueRows.litDots(on(100)), "100%");
-        T.eq(5, HueRows.litDots(new HueState(true, false, 100)), "on, not dimmable");
+        T.eq(2, HueRows.litDots(on(10)), "10%");
+        T.eq(6, HueRows.litDots(on(30)), "30%");
+        T.eq(11, HueRows.litDots(on(56.3)), "56%");
+        T.eq(20, HueRows.litDots(on(100)), "100%");
+        T.eq(20, HueRows.litDots(new HueState(true, false, 100)), "on, not dimmable");
     }
 
     public static void testToggleSelection() {
@@ -34,16 +34,16 @@ public final class HueRowsTest {
         s = HueRows.toggleSelection(s, "b");
         T.eq(Arrays.asList("a", "b"), s, "added in order");
         T.eq(Arrays.asList("b"), HueRows.toggleSelection(s, "a"), "removed");
-        List<String> full = Arrays.asList("a", "b", "c", "d");
-        T.eq(full, HueRows.toggleSelection(full, "e"), "a 5th pick is ignored");
-        T.eq(4, HueRows.MAX, "max rows");
+        List<String> full = Arrays.asList("a", "b", "c", "d", "e", "f", "g", "h");
+        T.eq(full, HueRows.toggleSelection(full, "i"), "a 9th pick is ignored");
+        T.eq(8, HueRows.MAX, "max picks");
     }
 
     public static void testEncodeDecode() {
         T.eq("r1,z1", HueRows.encode(Arrays.asList("r1", "z1")), "encode");
         T.eq(Arrays.asList("r1", "z1"), HueRows.decode("r1,,z1, "), "decode drops blanks");
         T.eq(0, HueRows.decode(null).size(), "null");
-        T.eq(4, HueRows.decode("a,b,c,d,e").size(), "capped at MAX");
+        T.eq(8, HueRows.decode("a,b,c,d,e,f,g,h,i").size(), "capped at MAX");
     }
 
     public static void testRowsOrder() {
@@ -68,9 +68,10 @@ public final class HueRowsTest {
         T.eq("{\"on\":{\"on\":false}}", HueRows.toggleBody(on(50)), "toggle off");
         T.eq("{\"on\":{\"on\":true}}", HueRows.toggleBody(HueState.OFF), "toggle on");
         T.eq("{\"on\":{\"on\":true}}", HueRows.toggleBody(null), "unknown toggles on");
-        T.eq("{\"on\":{\"on\":true},\"dimming\":{\"brightness\":60}}", HueRows.dimBody(on(10), 3), "dot 3 = 60%");
-        T.eq("{\"on\":{\"on\":true},\"dimming\":{\"brightness\":20}}", HueRows.dimBody(HueState.OFF, 1), "dot 1 from off");
-        T.eq("{\"on\":{\"on\":true},\"dimming\":{\"brightness\":100}}", HueRows.dimBody(null, 5), "dot 5");
+        T.eq("{\"on\":{\"on\":true},\"dimming\":{\"brightness\":60}}", HueRows.dimBody(on(10), 12), "step 12 = 60%");
+        T.eq("{\"on\":{\"on\":true},\"dimming\":{\"brightness\":5}}", HueRows.dimBody(HueState.OFF, 1), "step 1 = 5%, from off");
+        T.eq("{\"on\":{\"on\":true},\"dimming\":{\"brightness\":100}}", HueRows.dimBody(null, 20), "step 20");
+        T.eq("{\"on\":{\"on\":false}}", HueRows.ALL_OFF_BODY, "all off");
     }
 
     public static void testDimTapWithoutDimming() {
@@ -82,7 +83,7 @@ public final class HueRowsTest {
         T.eq(new HueState(false, true, 56.3), HueRows.afterToggle(on(56.3)), "off keeps brightness");
         T.eq(on(56.3), HueRows.afterToggle(new HueState(false, true, 56.3)), "back on");
         T.eq(on(100), HueRows.afterToggle(null), "unknown toggles on");
-        T.eq(on(80), HueRows.afterDim(HueState.OFF, 4), "dot 4");
+        T.eq(on(80), HueRows.afterDim(HueState.OFF, 16), "step 16");
     }
 
     public static void testStaleRefreshIgnored() {
@@ -129,5 +130,26 @@ public final class HueRowsTest {
         T.check(!HueRows.retryable(200), "ok");
         T.check(!HueRows.retryable(404), "gone");
         T.check(!HueRows.retryable(-1), "unreachable is not retried");
+    }
+    public static void testFlip() {
+        T.eq(1, HueRows.flip(0, 1, 3), "next");
+        T.eq(0, HueRows.flip(2, 1, 3), "wraps to the first");
+        T.eq(2, HueRows.flip(0, -1, 3), "wraps to the last");
+        T.eq(2, HueRows.flip(5, 0, 3), "a stale index wraps back in range");
+        T.eq(0, HueRows.flip(0, 1, 0), "no rooms");
+        T.eq(1, HueRows.index(7, 3), "index wraps (7 mod 3)");
+        T.eq(0, HueRows.index(-1, 3), "negative is the first");
+    }
+
+    public static void testAllOff() {
+        Map<String, HueState> st = new HashMap<>();
+        st.put("g1", on(60));
+        st.put("g2", new HueState(true, false, 100));
+        st.put("g3", HueState.OFF);
+        Map<String, HueState> off = HueRows.allOff(st);
+        T.eq(new HueState(false, true, 60), off.get("g1"), "off, brightness kept for the next on");
+        T.eq(new HueState(false, false, 100), off.get("g2"), "non-dimmable off");
+        T.eq(HueState.OFF, off.get("g3"), "already off");
+        T.eq(on(60), st.get("g1"), "the input is not changed");
     }
 }

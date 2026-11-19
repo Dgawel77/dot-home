@@ -6,35 +6,43 @@ import android.appwidget.AppWidgetProvider;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
+import android.util.SizeF;
 import android.util.TypedValue;
 import android.view.View;
 import android.widget.RemoteViews;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
 
 import dev.gawel.dothome.core.HueLayout;
 import dev.gawel.dothome.core.HueRows;
 
 /**
- * Dot Hue: up to HueRows.MAX Hue rooms or zones, each a name (tap: on/off) and five dots (tap dot n: n x 20%).
- * The art is one bitmap (HueArt); transparent tap cells are laid over it at runtime in HueLayout's geometry, one
- * layout per reported widget size (needs API 31; older devices get the art without taps). PAIR HUE IN DOT HOME until paired, PICK
- * ROOMS IN DOT HOME until rooms are picked. State comes from {@link HueRepo}.
+ * Dot Hue, a 1 x 4 strip: one picked room at a time (‹ › flip through them, per widget), its name (tap: on/off),
+ * ALL OFF (every light in the home), and 20 dots below (tap dot n: n x 5%), like the music widget's seek zones.
+ * The art is one bitmap (HueArt); transparent tap cells are placed over it at runtime in HueLayout's geometry, one
+ * layout per reported widget size (needs API 31; older devices get the art without taps). PAIR HUE IN DOT HOME
+ * until paired, PICK ROOMS IN DOT HOME until rooms are picked. State comes from {@link HueRepo}.
  */
 public class HueWidget extends AppWidgetProvider {
     private static final String TAG = "DotHome";
-    /** The 4 x 2 cell default placement, used when the launcher reports no size. */
-    private static final int DEFAULT_W_DP = 300, DEFAULT_H_DP = 180;
-    /** Tap cells take request codes 200 + row * 6 + cell (cell 0 = the name, 1..5 = the dots). */
-    private static final int CODE_BASE = 200;
+    /** The 4 x 1 cell default placement, used when the launcher reports no size. */
+    private static final int DEFAULT_W_DP = 300, DEFAULT_H_DP = 95;
+    /** Which picked room each widget shows: "hue.idx.<appWidgetId>". */
+    private static final String K_INDEX = "hue.idx.";
+    /** At most this many sizes get their own layout (each is a bitmap in the update). */
+    private static final int MAX_SIZES = 4;
 
-    private static final int[] ROWS = {R.id.hue_row_0, R.id.hue_row_1, R.id.hue_row_2, R.id.hue_row_3};
-    private static final int[][] CELLS = {
-        {R.id.hue_r0_name, R.id.hue_r0_d0, R.id.hue_r0_d1, R.id.hue_r0_d2, R.id.hue_r0_d3, R.id.hue_r0_d4},
-        {R.id.hue_r1_name, R.id.hue_r1_d0, R.id.hue_r1_d1, R.id.hue_r1_d2, R.id.hue_r1_d3, R.id.hue_r1_d4},
-        {R.id.hue_r2_name, R.id.hue_r2_d0, R.id.hue_r2_d1, R.id.hue_r2_d2, R.id.hue_r2_d3, R.id.hue_r2_d4},
-        {R.id.hue_r3_name, R.id.hue_r3_d0, R.id.hue_r3_d1, R.id.hue_r3_d2, R.id.hue_r3_d3, R.id.hue_r3_d4}};
+    private static final int[] DOT_IDS = {
+        R.id.hue_d0, R.id.hue_d1, R.id.hue_d2, R.id.hue_d3, R.id.hue_d4, R.id.hue_d5, R.id.hue_d6, R.id.hue_d7,
+        R.id.hue_d8, R.id.hue_d9, R.id.hue_d10, R.id.hue_d11, R.id.hue_d12, R.id.hue_d13, R.id.hue_d14, R.id.hue_d15,
+        R.id.hue_d16, R.id.hue_d17, R.id.hue_d18, R.id.hue_d19};
 
     /** What the widgets last showed; the same content pushes nothing. */
     private static volatile String lastKey;
@@ -47,6 +55,12 @@ public class HueWidget extends AppWidgetProvider {
     @Override
     public void onAppWidgetOptionsChanged(Context context, AppWidgetManager mgr, int id, Bundle newOptions) {
         push(context, true);
+    }
+
+    @Override
+    public void onDeleted(Context context, int[] ids) {
+        PrefsStore p = new PrefsStore(context);
+        for (int id : ids) p.remove(K_INDEX + id);
     }
 
     private static int[] ids(Context ctx) {
@@ -69,6 +83,21 @@ public class HueWidget extends AppWidgetProvider {
         return () -> push(app, force);
     }
 
+    private static int index(Context ctx, int id) {
+        try {
+            return Integer.parseInt(new PrefsStore(ctx).get(K_INDEX + id, "0"));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    /** ‹ (-1) or › (+1) on widget id: steps through the picked rooms (wrapping) and redraws. Main thread, no network. */
+    static void flip(Context ctx, int id, int delta) {
+        int n = HueRepo.current(ctx).rows.size();
+        new PrefsStore(ctx).put(K_INDEX + id, String.valueOf(HueRows.flip(index(ctx, id), delta, n)));
+        push(ctx.getApplicationContext(), true);
+    }
+
     /** Draws every Dot Hue widget when what it shows changed since the last push, or always when force. */
     static synchronized void push(Context ctx, boolean force) { // taps push on the main thread, refreshes on the executor
         try {
@@ -76,7 +105,9 @@ public class HueWidget extends AppWidgetProvider {
             if (ids.length == 0) return;
             HueRepo.Shown s = HueRepo.current(ctx);
             boolean backdrop = WidgetArt.backdropOn(ctx);
-            String key = key(s, backdrop);
+            StringBuilder k = new StringBuilder(key(s, backdrop));
+            for (int id : ids) k.append('|').append(id).append('=').append(HueRows.index(index(ctx, id), s.rows.size()));
+            String key = k.toString();
             if (!force && key.equals(lastKey)) return;
             lastKey = key;
             AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
@@ -101,35 +132,34 @@ public class HueWidget extends AppWidgetProvider {
         return b.append('|').append(backdrop).toString();
     }
 
-    /** At most this many sizes get their own layout (each is a bitmap in the update). */
-    private static final int MAX_SIZES = 4;
-
     /**
      * The views: on API 31+ one layout per size the launcher reports (portrait and landscape, cover and main), so
-     * the tap cells always sit over the rows drawn for the size actually shown; else one for MIN_WIDTH x MAX_HEIGHT.
+     * the tap cells always sit over what is drawn at the size actually shown; else one for MIN_WIDTH x MAX_HEIGHT.
      */
     @SuppressWarnings("deprecation") // the untyped getParcelableArrayList: the typed one needs API 33
     private static RemoteViews views(Context ctx, AppWidgetManager mgr, int id, HueRepo.Shown s, boolean backdrop) {
         Bundle o = mgr.getAppWidgetOptions(id);
+        int row = HueRows.index(index(ctx, id), s.rows.size());
         if (Build.VERSION.SDK_INT >= 31 && o != null) {
-            java.util.ArrayList<android.util.SizeF> sizes = o.getParcelableArrayList(AppWidgetManager.OPTION_APPWIDGET_SIZES);
+            ArrayList<SizeF> sizes = o.getParcelableArrayList(AppWidgetManager.OPTION_APPWIDGET_SIZES);
             if (sizes != null && !sizes.isEmpty()) {
-                java.util.Map<android.util.SizeF, RemoteViews> bySize = new java.util.HashMap<>();
-                for (android.util.SizeF sz : sizes) {
+                Map<SizeF, RemoteViews> bySize = new HashMap<>();
+                for (SizeF sz : sizes) {
                     if (bySize.size() >= MAX_SIZES || sz == null || bySize.containsKey(sz)) continue;
                     if (sz.getWidth() <= 0 || sz.getHeight() <= 0) continue;
-                    bySize.put(sz, sized(ctx, o, sz.getWidth(), sz.getHeight(), s, backdrop));
+                    bySize.put(sz, sized(ctx, o, id, sz.getWidth(), sz.getHeight(), s, row, backdrop));
                 }
                 if (!bySize.isEmpty()) return new RemoteViews(bySize);
             }
         }
         int wDp = o == null ? 0 : o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0);
         int hDp = o == null ? 0 : o.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0);
-        return sized(ctx, o, wDp <= 0 ? DEFAULT_W_DP : wDp, hDp <= 0 ? DEFAULT_H_DP : hDp, s, backdrop);
+        return sized(ctx, o, id, wDp <= 0 ? DEFAULT_W_DP : wDp, hDp <= 0 ? DEFAULT_H_DP : hDp, s, row, backdrop);
     }
 
     /** The layout for a widget shown at wDp x hDp: card, art and tap cells all in that size's geometry. */
-    private static RemoteViews sized(Context ctx, Bundle o, float wDp, float hDp, HueRepo.Shown s, boolean backdrop) {
+    private static RemoteViews sized(Context ctx, Bundle o, int id, float wDp, float hDp, HueRepo.Shown s, int row,
+                                     boolean backdrop) {
         RemoteViews rv = new RemoteViews(ctx.getPackageName(), R.layout.widget_hue);
         float density = ctx.getResources().getDisplayMetrics().density;
         float wPx = wDp * density, hPx = hDp * density;
@@ -142,57 +172,88 @@ public class HueWidget extends AppWidgetProvider {
         } else {
             rv.setViewVisibility(R.id.card_img, View.GONE);
         }
-        rv.setImageViewBitmap(R.id.hue_img, HueArt.render(ctx, w, h, eff, s));
-        rv.setContentDescription(R.id.hue_img, description(s));
-        attachTaps(ctx, rv, s, w / eff, h / eff);
+        rv.setImageViewBitmap(R.id.hue_img, HueArt.render(ctx, w, h, eff, s, row));
+        rv.setContentDescription(R.id.hue_img, description(s, row));
+        attachTaps(ctx, rv, id, s, row, w / eff, h / eff);
         return rv;
     }
 
-    /** Places the tap cells over the drawn rows; rows that are not drawn (or any, before API 31) stay hidden. */
-    private static void attachTaps(Context ctx, RemoteViews rv, HueRepo.Shown s, float wDp, float hDp) {
-        int n = s.mode == HueRepo.Mode.ROWS ? HueLayout.rowsFit(hDp, s.rows.size()) : 0;
-        for (int i = 0; i < HueRows.MAX; i++) {
-            if (i >= n || Build.VERSION.SDK_INT < 31) {
-                rv.setViewVisibility(ROWS[i], View.GONE);
-                continue;
+    /** Places the tap cells over what HueArt drew; hidden when there is no room to act on (or before API 31). */
+    private static void attachTaps(Context ctx, RemoteViews rv, int id, HueRepo.Shown s, int row, float wDp,
+                                   float hDp) {
+        boolean rows = s.mode == HueRepo.Mode.ROWS && !s.rows.isEmpty() && Build.VERSION.SDK_INT >= 31;
+        if (!rows) {
+            for (int v : new int[] {R.id.hue_prev, R.id.hue_name, R.id.hue_next, R.id.hue_off, R.id.hue_dots}) {
+                rv.setViewVisibility(v, View.GONE);
             }
-            HueRows.Row row = s.rows.get(i);
-            float[] r = HueLayout.row(wDp, hDp, n, i);
-            int u = TypedValue.COMPLEX_UNIT_DIP;
-            rv.setViewVisibility(ROWS[i], View.VISIBLE);
-            rv.setViewLayoutWidth(ROWS[i], r[2], u);
-            rv.setViewLayoutHeight(ROWS[i], r[3], u);
-            rv.setViewLayoutMargin(ROWS[i], RemoteViews.MARGIN_START, r[0], u);
-            rv.setViewLayoutMargin(ROWS[i], RemoteViews.MARGIN_TOP, r[1], u);
-            String name = row.name.toLowerCase(java.util.Locale.ROOT);
-            rv.setOnClickPendingIntent(CELLS[i][0], intent(ctx, i, 0, row.groupedLightId));
-            rv.setContentDescription(CELLS[i][0], name + (row.state.on ? ": on, tap to turn off" : ": off, tap to turn on"));
-            for (int d = 1; d <= HueRows.DOTS; d++) {
-                rv.setOnClickPendingIntent(CELLS[i][d], intent(ctx, i, d, row.groupedLightId));
-                rv.setContentDescription(CELLS[i][d], name + " " + (d * 20) + " percent");
-            }
+            return;
+        }
+        HueRows.Row r = s.rows.get(row);
+        float nameW = HueArt.nameCellDp(ctx, r.name, wDp);
+        boolean flips = s.rows.size() > 1;
+        String name = r.name.toLowerCase(Locale.ROOT);
+
+        place(rv, R.id.hue_name, HueLayout.nameCell(wDp, hDp, nameW));
+        rv.setOnClickPendingIntent(R.id.hue_name, command(ctx, HueCommandReceiver.TOGGLE, id, "name", r.groupedLightId, 0, 0));
+        rv.setContentDescription(R.id.hue_name, name + (r.state.on ? ": on, tap to turn off" : ": off, tap to turn on"));
+
+        place(rv, R.id.hue_off, HueLayout.offCell(wDp, hDp));
+        rv.setOnClickPendingIntent(R.id.hue_off, command(ctx, HueCommandReceiver.ALL_OFF, id, "off", null, 0, 0));
+        rv.setContentDescription(R.id.hue_off, "turn every light off");
+
+        if (flips) {
+            place(rv, R.id.hue_prev, HueLayout.prevCell(wDp, hDp));
+            place(rv, R.id.hue_next, HueLayout.nextCell(wDp, hDp, nameW));
+            rv.setOnClickPendingIntent(R.id.hue_prev, command(ctx, HueCommandReceiver.FLIP, id, "prev", null, 0, -1));
+            rv.setOnClickPendingIntent(R.id.hue_next, command(ctx, HueCommandReceiver.FLIP, id, "next", null, 0, 1));
+            rv.setContentDescription(R.id.hue_prev, "previous room");
+            rv.setContentDescription(R.id.hue_next, "next room");
+        } else {
+            rv.setViewVisibility(R.id.hue_prev, View.GONE);
+            rv.setViewVisibility(R.id.hue_next, View.GONE);
+        }
+
+        place(rv, R.id.hue_dots, HueLayout.dotsRow(wDp, hDp));
+        for (int i = 0; i < HueRows.STEPS; i++) {
+            int step = i + 1;
+            rv.setOnClickPendingIntent(DOT_IDS[i],
+                command(ctx, HueCommandReceiver.DIM, id, "d" + i, r.groupedLightId, step, 0));
+            rv.setContentDescription(DOT_IDS[i], name + " " + (step * 5) + " percent");
         }
     }
 
-    /** cell 0: toggle; 1..5: that dot. */
-    private static PendingIntent intent(Context ctx, int row, int cell, String light) {
-        Intent in = new Intent(cell == 0 ? HueCommandReceiver.TOGGLE : HueCommandReceiver.DIM)
-            .setClass(ctx, HueCommandReceiver.class)
-            .putExtra(HueCommandReceiver.EXTRA_LIGHT, light)
-            .putExtra(HueCommandReceiver.EXTRA_DOT, cell);
-        return PendingIntent.getBroadcast(ctx, CODE_BASE + row * 6 + cell, in,
-            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+    /** Sizes and places a tap cell at rect {x, y, w, h} dp from the widget's top left, and shows it. */
+    private static void place(RemoteViews rv, int view, float[] rect) {
+        int u = TypedValue.COMPLEX_UNIT_DIP;
+        rv.setViewVisibility(view, View.VISIBLE);
+        rv.setViewLayoutWidth(view, rect[2], u);
+        rv.setViewLayoutHeight(view, rect[3], u);
+        rv.setViewLayoutMargin(view, RemoteViews.MARGIN_START, rect[0], u);
+        rv.setViewLayoutMargin(view, RemoteViews.MARGIN_TOP, rect[1], u);
     }
 
-    private static String description(HueRepo.Shown s) {
+    /**
+     * A tap's broadcast. The data URI (widget id + cell) makes each PendingIntent distinct, so one widget's extras
+     * never replace another's.
+     */
+    private static PendingIntent command(Context ctx, String action, int widgetId, String cell, String light, int step,
+                                         int delta) {
+        Intent in = new Intent(action).setClass(ctx, HueCommandReceiver.class)
+            .setData(Uri.parse("dothome://hue/" + widgetId + "/" + cell))
+            .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+            .putExtra(HueCommandReceiver.EXTRA_DOT, step)
+            .putExtra(HueCommandReceiver.EXTRA_DELTA, delta);
+        if (light != null) in.putExtra(HueCommandReceiver.EXTRA_LIGHT, light);
+        return PendingIntent.getBroadcast(ctx, 0, in, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+    }
+
+    private static String description(HueRepo.Shown s, int row) {
         if (s.mode == HueRepo.Mode.UNPAIRED) return "Hue lights: pair your Hue bridge in Dot Home";
-        if (s.mode == HueRepo.Mode.NO_ROOMS) return "Hue lights: pick rooms in Dot Home";
-        StringBuilder b = new StringBuilder("Hue lights");
+        if (s.mode == HueRepo.Mode.NO_ROOMS || s.rows.isEmpty()) return "Hue lights: pick rooms in Dot Home";
+        HueRows.Row r = s.rows.get(row);
+        StringBuilder b = new StringBuilder("Hue lights, ").append(r.name.toLowerCase(Locale.ROOT)).append(' ');
+        b.append(r.state.on ? HueRows.litDots(r.state) * 5 + " percent" : "off");
         if (!s.reachable) b.append(", bridge not reachable");
-        for (HueRows.Row r : s.rows) {
-            b.append(". ").append(r.name.toLowerCase(java.util.Locale.ROOT)).append(' ');
-            b.append(r.state.on ? HueRows.litDots(r.state) * 20 + " percent" : "off");
-        }
         return b.append('.').toString();
     }
 }

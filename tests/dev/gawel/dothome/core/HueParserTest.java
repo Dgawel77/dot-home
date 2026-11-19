@@ -81,4 +81,10 @@ public final class HueParserTest {
         T.eq(null, HueParser.pairKey("{}"), "bad pair");
         T.check(!HueParser.linkButtonNeeded(null), "null pair");
     }
+    public static void testHomeLight() {
+        T.eq("7e6d5c4b-0000-4000-8000-00000000a000", HueParser.homeLight(fixture("hue-grouped-light.json")),
+            "the bridge_home grouped_light switches every light");
+        T.eq(null, HueParser.homeLight("{\"data\":[]}"), "none");
+        T.eq(null, HueParser.homeLight(null), "null");
+    }
 }

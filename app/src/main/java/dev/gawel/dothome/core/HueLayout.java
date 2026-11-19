@@ -1,41 +1,58 @@
 package dev.gawel.dothome.core;
 
 /**
- * Dot Hue's geometry in dp, shared by the bitmap (HueArt) and the transparent tap cells laid over it (HueWidget):
- * inside a PAD_DP pad, rows of equal height (the height the most rows that fit would have; fewer rows are centred
- * vertically), each a name cell on the left and five DOT_CELL_DP dot cells on the right. Rects are {x, y, w, h}.
+ * Dot Hue's 1 x 4 strip in dp, shared by the bitmap (HueArt) and the transparent tap cells over it (HueWidget).
+ * Inside a PAD_DP pad, a block of two lines centred vertically: the top line is ‹ (prev), the room name (as wide as
+ * its text, capped), › (next) and, at the right, ALL OFF; under it a full-width row of HueRows.STEPS dot cells, one
+ * per 5% of brightness, like the music widget's seek zones. Rects are {x, y, w, h}.
  */
 public final class HueLayout {
     private HueLayout() {}
 
-    public static final float PAD_DP = 16f, DOT_CELL_DP = 32f, MIN_ROW_DP = 32f, NAME_DP = 13f, DOT_R_DP = 3.5f;
+    public static final float PAD_DP = 16f, LINE_DP = 28f, GAP_DP = 4f, DOTS_H_DP = 28f;
+    public static final float ARROW_DP = 32f, OFF_DP = 76f, NAME_DP = 13f, LABEL_DP = 11f, DOT_R_DP = 3f;
 
-    /** How many of `rows` rows fit a widget hDp tall (at most HueRows.MAX, at least 0). */
-    public static int rowsFit(float hDp, int rows) {
-        int fit = (int) Math.floor((hDp - 2 * PAD_DP) / MIN_ROW_DP);
-        return Math.max(0, Math.min(Math.min(rows, HueRows.MAX), fit));
+    /** The top of the two-line block, centred in a widget hDp tall (0 when it does not fit). */
+    public static float top(float hDp) {
+        return Math.max(0f, (hDp - (LINE_DP + GAP_DP + DOTS_H_DP)) / 2f);
     }
 
-    /** Row i of `rows` (rows already limited by rowsFit). */
-    public static float[] row(float wDp, float hDp, int rows, int i) {
-        float avail = hDp - 2 * PAD_DP;
-        int full = Math.max(1, rowsFit(hDp, HueRows.MAX));
-        float rh = avail / full;
-        float top = PAD_DP + (avail - rows * rh) / 2f;
-        return new float[] {PAD_DP, top + i * rh, wDp - 2 * PAD_DP, rh};
+    /** The widest the name may be: the top line less the arrows, the gap and ALL OFF. */
+    public static float maxNameW(float wDp) {
+        return Math.max(0f, wDp - 2 * PAD_DP - 2 * ARROW_DP - GAP_DP - OFF_DP);
     }
 
-    public static float[] nameCell(float[] row) {
-        return new float[] {row[0], row[1], row[2] - HueRows.DOTS * DOT_CELL_DP, row[3]};
+    public static float[] prevCell(float wDp, float hDp) {
+        return new float[] {PAD_DP, top(hDp), ARROW_DP, LINE_DP};
     }
 
-    /** Dot cell d (0..4, left to right). */
-    public static float[] dotCell(float[] row, int d) {
-        return new float[] {row[0] + row[2] - (HueRows.DOTS - d) * DOT_CELL_DP, row[1], DOT_CELL_DP, row[3]};
+    /** The name cell for a name nameWDp wide (capped at maxNameW). */
+    public static float[] nameCell(float wDp, float hDp, float nameWDp) {
+        return new float[] {PAD_DP + ARROW_DP, top(hDp), Math.min(Math.max(0f, nameWDp), maxNameW(wDp)), LINE_DP};
     }
 
-    public static float[] dotCentre(float[] row, int d) {
-        float[] c = dotCell(row, d);
+    public static float[] nextCell(float wDp, float hDp, float nameWDp) {
+        float[] n = nameCell(wDp, hDp, nameWDp);
+        return new float[] {n[0] + n[2], top(hDp), ARROW_DP, LINE_DP};
+    }
+
+    public static float[] offCell(float wDp, float hDp) {
+        return new float[] {wDp - PAD_DP - OFF_DP, top(hDp), OFF_DP, LINE_DP};
+    }
+
+    public static float[] dotsRow(float wDp, float hDp) {
+        return new float[] {PAD_DP, top(hDp) + LINE_DP + GAP_DP, wDp - 2 * PAD_DP, DOTS_H_DP};
+    }
+
+    /** Dot cell i (0..STEPS-1, left to right): brightness (i + 1) x 5%. */
+    public static float[] dotCell(float wDp, float hDp, int i) {
+        float[] r = dotsRow(wDp, hDp);
+        float cw = r[2] / HueRows.STEPS;
+        return new float[] {r[0] + i * cw, r[1], cw, r[3]};
+    }
+
+    public static float[] dotCentre(float wDp, float hDp, int i) {
+        float[] c = dotCell(wDp, hDp, i);
         return new float[] {c[0] + c[2] / 2f, c[1] + c[3] / 2f};
     }
 }

@@ -275,13 +275,13 @@ final class HueRepo {
     }
 
     /**
-     * A tap on a row (dot -1 = the name: toggle; 1..5 = brightness): shows it at once (redraw runs on the calling
+     * A tap on a row (dot -1 = the name: toggle; 1..STEPS = brightness): shows it at once (redraw runs on the calling
      * thread), then sends it; a failure reverts the row unless a newer tap came, and redraw runs again. Finishes pr.
      * A grouped_light that is not one of the shown rows is ignored.
      */
     static void tap(Context ctx, String light, int dot, Runnable redraw, BroadcastReceiver.PendingResult pr) {
         final Context app = ctx.getApplicationContext();
-        if (light == null || dot < -1 || dot == 0 || dot > HueRows.DOTS || !shownLight(app, light)) {
+        if (light == null || dot < -1 || dot == 0 || dot > HueRows.STEPS || !shownLight(app, light)) {
             if (pr != null) pr.finish();
             return;
         }
@@ -321,24 +321,84 @@ final class HueRepo {
         if (!paired(ctx)) return;
         String key = p.get(K_KEY, "");
         HueBridge b = new HueBridge(p.get(K_HOST, ""), p.get(K_PIN, ""));
-        HueBridge.Reply r = b.put(LIGHTS + "/" + light, key, body, "set");
-        if (!r.ok() && HueRows.retryable(r.code)) {
-            try {
-                Thread.sleep(1_000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            r = b.put(LIGHTS + "/" + light, key, body, "set");
-        }
+        HueBridge.Reply r = putRetrying(b, LIGHTS + "/" + light, key, body, "set");
         if (r.ok()) {
-            long mark = SEQ.mark(); // this tap and older ones take the bridge's answer; newer taps keep theirs
-            HueBridge.Reply st = b.get(LIGHTS, key, "states");
-            if (st.ok()) applyStates(p, ctx, st.body, mark);
-            else reachable = true;
+            readBack(p, ctx, b, key);
             return;
         }
         synchronized (LOCK) {
             shown = HueRows.revert(states(ctx), light, before, SEQ, seq);
+        }
+        if (r.code == HueBridge.UNREACHABLE) reachable = false;
+    }
+    /** A PUT, retried once a second later when the bridge answers 429 (rate limit) or 503 (busy). */
+    private static HueBridge.Reply putRetrying(HueBridge b, String path, String key, String body, String what) {
+        HueBridge.Reply r = b.put(path, key, body, what);
+        if (r.ok() || !HueRows.retryable(r.code)) return r;
+        try {
+            Thread.sleep(1_000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return r;
+        }
+        return b.put(path, key, body, what);
+    }
+
+    /** After a good PUT: the bridge's states replace the optimistic ones (rows tapped since keep theirs). */
+    private static void readBack(PrefsStore p, Context ctx, HueBridge b, String key) {
+        long mark = SEQ.mark();
+        HueBridge.Reply st = b.get(LIGHTS, key, "states");
+        if (st.ok()) applyStates(p, ctx, st.body, mark);
+        else reachable = true;
+    }
+
+    /**
+     * ALL OFF: every room shows off at once, then the bridge_home grouped_light (every light in the home) is
+     * switched off; a failure reverts each row unless it was tapped since. Finishes pr.
+     */
+    static void allOff(Context ctx, Runnable redraw, BroadcastReceiver.PendingResult pr) {
+        final Context app = ctx.getApplicationContext();
+        if (!paired(app)) {
+            if (pr != null) pr.finish();
+            return;
+        }
+        final Map<String, HueState> before;
+        final Map<String, Long> seqs = new java.util.HashMap<>();
+        synchronized (LOCK) {
+            before = states(app);
+            for (String k : before.keySet()) seqs.put(k, SEQ.tap(k));
+            shown = HueRows.allOff(before);
+        }
+        redraw.run();
+        boolean queued = submit(() -> {
+            try {
+                sendAllOff(app, before, seqs);
+                redraw.run();
+            } finally {
+                if (pr != null) pr.finish();
+            }
+        });
+        if (!queued && pr != null) pr.finish();
+    }
+
+    /** Executor only: the ALL OFF PUT and its read-back, or the revert. */
+    private static void sendAllOff(Context ctx, Map<String, HueState> before, Map<String, Long> seqs) {
+        PrefsStore p = new PrefsStore(ctx);
+        if (!paired(ctx)) return;
+        String key = p.get(K_KEY, ""), home = HueParser.homeLight(p.get(K_STATES, null));
+        HueBridge b = new HueBridge(p.get(K_HOST, ""), p.get(K_PIN, ""));
+        HueBridge.Reply r = home == null ? new HueBridge.Reply(404, null)
+            : putRetrying(b, LIGHTS + "/" + home, key, HueRows.ALL_OFF_BODY, "all off");
+        if (r.ok()) {
+            readBack(p, ctx, b, key);
+            return;
+        }
+        synchronized (LOCK) {
+            Map<String, HueState> m = states(ctx);
+            for (Map.Entry<String, Long> e : seqs.entrySet()) {
+                m = HueRows.revert(m, e.getKey(), before.get(e.getKey()), SEQ, e.getValue());
+            }
+            shown = m;
         }
         if (r.code == HueBridge.UNREACHABLE) reachable = false;
     }

@@ -57,6 +57,16 @@ public final class HueParser {
         return out;
     }
 
+    /** The grouped_light that switches every light in the home (owner bridge_home), or null. */
+    public static String homeLight(String json) {
+        for (Object item : data(json)) {
+            Map<String, Object> o = MiniJson.obj(item);
+            Map<String, Object> owner = o == null ? null : MiniJson.obj(o.get("owner"));
+            if (owner != null && "bridge_home".equals(owner.get("rtype"))) return MiniJson.str(o.get("id"), null);
+        }
+        return null;
+    }
+
     /** The new app key from a pairing response, or null. */
     public static String pairKey(String json) {
         Map<String, Object> first = firstOf(json);

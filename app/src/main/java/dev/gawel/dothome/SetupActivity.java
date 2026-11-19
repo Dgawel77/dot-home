@@ -34,7 +34,7 @@ import dev.gawel.dothome.core.HueRows;
 
 /**
  * Setup checklist: permissions, wallpaper, fire mode, rock style, the Blue Line key and station, and pairing the Hue
- * bridge with the rooms Dot Hue shows. Done states refresh in onResume.
+ * bridge with the rooms Dot Hue steps through. Done states refresh in onResume.
  */
 public class SetupActivity extends Activity {
     private static final int REQ_LOCATION = 1, REQ_AUDIO = 2;
@@ -245,7 +245,7 @@ public class SetupActivity extends Activity {
     private void showHue(String message) {
         if (isFinishing() || isDestroyed()) return;
         boolean paired = HueRepo.paired(this);
-        String status = paired ? "Paired. Tick up to 4 rooms for the Dot Hue widget, in the order you want them."
+        String status = paired ? "Paired. Tick up to 8 rooms for Dot Hue, in the order ‹ › should step through them."
             : "Pair your Hue bridge so the Dot Hue widget can switch and dim your rooms. You'll press the button on top of the bridge.";
         hueStatus.setText(message != null ? message : status);
         findViewById(R.id.btn_hue_forget).setVisibility(paired ? View.VISIBLE : View.GONE);
@@ -268,7 +268,7 @@ public class SetupActivity extends Activity {
             cb.setChecked(at >= 0);
             cb.setOnClickListener(v -> {
                 List<String> now = HueRepo.selection(this), next = HueRows.toggleSelection(now, g.id);
-                if (next.equals(now)) android.widget.Toast.makeText(this, "Up to 4 rooms", android.widget.Toast.LENGTH_SHORT).show();
+                if (next.equals(now)) android.widget.Toast.makeText(this, "Up to 8 rooms", android.widget.Toast.LENGTH_SHORT).show();
                 HueRepo.setSelection(this, next);
                 HueWidget.redraw(this, true).run();
                 showHue(null);

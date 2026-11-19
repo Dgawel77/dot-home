@@ -151,19 +151,18 @@ public final class WidgetResourcesTest {
             throw new AssertionError("cannot list layouts: " + e);
         }
     }
-    /** Dot Hue: 4 tap rows, each a name cell and 5 dot cells as wide as HueLayout.DOT_CELL_DP (placed at runtime). */
+    /** Dot Hue: ‹, name, ›, ALL OFF and 20 dot zones, all transparent cells placed at runtime over the art. */
     public static void testHueLayoutIds() {
         String xml = read("layout/widget_hue.xml");
         List<String> cells = elements(xml, "FrameLayout");
-        List<String> rows = elements(xml, "LinearLayout");
-        for (int i = 0; i < HueRows.MAX; i++) {
-            T.check(byId(rows, "hue_row_" + i) != null, "row " + i);
-            T.check(byId(cells, "hue_r" + i + "_name") != null, "name cell " + i);
-            for (int d = 0; d < HueRows.DOTS; d++) {
-                String c = byId(cells, "hue_r" + i + "_d" + d);
-                T.check(c != null, "dot cell " + i + "/" + d);
-                T.eq(Math.round(HueLayout.DOT_CELL_DP) + "dp", attr(c, "layout_width"), "dot cell width " + i + "/" + d);
-            }
+        for (String id : new String[] {"hue_prev", "hue_name", "hue_next", "hue_off"}) {
+            T.check(byId(cells, id) != null, id);
+        }
+        T.check(byId(elements(xml, "LinearLayout"), "hue_dots") != null, "dot row");
+        for (int i = 0; i < HueRows.STEPS; i++) {
+            String c = byId(cells, "hue_d" + i);
+            T.check(c != null, "dot zone " + i);
+            T.eq("1", attr(c, "layout_weight"), "equal dot zones " + i);
         }
         T.check(byId(elements(xml, "ImageView"), "hue_img") != null, "art");
     }

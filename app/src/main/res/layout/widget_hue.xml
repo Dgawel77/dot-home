@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Dot Hue (widget_hue_empty before the first draw): the card, the art bitmap from HueArt (One UI ignores widget
-     fonts, so all text is drawn into it) and, over it, up to 4 rows of transparent tap cells that HueWidget sizes
-     and places at runtime from HueLayout: a name cell (toggle) and five 32 dp dot cells (HueLayout.DOT_CELL_DP,
-     brightness 20..100%). No plain View: not allowed in RemoteViews. -->
+<!-- Dot Hue, a 1 x 4 strip (widget_hue_empty before the first draw): the card, the art bitmap from HueArt (One UI
+     ignores widget fonts, so all text is drawn into it) and, over it, transparent tap cells that HueWidget sizes and
+     places at runtime from HueLayout: ‹ / › (flip rooms), the name (on/off), ALL OFF, and 20 equal dot zones
+     (brightness 5..100%, like the music seek zones). No plain View: not allowed in RemoteViews. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/hue_root"
     android:layout_width="match_parent"
@@ -19,136 +19,136 @@
         android:layout_height="match_parent"
         android:scaleType="fitXY"
         android:contentDescription="@string/widget_hue_desc" />
+    <FrameLayout
+        android:id="@+id/hue_prev"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_gravity="top|start"
+        android:visibility="gone" />
+    <FrameLayout
+        android:id="@+id/hue_name"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_gravity="top|start"
+        android:visibility="gone" />
+    <FrameLayout
+        android:id="@+id/hue_next"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_gravity="top|start"
+        android:visibility="gone" />
+    <FrameLayout
+        android:id="@+id/hue_off"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_gravity="top|start"
+        android:visibility="gone" />
     <LinearLayout
-        android:id="@+id/hue_row_0"
+        android:id="@+id/hue_dots"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:layout_gravity="top|start"
         android:orientation="horizontal"
         android:visibility="gone">
         <FrameLayout
-            android:id="@+id/hue_r0_name"
+            android:id="@+id/hue_d0"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1" />
         <FrameLayout
-            android:id="@+id/hue_r0_d0"
-            android:layout_width="32dp"
-            android:layout_height="match_parent" />
-        <FrameLayout
-            android:id="@+id/hue_r0_d1"
-            android:layout_width="32dp"
-            android:layout_height="match_parent" />
-        <FrameLayout
-            android:id="@+id/hue_r0_d2"
-            android:layout_width="32dp"
-            android:layout_height="match_parent" />
-        <FrameLayout
-            android:id="@+id/hue_r0_d3"
-            android:layout_width="32dp"
-            android:layout_height="match_parent" />
-        <FrameLayout
-            android:id="@+id/hue_r0_d4"
-            android:layout_width="32dp"
-            android:layout_height="match_parent" />
-    </LinearLayout>
-    <LinearLayout
-        android:id="@+id/hue_row_1"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_gravity="top|start"
-        android:orientation="horizontal"
-        android:visibility="gone">
-        <FrameLayout
-            android:id="@+id/hue_r1_name"
+            android:id="@+id/hue_d1"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1" />
         <FrameLayout
-            android:id="@+id/hue_r1_d0"
-            android:layout_width="32dp"
-            android:layout_height="match_parent" />
-        <FrameLayout
-            android:id="@+id/hue_r1_d1"
-            android:layout_width="32dp"
-            android:layout_height="match_parent" />
-        <FrameLayout
-            android:id="@+id/hue_r1_d2"
-            android:layout_width="32dp"
-            android:layout_height="match_parent" />
-        <FrameLayout
-            android:id="@+id/hue_r1_d3"
-            android:layout_width="32dp"
-            android:layout_height="match_parent" />
-        <FrameLayout
-            android:id="@+id/hue_r1_d4"
-            android:layout_width="32dp"
-            android:layout_height="match_parent" />
-    </LinearLayout>
-    <LinearLayout
-        android:id="@+id/hue_row_2"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_gravity="top|start"
-        android:orientation="horizontal"
-        android:visibility="gone">
-        <FrameLayout
-            android:id="@+id/hue_r2_name"
+            android:id="@+id/hue_d2"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1" />
         <FrameLayout
-            android:id="@+id/hue_r2_d0"
-            android:layout_width="32dp"
-            android:layout_height="match_parent" />
-        <FrameLayout
-            android:id="@+id/hue_r2_d1"
-            android:layout_width="32dp"
-            android:layout_height="match_parent" />
-        <FrameLayout
-            android:id="@+id/hue_r2_d2"
-            android:layout_width="32dp"
-            android:layout_height="match_parent" />
-        <FrameLayout
-            android:id="@+id/hue_r2_d3"
-            android:layout_width="32dp"
-            android:layout_height="match_parent" />
-        <FrameLayout
-            android:id="@+id/hue_r2_d4"
-            android:layout_width="32dp"
-            android:layout_height="match_parent" />
-    </LinearLayout>
-    <LinearLayout
-        android:id="@+id/hue_row_3"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_gravity="top|start"
-        android:orientation="horizontal"
-        android:visibility="gone">
-        <FrameLayout
-            android:id="@+id/hue_r3_name"
+            android:id="@+id/hue_d3"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1" />
         <FrameLayout
-            android:id="@+id/hue_r3_d0"
-            android:layout_width="32dp"
-            android:layout_height="match_parent" />
+            android:id="@+id/hue_d4"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
         <FrameLayout
-            android:id="@+id/hue_r3_d1"
-            android:layout_width="32dp"
-            android:layout_height="match_parent" />
+            android:id="@+id/hue_d5"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
         <FrameLayout
-            android:id="@+id/hue_r3_d2"
-            android:layout_width="32dp"
-            android:layout_height="match_parent" />
+            android:id="@+id/hue_d6"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
         <FrameLayout
-            android:id="@+id/hue_r3_d3"
-            android:layout_width="32dp"
-            android:layout_height="match_parent" />
+            android:id="@+id/hue_d7"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
         <FrameLayout
-            android:id="@+id/hue_r3_d4"
-            android:layout_width="32dp"
-            android:layout_height="match_parent" />
+            android:id="@+id/hue_d8"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+        <FrameLayout
+            android:id="@+id/hue_d9"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+        <FrameLayout
+            android:id="@+id/hue_d10"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+        <FrameLayout
+            android:id="@+id/hue_d11"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+        <FrameLayout
+            android:id="@+id/hue_d12"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+        <FrameLayout
+            android:id="@+id/hue_d13"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+        <FrameLayout
+            android:id="@+id/hue_d14"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+        <FrameLayout
+            android:id="@+id/hue_d15"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+        <FrameLayout
+            android:id="@+id/hue_d16"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+        <FrameLayout
+            android:id="@+id/hue_d17"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+        <FrameLayout
+            android:id="@+id/hue_d18"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
+        <FrameLayout
+            android:id="@+id/hue_d19"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1" />
     </LinearLayout>
 </FrameLayout>
